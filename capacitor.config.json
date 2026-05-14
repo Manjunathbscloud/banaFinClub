@@ -1,0 +1,8 @@
+{
+  "appId": "com.banakar.finclub",
+  "appName": "Banakar FinClub",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

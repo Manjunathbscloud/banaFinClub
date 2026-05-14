@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f4c81"/>
+  <path d="M92 314c0-90 73-163 163-163h165v72H255c-50 0-91 41-91 91s41 91 91 91h41v72h-41c-90 0-163-73-163-163Z" fill="#f58220"/>
+  <path d="M222 314c0-49 40-89 89-89h109v72H311c-9 0-17 8-17 17s8 17 17 17h109v72H311c-49 0-89-40-89-89Z" fill="#ffffff"/>
+  <path d="M119 96h274c15 0 27 12 27 27v20H92v-20c0-15 12-27 27-27Z" fill="#f9b233"/>
+  <text x="256" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-weight="800" font-size="54" fill="#0f4c81">BF</text>
+</svg>

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Banakar FinClub</string>
+    <string name="title_activity_main">Banakar FinClub</string>
+    <string name="package_name">com.banakar.finclub</string>
+    <string name="custom_url_scheme">com.banakar.finclub</string>
+</resources>
