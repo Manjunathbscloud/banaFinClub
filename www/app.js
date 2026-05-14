@@ -1,4 +1,6 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
+const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
+const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
 
 const translations = {
   en: {
@@ -37,6 +39,8 @@ const translations = {
     language: "ಕನ್ನಡ",
     adminOnly: "Admin only",
     ownDetailsOnly: "Members see own details and group balance.",
+    demoMode: "Demo mode",
+    liveMode: "Live mode",
   },
   kn: {
     privateClub: "ಖಾಸಗಿ ಸದಸ್ಯರ ಹಣಕಾಸು ಕ್ಲಬ್",
@@ -74,6 +78,8 @@ const translations = {
     language: "English",
     adminOnly: "ಅಡ್ಮಿನ್ ಮಾತ್ರ",
     ownDetailsOnly: "ಸದಸ್ಯರು ತಮ್ಮ ವಿವರಗಳು ಮತ್ತು ಗುಂಪು ಬ್ಯಾಲೆನ್ಸ್ ಮಾತ್ರ ನೋಡುತ್ತಾರೆ.",
+    demoMode: "ಡೆಮೊ ಮೋಡ್",
+    liveMode: "ಲೈವ್ ಮೋಡ್",
   },
 };
 
@@ -170,6 +176,10 @@ function currentUser() {
 
 function isAdmin(member = currentUser()) {
   return member && member.role === "president" && member.status === "active";
+}
+
+function backendLabel() {
+  return liveBackendReady ? t("liveMode") : t("demoMode");
 }
 
 function memberById(id) {
@@ -275,6 +285,7 @@ function render() {
             </div>
           </div>
           <div class="top-actions">
+            <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
             <button class="icon-button" type="button" data-action="logout" title="${t("logout")}">⎋</button>
           </div>
@@ -340,7 +351,7 @@ function loginForm() {
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9000000001" /></label>
       <label class="field"><span>${t("password")}</span><input name="password" type="password" required placeholder="123456" /></label>
       <button class="primary" type="submit">${t("signIn")}</button>
-      <p class="hint">Demo admin: 9000000001 / 123456. Real OTP/password reset will be connected after backend setup.</p>
+      <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9000000001 / 123456. Add Supabase details in config.js to connect live data."}</p>
     </form>
   `;
 }

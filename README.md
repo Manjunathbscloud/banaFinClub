@@ -15,6 +15,8 @@ Banakar FinClub is a private Android/PWA finance app for family fund management.
 - Monthly loan interest calculation at 1.25%
 - ICICI statement CSV import starter
 - Capacitor Android project for APK builds
+- GitHub Pages web/PWA deployment workflow
+- Supabase-ready live backend config file
 
 ## Demo Login
 
@@ -47,6 +49,18 @@ Expected web URL:
 https://manjunathbscloud.github.io/banaFinClub/
 ```
 
+## Configure Live Backend
+
+The app currently runs in demo mode until `www/config.js` is changed:
+
+```js
+window.BANAKAR_FINCLUB_CONFIG = {
+  backend: "supabase",
+  supabaseUrl: "https://your-project.supabase.co",
+  supabaseAnonKey: "your-public-anon-key",
+};
+```
+
 ## Build Debug APK
 
 ```bash
@@ -71,3 +85,8 @@ android/app/build/outputs/apk/debug/app-debug.apk
 - Replace demo local storage with Supabase/Firebase/Apps Script backend.
 - Add ICICI statement file upload parser after sample statement is provided.
 - Create a signed release APK for production sharing.
+
+See:
+
+- [Live setup](docs/live-setup.md)
+- [Supabase schema](docs/supabase-schema.sql)

@@ -290,7 +290,29 @@ button:focus-visible {
 
 .top-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.mode-badge {
+  display: none;
+  align-items: center;
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mode-badge.demo {
+  background: var(--orange-soft);
+  color: #7c3a00;
+}
+
+.mode-badge.live {
+  background: #dcfce7;
+  color: var(--good);
 }
 
 .icon-button {
@@ -615,5 +637,9 @@ th {
 
   .content {
     padding-bottom: 116px;
+  }
+
+  .mode-badge {
+    display: inline-flex;
   }
 }
