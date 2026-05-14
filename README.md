@@ -30,6 +30,23 @@ npm install
 npm start
 ```
 
+## Host Web/PWA Version
+
+This repo includes a GitHub Pages workflow that deploys the `www/` folder.
+
+In GitHub:
+
+1. Open repository settings.
+2. Go to **Pages**.
+3. Set **Build and deployment** source to **GitHub Actions**.
+4. Push to `main` or run the `Deploy Web App` workflow manually.
+
+Expected web URL:
+
+```text
+https://manjunathbscloud.github.io/banaFinClub/
+```
+
 ## Build Debug APK
 
 ```bash
