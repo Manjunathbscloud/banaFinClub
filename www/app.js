@@ -170,7 +170,7 @@ function normalizePhone(phone) {
 }
 
 function phoneEmail(phone) {
-  return `${normalizePhone(phone)}@banakar-finclub.local`;
+  return `${normalizePhone(phone)}@banakarfinclub.app`;
 }
 
 async function liveQuery(promise) {
@@ -788,6 +788,21 @@ async function login(data) {
     const { data: authData } = await supabaseClient.auth.getUser();
     const profile = state.members.find((item) => item.authUserId === authData?.user?.id);
     if (!member) {
+      if (!profile) {
+        await liveQuery(supabaseClient.rpc("register_profile", {
+          p_full_name: "",
+          p_phone: normalizePhone(data.phone),
+        }));
+        await loadLiveState();
+        const claimedMember = currentUser();
+        if (claimedMember) {
+          state.activeTab = "dashboard";
+          await addLiveAudit(`${claimedMember.name} logged in.`, "login");
+          await loadLiveState();
+          render();
+          return;
+        }
+      }
       if (profile && profile.status !== "active") {
         await supabaseClient.auth.signOut();
         state.currentUserId = null;

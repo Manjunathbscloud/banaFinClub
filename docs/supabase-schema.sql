@@ -197,7 +197,7 @@ begin
     raise exception 'Phone number is required.';
   end if;
 
-  if auth_email <> (normalized_phone || '@banakar-finclub.local') then
+  if auth_email <> (normalized_phone || '@banakarfinclub.app') then
     raise exception 'Phone number does not match the login account.';
   end if;
 

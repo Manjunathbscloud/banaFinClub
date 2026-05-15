@@ -69,7 +69,7 @@ cd android
 Supabase email/password auth is free. Since members want phone + password, the app converts phone numbers to private login emails internally:
 
 ```text
-9591382942@banakar-finclub.local
+9591382942@banakarfinclub.app
 ```
 
 Members still see and type only phone + password.
