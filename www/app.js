@@ -282,8 +282,12 @@ async function loadLiveState() {
     liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
   ]);
 
-  const members = profiles.map(liveProfileToMember);
   const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
+  const visibleProfiles = profiles.filter((profile) => {
+    if (profile.id === current?.id) return true;
+    return profile.status === "active" && profile.auth_user_id;
+  });
+  const members = visibleProfiles.map(liveProfileToMember);
   state = {
     ...structuredClone(initialState),
     ...prefs,
