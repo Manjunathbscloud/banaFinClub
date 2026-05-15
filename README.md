@@ -18,11 +18,11 @@ Banakar FinClub is a private Android/PWA finance app for family fund management.
 - GitHub Pages web/PWA deployment workflow
 - Supabase-ready live backend config file
 
-## Demo Login
+## President Login
 
 ```text
 Phone: 9591382942
-Password: 123456
+Password: Password chosen during signup
 ```
 
 ## Run Locally
@@ -34,7 +34,7 @@ npm start
 
 ## Host Web/PWA Version
 
-This repo includes a GitHub Pages workflow that deploys the `www/` folder.
+This repo includes a GitHub Pages workflow that deploys the `www/` folder as an installable PWA.
 
 In GitHub:
 
@@ -49,9 +49,11 @@ Expected web URL:
 https://manjunathbscloud.github.io/banaFinClub/
 ```
 
+After opening the URL on a phone, use the browser menu and choose **Add to Home Screen** or **Install app**.
+
 ## Configure Live Backend
 
-The app currently runs in demo mode until `www/config.js` is changed:
+The app uses Supabase live mode from `www/config.js`:
 
 ```js
 window.BANAKAR_FINCLUB_CONFIG = {
@@ -80,9 +82,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 ## Next Steps
 
-- Connect real backend authentication and shared database.
 - Add real OTP/password reset.
-- Replace demo local storage with Supabase/Firebase/Apps Script backend.
 - Add ICICI statement file upload parser after sample statement is provided.
 - Create a signed release APK for production sharing.
 

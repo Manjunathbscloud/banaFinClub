@@ -2,7 +2,7 @@
 
 ## 1. Web/PWA Hosting
 
-The app is ready for GitHub Pages, but it can also run only as an APK. GitHub Pages is optional.
+The app is ready for GitHub Pages as an installable PWA. This is the preferred path for testing because UI/code updates can be deployed without rebuilding an APK.
 
 Expected web URL if Pages is enabled:
 
@@ -57,7 +57,7 @@ window.BANAKAR_FINCLUB_CONFIG = {
 };
 ```
 
-Then rebuild the APK:
+For web/PWA deployments, push the change to `main` and let GitHub Pages deploy. For APK deployments, rebuild:
 
 ```bash
 npx cap sync android
