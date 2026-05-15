@@ -1,6 +1,7 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
 const PRESIDENT_PHONE = "9591382942";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
+const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
 const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
 const supabaseClient = liveBackendReady ? window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey) : null;
@@ -184,7 +185,9 @@ function requireValidPhone(phone) {
 }
 
 function phoneEmail(phone) {
-  return `${normalizePhone(phone)}@${AUTH_EMAIL_DOMAIN}`;
+  const normalized = normalizePhone(phone);
+  if (normalized === PRESIDENT_PHONE) return PRESIDENT_EMAIL;
+  return `${normalized}@${AUTH_EMAIL_DOMAIN}`;
 }
 
 async function liveQuery(promise) {

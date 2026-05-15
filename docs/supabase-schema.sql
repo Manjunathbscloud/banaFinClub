@@ -197,7 +197,10 @@ begin
     raise exception 'Phone number is required.';
   end if;
 
-  if auth_email <> (normalized_phone || '@banakarfinclub.app') then
+  if not (
+    auth_email = (normalized_phone || '@banakarfinclub.app')
+    or (normalized_phone = '9591382942' and auth_email = 'manjunathbs.cloud@gmail.com')
+  ) then
     raise exception 'Phone number does not match the login account.';
   end if;
 

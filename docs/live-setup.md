@@ -67,10 +67,10 @@ cd android
 
 ## 5. Auth Approach
 
-Supabase email/password auth is free. Members never type email. The app uses a private internal login ID behind the scenes:
+Supabase email/password auth is free. Members never type email. The president phone is mapped to the president email internally; other members use a private internal login ID behind the scenes:
 
 ```text
-9591382942@banakarfinclub.app
+9591382942 -> manjunathbs.cloud@gmail.com
 ```
 
 Members still see and type only phone + password.

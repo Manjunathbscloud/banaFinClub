@@ -1,6 +1,6 @@
 -- Run this once in Supabase SQL Editor.
--- It updates the profile-claim function to use a valid internal email format:
--- 9591382942@banakarfinclub.app
+-- It updates the profile-claim function so president phone 9591382942 can use
+-- manjunathbs.cloud@gmail.com while other members use internal generated emails.
 
 create or replace function public.register_profile(p_full_name text, p_phone text)
 returns public.profiles
@@ -22,7 +22,10 @@ begin
     raise exception 'Phone number is required.';
   end if;
 
-  if auth_email <> (normalized_phone || '@banakarfinclub.app') then
+  if not (
+    auth_email = (normalized_phone || '@banakarfinclub.app')
+    or (normalized_phone = '9591382942' and auth_email = 'manjunathbs.cloud@gmail.com')
+  ) then
     raise exception 'Phone number does not match the login account.';
   end if;
 
