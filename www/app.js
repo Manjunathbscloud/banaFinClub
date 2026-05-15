@@ -1,4 +1,6 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
+const PRESIDENT_PHONE = "9591382942";
+const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
 const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
 const supabaseClient = liveBackendReady ? window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey) : null;
@@ -169,8 +171,20 @@ function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
+function isValidPhone(phone) {
+  return /^[6-9]\d{9}$/.test(normalizePhone(phone));
+}
+
+function requireValidPhone(phone) {
+  const normalized = normalizePhone(phone);
+  if (!isValidPhone(normalized)) {
+    throw new Error("Enter a valid 10-digit mobile number.");
+  }
+  return normalized;
+}
+
 function phoneEmail(phone) {
-  return `${normalizePhone(phone)}@banakarfinclub.app`;
+  return `${normalizePhone(phone)}@${AUTH_EMAIL_DOMAIN}`;
 }
 
 async function liveQuery(promise) {
@@ -279,7 +293,7 @@ async function loadLiveState() {
     currentUserId: current?.status === "active" ? current.id : null,
     members,
     signupRequests: profiles
-      .filter((profile) => profile.status === "pending")
+      .filter((profile) => profile.status === "pending" && profile.auth_user_id)
       .map((profile) => ({ id: profile.id, name: profile.full_name, phone: profile.phone, date: String(profile.created_at || "").slice(0, 10) })),
     deposits: deposits.map((item) => ({
       id: item.id,
@@ -778,9 +792,10 @@ document.addEventListener("submit", async (event) => {
 });
 
 async function login(data) {
+  const phone = requireValidPhone(data.phone);
   if (liveBackendReady) {
     await liveQuery(supabaseClient.auth.signInWithPassword({
-      email: phoneEmail(data.phone),
+      email: phoneEmail(phone),
       password: data.password,
     }));
     await loadLiveState();
@@ -791,7 +806,7 @@ async function login(data) {
       if (!profile) {
         await liveQuery(supabaseClient.rpc("register_profile", {
           p_full_name: "",
-          p_phone: normalizePhone(data.phone),
+          p_phone: phone,
         }));
         await loadLiveState();
         const claimedMember = currentUser();
@@ -827,7 +842,7 @@ async function login(data) {
     return;
   }
 
-  const member = state.members.find((item) => item.phone === data.phone && item.password === data.password);
+  const member = state.members.find((item) => item.phone === phone && item.password === data.password);
   if (!member) {
     showToast("Invalid phone or password.");
     return;
@@ -844,29 +859,34 @@ async function login(data) {
 }
 
 async function signup(data) {
+  const phone = requireValidPhone(data.phone);
+  const name = data.name.trim();
+  if (!name) {
+    throw new Error("Enter member name.");
+  }
+
   if (liveBackendReady) {
-    const phone = normalizePhone(data.phone);
     await liveQuery(supabaseClient.auth.signUp({
       email: phoneEmail(phone),
       password: data.password,
     }));
     await liveQuery(supabaseClient.rpc("register_profile", {
-      p_full_name: data.name.trim(),
+      p_full_name: name,
       p_phone: phone,
     }));
     await supabaseClient.auth.signOut();
     await loadLiveState();
-    showToast("Signup saved. Existing members can login; new members need admin approval.");
+    showToast(phone === PRESIDENT_PHONE ? "President signup complete. Login now." : "Signup sent to admin for approval.");
     renderAuth("login");
     return;
   }
 
-  if (state.members.some((member) => member.phone === data.phone) || state.signupRequests.some((request) => request.phone === data.phone)) {
+  if (state.members.some((member) => member.phone === phone) || state.signupRequests.some((request) => request.phone === phone)) {
     showToast("Phone number already exists or is pending.");
     return;
   }
-  state.signupRequests.push({ id: uid("s"), name: data.name.trim(), phone: data.phone.trim(), password: data.password, date: today() });
-  state.audit.push({ id: uid("a"), date: today(), text: `Signup requested by ${data.name}.` });
+  state.signupRequests.push({ id: uid("s"), name, phone, password: data.password, date: today() });
+  state.audit.push({ id: uid("a"), date: today(), text: `Signup requested by ${name}.` });
   saveState();
   showToast("Signup request sent to admin.");
   renderAuth("login");

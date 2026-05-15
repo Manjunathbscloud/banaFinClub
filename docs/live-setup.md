@@ -30,11 +30,12 @@ Do not send the `service_role` key. Only the public `anon` key is needed inside 
 
 After Supabase is connected:
 
-1. Each seeded member signs up once with their phone and password.
-2. Seeded active members claim their existing account automatically.
-3. New unknown phone numbers stay pending until the president approves them.
-4. Members login with phone + password.
-5. Deposits, loans, approvals, and statement imports are shared across all phones.
+1. Members sign up with name, phone number, and password only.
+2. The app validates a proper 10-digit mobile number.
+3. The president phone number `9591382942` is active immediately after signup.
+4. Other members stay pending until the president/admin approves them.
+5. Members login with phone + password.
+6. Deposits, loans, approvals, and statement imports are shared across all phones.
 
 The seeded first admin is:
 
@@ -66,7 +67,7 @@ cd android
 
 ## 5. Auth Approach
 
-Supabase email/password auth is free. Since members want phone + password, the app converts phone numbers to private login emails internally:
+Supabase email/password auth is free. Members never type email. The app uses a private internal login ID behind the scenes:
 
 ```text
 9591382942@banakarfinclub.app
