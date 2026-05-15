@@ -1,6 +1,7 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
 const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
+const supabaseClient = liveBackendReady ? window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey) : null;
 
 const translations = {
   en: {
@@ -149,7 +150,152 @@ function loadState() {
 }
 
 function saveState() {
+  if (liveBackendReady) {
+    localStorage.setItem(`${STORAGE_KEY}-prefs`, JSON.stringify({ lang: state.lang, activeTab: state.activeTab }));
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function loadPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(`${STORAGE_KEY}-prefs`)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function phoneEmail(phone) {
+  return `${normalizePhone(phone)}@banakar-finclub.local`;
+}
+
+async function liveQuery(promise) {
+  const { data, error } = await promise;
+  if (error) throw error;
+  return data;
+}
+
+function liveProfileToMember(profile) {
+  return {
+    id: profile.id,
+    name: profile.full_name,
+    phone: profile.phone,
+    role: profile.role,
+    status: profile.status,
+    authUserId: profile.auth_user_id,
+  };
+}
+
+function livePaymentToLocal(payment) {
+  return {
+    id: payment.id,
+    memberId: payment.profile_id,
+    month: payment.month,
+    amount: Number(payment.expected_amount || payment.paid_amount || 0),
+    paidAmount: Number(payment.paid_amount || 0),
+    status: payment.status,
+    source: payment.source,
+  };
+}
+
+function liveLoanToLocal(loan) {
+  return {
+    id: loan.id,
+    memberId: loan.profile_id,
+    amount: Number(loan.principal || 0),
+    principalPaid: Number(loan.principal_paid || 0),
+    from: loan.disbursed_at,
+    status: loan.status,
+    purpose: loan.purpose || "",
+  };
+}
+
+function liveLoanRequestToLocal(request) {
+  return {
+    id: request.id,
+    memberId: request.profile_id,
+    amount: Number(request.amount || 0),
+    reason: request.reason,
+    status: request.status,
+    date: String(request.requested_at || "").slice(0, 10),
+  };
+}
+
+function liveAuditToLocal(log) {
+  return {
+    id: log.id,
+    date: String(log.created_at || "").slice(0, 10),
+    text: log.details?.message || log.action,
+  };
+}
+
+function currentProfileId() {
+  return state.currentUserId;
+}
+
+async function addLiveAudit(message, action = "activity") {
+  if (!liveBackendReady || !currentProfileId()) return;
+  await liveQuery(supabaseClient.from("audit_logs").insert({
+    actor_profile_id: currentProfileId(),
+    action,
+    details: { message },
+  }));
+}
+
+async function loadLiveState() {
+  if (!liveBackendReady) return;
+  const prefs = loadPrefs();
+  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+  if (authError || !authData?.user) {
+    state = { ...structuredClone(initialState), ...prefs, currentUserId: null };
+    return;
+  }
+
+  const [settingsRow, profiles, deposits, payments, loanRequests, loans, audit] = await Promise.all([
+    liveQuery(supabaseClient.from("settings").select("value").eq("id", "rules").single()),
+    liveQuery(supabaseClient.from("profiles").select("*").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
+    liveQuery(supabaseClient.from("monthly_payments").select("*").order("created_at", { ascending: false })),
+    liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
+    liveQuery(supabaseClient.from("loans").select("*").order("created_at", { ascending: false })),
+    liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
+  ]);
+
+  const members = profiles.map(liveProfileToMember);
+  const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
+  state = {
+    ...structuredClone(initialState),
+    ...prefs,
+    settings: {
+      ...initialState.settings,
+      ...(settingsRow?.value || {}),
+      loanInterestLabel: "Rs. 1.25 per Rs. 100 per month",
+      bankName: "ICICI Bank",
+    },
+    currentUserId: current?.status === "active" ? current.id : null,
+    members,
+    signupRequests: profiles
+      .filter((profile) => profile.status === "pending")
+      .map((profile) => ({ id: profile.id, name: profile.full_name, phone: profile.phone, date: String(profile.created_at || "").slice(0, 10) })),
+    deposits: deposits.map((item) => ({
+      id: item.id,
+      year: item.year,
+      label: item.label,
+      principal: Number(item.principal || 0),
+      interest: Number(item.interest || 0),
+      expenditure: Number(item.expenditure || 0),
+      balance: Number(item.balance || 0),
+    })),
+    monthlyPayments: payments.map(livePaymentToLocal),
+    loanRequests: loanRequests.map(liveLoanRequestToLocal),
+    loans: loans.map(liveLoanToLocal),
+    statementRows: [],
+    audit: audit.reverse().map(liveAuditToLocal),
+  };
 }
 
 function money(value) {
@@ -573,7 +719,7 @@ function statusBadge(status) {
   return `<span class="badge ${type}">${escapeHtml(status || "-")}</span>`;
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const tabButton = event.target.closest("[data-tab]");
   if (tabButton) {
     state.activeTab = tabButton.dataset.tab;
@@ -598,31 +744,74 @@ document.addEventListener("click", (event) => {
   }
 
   if (action.dataset.action === "logout") {
+    if (liveBackendReady) await supabaseClient.auth.signOut();
     state.currentUserId = null;
     saveState();
     render();
   }
 
-  if (action.dataset.action === "approve-signup") approveSignup(action.dataset.id);
-  if (action.dataset.action === "reject-signup") rejectSignup(action.dataset.id);
-  if (action.dataset.action === "approve-loan") approveLoan(action.dataset.id);
-  if (action.dataset.action === "reject-loan") rejectLoan(action.dataset.id);
+  try {
+    if (action.dataset.action === "approve-signup") await approveSignup(action.dataset.id);
+    if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
+    if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
+    if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
+  } catch (error) {
+    showToast(error.message || "Something went wrong.");
+  }
 });
 
-document.addEventListener("submit", (event) => {
+document.addEventListener("submit", async (event) => {
   const form = event.target.closest("[data-form]");
   if (!form) return;
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
   const type = form.dataset.form;
-  if (type === "login") login(data);
-  if (type === "signup") signup(data);
-  if (type === "reset") resetPassword(data);
-  if (type === "loan-request") requestLoan(data);
-  if (type === "statement-text") importStatement(data);
+  try {
+    if (type === "login") await login(data);
+    if (type === "signup") await signup(data);
+    if (type === "reset") await resetPassword(data);
+    if (type === "loan-request") await requestLoan(data);
+    if (type === "statement-text") await importStatement(data);
+  } catch (error) {
+    showToast(error.message || "Something went wrong.");
+  }
 });
 
-function login(data) {
+async function login(data) {
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.auth.signInWithPassword({
+      email: phoneEmail(data.phone),
+      password: data.password,
+    }));
+    await loadLiveState();
+    const member = currentUser();
+    const { data: authData } = await supabaseClient.auth.getUser();
+    const profile = state.members.find((item) => item.authUserId === authData?.user?.id);
+    if (!member) {
+      if (profile && profile.status !== "active") {
+        await supabaseClient.auth.signOut();
+        state.currentUserId = null;
+        showToast("Account is pending admin approval.");
+        render();
+        return;
+      }
+      showToast("Profile not found. Please signup first.");
+      return;
+    }
+    if (member.status !== "active") {
+      await supabaseClient.auth.signOut();
+      state.currentUserId = null;
+      showToast("Account is pending admin approval.");
+      render();
+      return;
+    }
+    state.activeTab = "dashboard";
+    await addLiveAudit(`${member.name} logged in.`, "login");
+    await loadLiveState();
+    render();
+    return;
+  }
+
   const member = state.members.find((item) => item.phone === data.phone && item.password === data.password);
   if (!member) {
     showToast("Invalid phone or password.");
@@ -639,7 +828,24 @@ function login(data) {
   render();
 }
 
-function signup(data) {
+async function signup(data) {
+  if (liveBackendReady) {
+    const phone = normalizePhone(data.phone);
+    await liveQuery(supabaseClient.auth.signUp({
+      email: phoneEmail(phone),
+      password: data.password,
+    }));
+    await liveQuery(supabaseClient.rpc("register_profile", {
+      p_full_name: data.name.trim(),
+      p_phone: phone,
+    }));
+    await supabaseClient.auth.signOut();
+    await loadLiveState();
+    showToast("Signup saved. Existing members can login; new members need admin approval.");
+    renderAuth("login");
+    return;
+  }
+
   if (state.members.some((member) => member.phone === data.phone) || state.signupRequests.some((request) => request.phone === data.phone)) {
     showToast("Phone number already exists or is pending.");
     return;
@@ -651,14 +857,32 @@ function signup(data) {
   renderAuth("login");
 }
 
-function resetPassword(data) {
+async function resetPassword(data) {
+  if (liveBackendReady) {
+    showToast("Reset request recorded. Admin can reset the password in Supabase.");
+    return;
+  }
+
   state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.phone}.` });
   saveState();
   showToast("Reset request recorded. Backend OTP will be connected later.");
 }
 
-function requestLoan(data) {
+async function requestLoan(data) {
   const user = currentUser();
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("loan_requests").insert({
+      profile_id: user.id,
+      amount: Number(data.amount),
+      reason: data.reason.trim(),
+    }));
+    await addLiveAudit(`${user.name} requested loan ${money(data.amount)}.`, "loan_requested");
+    await loadLiveState();
+    showToast("Loan request submitted.");
+    render();
+    return;
+  }
+
   state.loanRequests.push({ id: uid("q"), memberId: user.id, amount: Number(data.amount), reason: data.reason.trim(), status: "pending", date: today() });
   state.audit.push({ id: uid("a"), date: today(), text: `${user.name} requested loan ${money(data.amount)}.` });
   saveState();
@@ -666,9 +890,23 @@ function requestLoan(data) {
   render();
 }
 
-function approveSignup(id) {
+async function approveSignup(id) {
   const request = state.signupRequests.find((item) => item.id === id);
   if (!request) return;
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("profiles").update({
+      status: "active",
+      role: "member",
+      approved_at: new Date().toISOString(),
+      approved_by: currentProfileId(),
+    }).eq("id", id));
+    await addLiveAudit(`Approved new member ${request.name}.`, "member_approved");
+    await loadLiveState();
+    showToast("Member approved.");
+    render();
+    return;
+  }
+
   state.members.push({ id: uid("m"), name: request.name, phone: request.phone, role: "member", status: "active", password: request.password });
   state.signupRequests = state.signupRequests.filter((item) => item.id !== id);
   state.audit.push({ id: uid("a"), date: today(), text: `Approved new member ${request.name}.` });
@@ -677,17 +915,48 @@ function approveSignup(id) {
   render();
 }
 
-function rejectSignup(id) {
+async function rejectSignup(id) {
   const request = state.signupRequests.find((item) => item.id === id);
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("profiles").update({ status: "rejected" }).eq("id", id));
+    await addLiveAudit(`Rejected signup ${request?.name || id}.`, "member_rejected");
+    await loadLiveState();
+    render();
+    return;
+  }
+
   state.signupRequests = state.signupRequests.filter((item) => item.id !== id);
   state.audit.push({ id: uid("a"), date: today(), text: `Rejected signup ${request?.name || id}.` });
   saveState();
   render();
 }
 
-function approveLoan(id) {
+async function approveLoan(id) {
   const request = state.loanRequests.find((item) => item.id === id);
   if (!request) return;
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("loan_requests").update({
+      status: "approved",
+      decided_at: new Date().toISOString(),
+      decided_by: currentProfileId(),
+    }).eq("id", id));
+    await liveQuery(supabaseClient.from("loans").insert({
+      profile_id: request.memberId,
+      request_id: request.id,
+      principal: request.amount,
+      principal_paid: 0,
+      interest_rate_monthly: state.settings.loanInterestRateMonthly,
+      status: "active",
+      purpose: request.reason,
+      disbursed_at: today(),
+    }));
+    await addLiveAudit(`Approved loan ${money(request.amount)} for ${memberById(request.memberId)?.name}.`, "loan_approved");
+    await loadLiveState();
+    showToast("Loan approved.");
+    render();
+    return;
+  }
+
   request.status = "approved";
   state.loans.push({ id: uid("l"), memberId: request.memberId, amount: request.amount, principalPaid: 0, from: today(), status: "active", purpose: request.reason });
   state.audit.push({ id: uid("a"), date: today(), text: `Approved loan ${money(request.amount)} for ${memberById(request.memberId)?.name}.` });
@@ -696,16 +965,28 @@ function approveLoan(id) {
   render();
 }
 
-function rejectLoan(id) {
+async function rejectLoan(id) {
   const request = state.loanRequests.find((item) => item.id === id);
   if (!request) return;
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("loan_requests").update({
+      status: "rejected",
+      decided_at: new Date().toISOString(),
+      decided_by: currentProfileId(),
+    }).eq("id", id));
+    await addLiveAudit(`Rejected loan request for ${memberById(request.memberId)?.name}.`, "loan_rejected");
+    await loadLiveState();
+    render();
+    return;
+  }
+
   request.status = "rejected";
   state.audit.push({ id: uid("a"), date: today(), text: `Rejected loan request for ${memberById(request.memberId)?.name}.` });
   saveState();
   render();
 }
 
-function importStatement(data) {
+async function importStatement(data) {
   const rows = data.statement
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -726,6 +1007,38 @@ function importStatement(data) {
     state.monthlyPayments.push({ id: uid("p"), memberId: member.id, month: row.date.slice(0, 7), amount: row.credit, status: "paid", source: "statement" });
   });
 
+  if (liveBackendReady) {
+    for (const row of rows) {
+      const match = matchedPayments.find((item) => item.row.id === row.id);
+      const transaction = await liveQuery(supabaseClient.from("bank_transactions").insert({
+        transaction_date: row.date,
+        narration: row.narration,
+        debit: row.debit,
+        credit: row.credit,
+        balance: row.balance,
+        matched_profile_id: match?.member.id || null,
+        match_type: match ? "monthly_deposit" : null,
+        review_status: match ? "posted" : "unreviewed",
+      }).select("id").single());
+      if (match) {
+        await liveQuery(supabaseClient.from("monthly_payments").upsert({
+          profile_id: match.member.id,
+          month: row.date.slice(0, 7),
+          expected_amount: expectedMonthlyDeposit(match.member, row.date.slice(0, 7)),
+          paid_amount: row.credit,
+          status: "paid",
+          source: "statement",
+          bank_transaction_id: transaction.id,
+        }, { onConflict: "profile_id,month" }));
+      }
+    }
+    await addLiveAudit(`Imported ${rows.length} statement rows; matched ${matchedPayments.length} deposits.`, "statement_imported");
+    await loadLiveState();
+    showToast(`Imported ${rows.length} rows, matched ${matchedPayments.length}.`);
+    render();
+    return;
+  }
+
   state.statementRows.push(...rows);
   state.audit.push({ id: uid("a"), date: today(), text: `Imported ${rows.length} statement rows; matched ${matchedPayments.length} deposits.` });
   saveState();
@@ -733,4 +1046,15 @@ function importStatement(data) {
   render();
 }
 
-render();
+async function initApp() {
+  if (liveBackendReady) {
+    try {
+      await loadLiveState();
+    } catch (error) {
+      showToast(error.message || "Could not load live data.");
+    }
+  }
+  render();
+}
+
+initApp();
