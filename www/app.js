@@ -99,7 +99,7 @@ const initialState = {
     bankName: "ICICI Bank",
   },
   members: [
-    { id: "m1", name: "Manjunath Banakar", phone: "9000000001", role: "president", status: "active", password: "123456" },
+    { id: "m1", name: "Manjunath Banakar", phone: "9591382942", role: "president", status: "active", password: "123456" },
     { id: "m2", name: "Pratap Banakar", phone: "9000000002", role: "vice_president", status: "active", password: "123456" },
     { id: "m3", name: "Sarpabhushana Banakar", phone: "9000000003", role: "member", status: "active", password: "123456" },
     { id: "m4", name: "Mukkanna Banakar", phone: "9000000004", role: "member", status: "active", password: "123456" },
@@ -494,10 +494,10 @@ function renderAuth(mode) {
 function loginForm() {
   return `
     <form class="form" data-form="login">
-      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9000000001" /></label>
+      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
       <label class="field"><span>${t("password")}</span><input name="password" type="password" required placeholder="123456" /></label>
       <button class="primary" type="submit">${t("signIn")}</button>
-      <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9000000001 / 123456. Add Supabase details in config.js to connect live data."}</p>
+      <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9591382942 / 123456. Add Supabase details in config.js to connect live data."}</p>
     </form>
   `;
 }

@@ -39,7 +39,7 @@ After Supabase is connected:
 The seeded first admin is:
 
 ```text
-Phone: 9000000001
+Phone: 9591382942
 Name: Manjunath Banakar
 Role: President
 ```
@@ -69,7 +69,7 @@ cd android
 Supabase email/password auth is free. Since members want phone + password, the app converts phone numbers to private login emails internally:
 
 ```text
-9000000001@banakar-finclub.local
+9591382942@banakar-finclub.local
 ```
 
 Members still see and type only phone + password.

@@ -21,7 +21,7 @@ Banakar FinClub is a private Android/PWA finance app for family fund management.
 ## Demo Login
 
 ```text
-Phone: 9000000001
+Phone: 9591382942
 Password: 123456
 ```
 

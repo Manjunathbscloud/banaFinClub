@@ -37,7 +37,7 @@ on conflict (id) do nothing;
 
 insert into public.profiles (full_name, phone, role, status)
 values
-  ('Manjunath Banakar', '9000000001', 'president', 'active'),
+  ('Manjunath Banakar', '9591382942', 'president', 'active'),
   ('Pratap Banakar', '9000000002', 'vice_president', 'active'),
   ('Sarpabhushana Banakar', '9000000003', 'member', 'active'),
   ('Mukkanna Banakar', '9000000004', 'member', 'active'),
