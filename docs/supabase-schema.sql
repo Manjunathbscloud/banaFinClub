@@ -125,14 +125,22 @@ create table if not exists public.current_loans (
   principal numeric(12,2) not null,
   principal_paid numeric(12,2) not null default 0,
   interest_rate_monthly numeric(6,3) not null default 1.25,
+  interest_paid numeric(12,2) not null default 0,
   is_interest_free boolean not null default false,
-  status text not null default 'active' check (status in ('active', 'closed', 'interest_free')),
+  status text not null default 'active' check (status in ('active', 'clear', 'interest_free')),
   purpose text,
   renewal_or_return_date date,
   disbursed_at date not null default current_date,
+  closed_at date,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
+
+alter table public.current_loans add column if not exists interest_paid numeric(12,2) not null default 0;
+alter table public.current_loans add column if not exists closed_at date;
+alter table public.current_loans drop constraint if exists current_loans_status_check;
+alter table public.current_loans add constraint current_loans_status_check
+  check (status in ('active', 'clear', 'interest_free'));
 
 create table if not exists public.loan_history (
   id uuid primary key default gen_random_uuid(),

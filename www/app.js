@@ -246,8 +246,10 @@ function liveLoanToLocal(loan) {
     amount: Number(loan.principal || 0),
     principalPaid: Number(loan.principal_paid || 0),
     interestRateMonthly: Number(loan.interest_rate_monthly || 1.25),
+    interestPaid: Number(loan.interest_paid || 0),
     from: loan.disbursed_at,
     renewalOrReturnDate: loan.renewal_or_return_date || "",
+    closedAt: loan.closed_at || "",
     status: loan.status,
     isInterestFree: Boolean(loan.is_interest_free),
     purpose: loan.purpose || "",
@@ -438,6 +440,24 @@ function loanMonthlyInterest(loan) {
   return (loanOutstanding(loan) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
 }
 
+function loanBaseMonthlyInterest(loan) {
+  if (loan.status === "interest_free" || loan.isInterestFree) return 0;
+  return (Number(loan.amount || 0) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
+}
+
+function monthDiff(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months -= 1;
+  return Math.max(1, months);
+}
+
+function calculatedInterestPaid(loan, clearDate = today()) {
+  return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
+}
+
 function normalizedName(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -462,6 +482,10 @@ function isCurrentLoan(loan) {
 
 function currentLoans() {
   return state.loans.filter(isCurrentLoan);
+}
+
+function currentLoanBookRows() {
+  return state.loans;
 }
 
 function memberLoans(memberId) {
@@ -773,35 +797,16 @@ function renderDeposits() {
 
 function renderLoans() {
   const user = currentUser();
-  const activeLoans = currentLoans();
-  const visibleLoans = isAdmin() ? activeLoans : activeLoans.filter((loan) => loanBelongsToMember(loan, user));
-  const entryForm = isAdmin() ? `
-      <div class="card">
-        <div class="card-header"><div><h3>Add current loan</h3><p>Manual entry saved to database</p></div></div>
-        <div class="card-body">
-          <form class="form" data-form="manual-loan">
-            <label class="field"><span>Member name</span><input name="memberName" required placeholder="Example: Pratap Banakar" /></label>
-            <label class="field"><span>Phone number</span><input name="memberPhone" inputmode="numeric" placeholder="Optional until member registers" /></label>
-            <label class="field"><span>Loan amount</span><input name="amount" type="number" min="1" required /></label>
-            <label class="field"><span>Principal paid</span><input name="principalPaid" type="number" min="0" value="0" /></label>
-            <label class="field"><span>Loan taken date</span><input name="from" type="date" value="${today()}" required /></label>
-            <label class="field"><span>Return / renewal date</span><input name="renewalOrReturnDate" type="date" /></label>
-            <label class="field"><span>Notes</span><textarea name="purpose" placeholder="Optional"></textarea></label>
-            <button class="primary" type="submit">Add loan</button>
-          </form>
-        </div>
-      </div>
-  ` : "";
+  const visibleLoans = isAdmin() ? currentLoanBookRows() : currentLoanBookRows().filter((loan) => loanBelongsToMember(loan, user));
   return `
     <section class="page-title"><p>${t("loans")}</p><h2>Current loan book</h2></section>
     <section class="grid">
-      ${entryForm}
       <div class="card">
-        <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered from this screen</p></div></div>
+        <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Principal</th><th>Paid</th><th>Outstanding</th><th>Interest/month</th><th>Return/Renewal</th><th>Status</th></tr></thead>
-            <tbody>${visibleLoans.map((loan) => `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.principalPaid)}</td><td>${money(loanOutstanding(loan))}</td><td>${money(loanMonthlyInterest(loan))}</td><td>${escapeHtml(loan.renewalOrReturnDate || "-")}</td><td>${statusBadge(loan.status)}</td></tr>`).join("") || `<tr><td colspan="9" class="empty">No current loans entered yet.</td></tr>`}</tbody>
+            <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>${visibleLoans.map((loan) => `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${isAdmin() && loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button">Mark clear</button>` : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -838,9 +843,24 @@ function renderAdmin() {
   }
 
   const pendingLoanRequests = state.loanRequests.filter((request) => request.status === "pending");
+  const monthlyInterestPreview = (Number(0) * state.settings.loanInterestRateMonthly) / 100;
   return `
     <section class="page-title"><p>${t("admin")}</p><h2>Operations</h2></section>
     <section class="grid">
+      <div class="card">
+        <div class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div></div>
+        <div class="card-body">
+          <form class="form" data-form="manual-loan">
+            <label class="field"><span>Member name</span><input name="memberName" required placeholder="Example: Pratap Banakar" /></label>
+            <label class="field"><span>Phone number</span><input name="memberPhone" inputmode="numeric" required placeholder="10 digit mobile number" /></label>
+            <label class="field"><span>Loan amount</span><input name="amount" type="number" min="1" required data-loan-amount /></label>
+            <label class="field"><span>Interest to be paid / month</span><input value="${money(monthlyInterestPreview)}" readonly data-loan-interest-preview /></label>
+            <label class="field"><span>Loan taken date</span><input name="from" type="date" value="${today()}" required /></label>
+            <button class="primary" type="submit">Add loan</button>
+          </form>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header"><div><h3>Signup approvals</h3><p>Member signup requests</p></div></div>
         <div class="card-body row-list">
@@ -890,7 +910,7 @@ function renderAdmin() {
 
 function statusBadge(status) {
   const normalized = String(status || "").toLowerCase();
-  const type = normalized.includes("paid") || normalized.includes("active") || normalized.includes("approved") ? "good" :
+  const type = normalized.includes("paid") || normalized.includes("active") || normalized.includes("approved") || normalized.includes("clear") ? "good" :
     normalized.includes("pending") || normalized.includes("interest_free") || normalized.includes("onboarding") ? "warn" :
     normalized.includes("reject") ? "bad" : "info";
   return `<span class="badge ${type}">${escapeHtml(status || "-")}</span>`;
@@ -938,9 +958,20 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
     if (action.dataset.action === "delete-member") await deleteMember(action.dataset.id);
+    if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
   } catch (error) {
     showToast(error.message || "Something went wrong.");
   }
+});
+
+document.addEventListener("input", (event) => {
+  const amountInput = event.target.closest("[data-loan-amount]");
+  if (!amountInput) return;
+  const form = amountInput.closest("form");
+  const preview = form?.querySelector("[data-loan-interest-preview]");
+  if (!preview) return;
+  const amount = Number(amountInput.value || 0);
+  preview.value = money((amount * state.settings.loanInterestRateMonthly) / 100);
 });
 
 document.addEventListener("submit", async (event) => {
@@ -1099,24 +1130,20 @@ async function addManualLoan(data) {
   if (!isAdmin()) throw new Error("Only admin can add current loans.");
   const memberName = String(data.memberName || "").trim();
   if (!memberName) throw new Error("Enter member name.");
-  const memberPhone = normalizePhone(data.memberPhone);
-  if (memberPhone && !isValidPhone(memberPhone)) throw new Error("Enter a valid 10-digit phone number or leave it blank.");
+  const memberPhone = requireValidPhone(data.memberPhone);
   const amount = Number(data.amount || 0);
-  const principalPaid = Number(data.principalPaid || 0);
   if (amount <= 0) throw new Error("Enter loan amount.");
-  if (principalPaid < 0 || principalPaid > amount) throw new Error("Principal paid must be between 0 and loan amount.");
 
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("current_loans").insert({
       member_name: memberName,
-      member_phone: memberPhone || null,
+      member_phone: memberPhone,
       principal: amount,
-      principal_paid: principalPaid,
+      principal_paid: 0,
+      interest_paid: 0,
       interest_rate_monthly: state.settings.loanInterestRateMonthly,
       status: "active",
-      purpose: String(data.purpose || "").trim() || null,
       disbursed_at: data.from || today(),
-      renewal_or_return_date: data.renewalOrReturnDate || null,
       created_by: currentProfileId(),
     }));
     await addLiveAudit(`Added current loan ${money(amount)} for ${memberName}.`, "current_loan_added");
@@ -1131,15 +1158,46 @@ async function addManualLoan(data) {
     memberName,
     memberPhone,
     amount,
-    principalPaid,
+    principalPaid: 0,
+    interestPaid: 0,
+    interestRateMonthly: state.settings.loanInterestRateMonthly,
     from: data.from || today(),
-    renewalOrReturnDate: data.renewalOrReturnDate || "",
     status: "active",
-    purpose: String(data.purpose || "").trim(),
   });
   state.audit.push({ id: uid("a"), date: today(), text: `Added current loan ${money(amount)} for ${memberName}.` });
   saveState();
   showToast("Current loan added.");
+  render();
+}
+
+async function clearCurrentLoan(id) {
+  if (!isAdmin()) throw new Error("Only admin can clear current loans.");
+  const loan = state.loans.find((item) => item.id === id);
+  if (!loan) throw new Error("Loan not found.");
+  const closedAt = today();
+  const interestPaid = calculatedInterestPaid(loan, closedAt);
+
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("current_loans").update({
+      status: "clear",
+      principal_paid: loan.amount,
+      interest_paid: interestPaid,
+      closed_at: closedAt,
+    }).eq("id", id));
+    await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
+    await loadLiveState();
+    showToast("Loan marked clear.");
+    render();
+    return;
+  }
+
+  loan.status = "clear";
+  loan.principalPaid = loan.amount;
+  loan.interestPaid = interestPaid;
+  loan.closedAt = closedAt;
+  state.audit.push({ id: uid("a"), date: today(), text: `Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.` });
+  saveState();
+  showToast("Loan marked clear.");
   render();
 }
 
