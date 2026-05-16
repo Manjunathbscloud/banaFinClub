@@ -406,6 +406,11 @@ function activeMembers() {
   return state.members.filter((member) => member.status === "active");
 }
 
+function depositMembers() {
+  const pool = state.allMembers?.length ? state.allMembers : state.members;
+  return pool.filter((member) => member.status === "active" && member.role !== "onboarding");
+}
+
 function roleLabel(role) {
   const labels = {
     president: "President",
@@ -482,6 +487,14 @@ function currentMonthPayment(memberId) {
 
 function memberMonthlyDue(member) {
   return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id);
+}
+
+function groupMonthlyDepositDue() {
+  return depositMembers().reduce((sum, member) => sum + expectedMonthlyDeposit(member), 0);
+}
+
+function groupMonthlyDue() {
+  return groupMonthlyDepositDue() + groupStats().currentInterestDue;
 }
 
 function latestLoanRequest(memberId) {
@@ -639,15 +652,17 @@ function renderDashboard() {
   const user = currentUser();
   const stats = groupStats();
   const monthlyDue = isAdmin()
-    ? activeMembers().reduce((sum, member) => sum + memberMonthlyDue(member), 0)
+    ? groupMonthlyDue()
     : memberMonthlyDue(user);
   const monthlyPayment = currentMonthPayment(user.id);
+  const ownDeposit = expectedMonthlyDeposit(user);
+  const ownInterest = memberMonthlyInterest(user.id);
   const request = latestLoanRequest(user.id);
   const approvalCount = state.signupRequests.length + state.loanRequests.filter((item) => item.status === "pending").length;
   const dashboardMetrics = [
     metric(t("bankBalance"), money(bankBalance()), `From latest statement · ${escapeHtml(state.settings.bankBalanceUpdatedAt || "-")}`),
     metric(t("availableLoan"), money(availableLoanAmount()), `Bank balance - ${money(state.settings.minimumReserve || 5000)} reserve`),
-    metric(t("monthlyDue"), money(monthlyDue), isAdmin() ? "Monthly deposits + loan interest" : `${statusText(monthlyPayment?.status || "pending")} · deposit + interest`),
+    metric(t("monthlyDue"), money(monthlyDue), isAdmin() ? `Deposits ${money(groupMonthlyDepositDue())} + interest ${money(stats.currentInterestDue)}` : `${statusText(monthlyPayment?.status || "pending")} · deposit ${money(ownDeposit)} + interest ${money(ownInterest)}`),
     metric(t("outstandingLoans"), money(memberOutstanding(user.id)), "Your outstanding principal"),
   ];
   if (isAdmin()) {
@@ -667,6 +682,23 @@ function renderDashboard() {
         </div>
       </div>
   ` : "";
+  const loanRows = isAdmin()
+    ? depositMembers()
+      .map((member) => ({ member, outstanding: memberOutstanding(member.id), interest: memberMonthlyInterest(member.id), loans: memberLoans(member.id).length }))
+      .filter((item) => item.outstanding > 0 || item.interest > 0)
+      .map((item) => `<div class="row-item"><div><strong>${escapeHtml(item.member.name)}</strong><span>${item.loans} active loan${item.loans === 1 ? "" : "s"} · interest ${money(item.interest)}</span></div><strong>${money(item.outstanding)}</strong></div>`)
+      .join("")
+    : memberLoans(user.id)
+      .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loan.legacyLoanId || "Loan")}: ${money(loanOutstanding(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))} · return ${escapeHtml(loan.renewalOrReturnDate || "-")}</span></div><span class="badge info">${statusText(loan.status)}</span></div>`)
+      .join("");
+  const loanCard = `
+      <div class="card">
+        <div class="card-header"><div><h3>Loan taken</h3><p>${isAdmin() ? "Current member totals" : "Your current loan details"}</p></div></div>
+        <div class="card-body row-list">
+          ${loanRows || `<div class="empty">No current loans.</div>`}
+        </div>
+      </div>
+  `;
   return `
     <section class="page-title">
       <p>Banakar FinClub</p>
@@ -677,6 +709,7 @@ function renderDashboard() {
     </section>
     <section class="two-col" style="margin-top: 14px;">
       ${logCard}
+      ${loanCard}
       <div class="card">
         <div class="card-header"><div><h3>${t("groupRules")}</h3><p>Current 5-year extension setup</p></div></div>
         <div class="card-body row-list">
@@ -730,11 +763,11 @@ function renderLoans() {
     <section class="page-title"><p>${t("loans")}</p><h2>Current loans and history</h2></section>
     <section class="grid">
       <div class="card">
-        <div class="card-header"><div><h3>Current loan book</h3><p>Separate rows; dashboard totals by member</p></div></div>
+        <div class="card-header"><div><h3>Current loan book</h3><p>2025-26 active loan rows only</p></div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Member</th><th>From</th><th>Principal</th><th>Outstanding</th><th>Interest/month</th><th>Return/Renewal</th><th>Status</th></tr></thead>
-            <tbody>${visibleLoans.map((loan) => `<tr><td>${escapeHtml(memberById(loan.memberId)?.name || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loanOutstanding(loan))}</td><td>${money(loanMonthlyInterest(loan))}</td><td>${escapeHtml(loan.renewalOrReturnDate || "-")}</td><td>${statusBadge(loan.status)}</td></tr>`).join("") || `<tr><td colspan="7" class="empty">No active loans.</td></tr>`}</tbody>
+            <thead><tr><th>Loan ID</th><th>Member</th><th>From</th><th>Principal</th><th>Outstanding</th><th>Interest/month</th><th>Return/Renewal</th><th>Status</th></tr></thead>
+            <tbody>${visibleLoans.map((loan) => `<tr><td>${escapeHtml(loan.legacyLoanId || "-")}</td><td>${escapeHtml(memberById(loan.memberId)?.name || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loanOutstanding(loan))}</td><td>${money(loanMonthlyInterest(loan))}</td><td>${escapeHtml(loan.renewalOrReturnDate || "-")}</td><td>${statusBadge(loan.status)}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No active loans.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -751,7 +784,7 @@ function renderLoans() {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><div><h3>Loan history</h3><p>Closed and clear records</p></div></div>
+          <div class="card-header"><div><h3>Loan history</h3><p>Older-year rows are archived here, even if their old status says Active</p></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Year</th><th>Member</th><th>From</th><th>Amount</th><th>Interest</th><th>Return/Renewal</th><th>Status</th><th>Total paid</th></tr></thead>
