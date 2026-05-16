@@ -30,7 +30,19 @@ values (
     "loanInterestRateMonthly": 1.25,
     "presidentDecemberDeposit": 0,
     "vicePresidentDecemberDeposit": 1250,
+    "minimumReserve": 5000,
     "annualRenewalRule": "Decided in annual meeting"
+  }'::jsonb
+)
+on conflict (id) do nothing;
+
+insert into public.settings (id, value)
+values (
+  'bank_balance',
+  '{
+    "amount": 231770,
+    "updatedAt": "2026-05-14",
+    "source": "initial"
   }'::jsonb
 )
 on conflict (id) do nothing;

@@ -25,6 +25,9 @@ const translations = {
     members: "Members",
     admin: "Admin",
     totalFund: "Total fund balance",
+    bankBalance: "Bank balance",
+    availableLoan: "Available loan",
+    loanRequestStatus: "Loan request status",
     monthlyDue: "Monthly due",
     outstandingLoans: "Outstanding loans",
     pendingApprovals: "Pending approvals",
@@ -64,6 +67,9 @@ const translations = {
     members: "ಸದಸ್ಯರು",
     admin: "ಅಡ್ಮಿನ್",
     totalFund: "ಒಟ್ಟು ನಿಧಿ ಬ್ಯಾಲೆನ್ಸ್",
+    bankBalance: "ಬ್ಯಾಂಕ್ ಬ್ಯಾಲೆನ್ಸ್",
+    availableLoan: "ಲಭ್ಯವಿರುವ ಸಾಲ",
+    loanRequestStatus: "ಸಾಲ ವಿನಂತಿ ಸ್ಥಿತಿ",
     monthlyDue: "ಮಾಸಿಕ ಬಾಕಿ",
     outstandingLoans: "ಬಾಕಿ ಸಾಲಗಳು",
     pendingApprovals: "ಬಾಕಿ ಅನುಮೋದನೆಗಳು",
@@ -100,6 +106,9 @@ const initialState = {
     vicePresidentDecemberDeposit: 1250,
     annualRenewalRule: "Decided in annual meeting",
     bankName: "ICICI Bank",
+    bankBalance: 231770,
+    minimumReserve: 5000,
+    bankBalanceUpdatedAt: "2026-05-14",
   },
   members: [
     { id: "m1", name: "Manjunath Banakar", phone: "9591382942", role: "president", status: "active", password: "123456" },
@@ -272,8 +281,8 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRow, profiles, deposits, payments, loanRequests, loans, audit] = await Promise.all([
-    liveQuery(supabaseClient.from("settings").select("value").eq("id", "rules").single()),
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, audit] = await Promise.all([
+    liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("*").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
     liveQuery(supabaseClient.from("monthly_payments").select("*").order("created_at", { ascending: false })),
@@ -282,6 +291,7 @@ async function loadLiveState() {
     liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
   ]);
 
+  const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
   const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
   const visibleProfiles = profiles.filter((profile) => {
     if (profile.id === current?.id) return true;
@@ -293,7 +303,9 @@ async function loadLiveState() {
     ...prefs,
     settings: {
       ...initialState.settings,
-      ...(settingsRow?.value || {}),
+      ...(settingsById.rules || {}),
+      bankBalance: Number(settingsById.bank_balance?.amount ?? initialState.settings.bankBalance),
+      bankBalanceUpdatedAt: settingsById.bank_balance?.updatedAt || initialState.settings.bankBalanceUpdatedAt,
       loanInterestLabel: "Rs. 1.25 per Rs. 100 per month",
       bankName: "ICICI Bank",
     },
@@ -401,7 +413,7 @@ function latestHistoricalBalance() {
 }
 
 function groupStats() {
-  const baseBalance = latestHistoricalBalance();
+  const baseBalance = Number(state.settings.bankBalance ?? latestHistoricalBalance());
   const monthlyCredits = state.monthlyPayments
     .filter((payment) => payment.status === "paid")
     .reduce((sum, payment) => sum + payment.amount, 0);
@@ -409,6 +421,28 @@ function groupStats() {
   const currentInterestDue = state.loans.reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
   const availableBalance = baseBalance + monthlyCredits - loanPrincipalOutstanding;
   return { baseBalance, monthlyCredits, loanPrincipalOutstanding, currentInterestDue, availableBalance };
+}
+
+function bankBalance() {
+  return Number(state.settings.bankBalance ?? latestHistoricalBalance());
+}
+
+function availableLoanAmount() {
+  return Math.max(0, bankBalance() - Number(state.settings.minimumReserve || 5000));
+}
+
+function currentMonthPayment(memberId) {
+  return state.monthlyPayments.find((payment) => payment.memberId === memberId && payment.month === currentMonth());
+}
+
+function memberMonthlyDue(member) {
+  return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id);
+}
+
+function latestLoanRequest(memberId) {
+  return state.loanRequests
+    .filter((request) => request.memberId === memberId)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
 }
 
 function showToast(message) {
@@ -559,8 +593,23 @@ function renderTab() {
 function renderDashboard() {
   const user = currentUser();
   const stats = groupStats();
-  const expected = expectedMonthlyDeposit(user);
-  const interest = memberMonthlyInterest(user.id);
+  const monthlyDue = isAdmin()
+    ? activeMembers().reduce((sum, member) => sum + memberMonthlyDue(member), 0)
+    : memberMonthlyDue(user);
+  const monthlyPayment = currentMonthPayment(user.id);
+  const request = latestLoanRequest(user.id);
+  const approvalCount = state.signupRequests.length + state.loanRequests.filter((item) => item.status === "pending").length;
+  const dashboardMetrics = [
+    metric(t("bankBalance"), money(bankBalance()), `From latest statement · ${escapeHtml(state.settings.bankBalanceUpdatedAt || "-")}`),
+    metric(t("availableLoan"), money(availableLoanAmount()), `Bank balance - ${money(state.settings.minimumReserve || 5000)} reserve`),
+    metric(t("monthlyDue"), money(monthlyDue), isAdmin() ? "Monthly deposits + loan interest" : `${statusText(monthlyPayment?.status || "pending")} · deposit + interest`),
+    metric(t("outstandingLoans"), money(isAdmin() ? stats.loanPrincipalOutstanding : memberOutstanding(user.id)), isAdmin() ? "Group outstanding principal" : "Your outstanding principal"),
+  ];
+  if (isAdmin()) {
+    dashboardMetrics.push(metric(t("pendingApprovals"), String(approvalCount), "Signup and loan requests"));
+  } else {
+    dashboardMetrics.push(metric(t("loanRequestStatus"), statusText(request?.status || "none"), request ? `${money(request.amount)} · ${escapeHtml(request.date || "-")}` : "No loan request"));
+  }
   const logCard = isAdmin() ? `
       <div class="card">
         <div class="card-header">
@@ -579,10 +628,7 @@ function renderDashboard() {
       <h2>${t("dashboard")}</h2>
     </section>
     <section class="metrics">
-      ${metric(t("totalFund"), money(stats.availableBalance), "Historical balance + paid deposits - active loans")}
-      ${metric(t("monthlyDue"), money(expected + interest), `${t("dueBy")} · ${money(interest)} interest`)}
-      ${metric(t("outstandingLoans"), money(isAdmin() ? stats.loanPrincipalOutstanding : memberOutstanding(user.id)), isAdmin() ? "Group active principal" : "Your active principal")}
-      ${metric(t("pendingApprovals"), String(state.signupRequests.length + state.loanRequests.filter((item) => item.status === "pending").length), "Signup and loan requests")}
+      ${dashboardMetrics.join("")}
     </section>
     <section class="two-col" style="margin-top: 14px;">
       ${logCard}
@@ -744,6 +790,11 @@ function statusBadge(status) {
     normalized.includes("pending") || normalized.includes("interest_free") || normalized.includes("onboarding") ? "warn" :
     normalized.includes("reject") ? "bad" : "info";
   return `<span class="badge ${type}">${escapeHtml(status || "-")}</span>`;
+}
+
+function statusText(status) {
+  const value = String(status || "none");
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 document.addEventListener("click", async (event) => {
@@ -1092,6 +1143,7 @@ async function importStatement(data) {
   });
 
   if (liveBackendReady) {
+    const latestBalanceRow = [...rows].reverse().find((row) => Number.isFinite(row.balance));
     for (const row of rows) {
       const match = matchedPayments.find((item) => item.row.id === row.id);
       const transaction = await liveQuery(supabaseClient.from("bank_transactions").insert({
@@ -1115,6 +1167,17 @@ async function importStatement(data) {
           bank_transaction_id: transaction.id,
         }, { onConflict: "profile_id,month" }));
       }
+    }
+    if (latestBalanceRow) {
+      await liveQuery(supabaseClient.from("settings").upsert({
+        id: "bank_balance",
+        value: {
+          amount: latestBalanceRow.balance,
+          updatedAt: latestBalanceRow.date || today(),
+          source: "statement",
+        },
+        updated_at: new Date().toISOString(),
+      }));
     }
     await addLiveAudit(`Imported ${rows.length} statement rows; matched ${matchedPayments.length} deposits.`, "statement_imported");
     await loadLiveState();
