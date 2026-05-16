@@ -249,6 +249,7 @@ function liveLoanToLocal(loan) {
     from: loan.disbursed_at,
     renewalOrReturnDate: loan.renewal_or_return_date || "",
     status: loan.status,
+    isInterestFree: Boolean(loan.is_interest_free),
     purpose: loan.purpose || "",
   };
 }
@@ -428,12 +429,20 @@ function loanOutstanding(loan) {
 }
 
 function loanMonthlyInterest(loan) {
-  if (loan.status === "interest_free") return 0;
+  if (loan.status === "interest_free" || loan.isInterestFree) return 0;
   return (loanOutstanding(loan) * state.settings.loanInterestRateMonthly) / 100;
 }
 
+function isCurrentLoan(loan) {
+  return loan.status === "active" && loanOutstanding(loan) > 0;
+}
+
+function currentLoans() {
+  return state.loans.filter(isCurrentLoan);
+}
+
 function memberLoans(memberId) {
-  return state.loans.filter((loan) => loan.memberId === memberId);
+  return currentLoans().filter((loan) => loan.memberId === memberId);
 }
 
 function memberOutstanding(memberId) {
@@ -453,8 +462,8 @@ function groupStats() {
   const monthlyCredits = state.monthlyPayments
     .filter((payment) => payment.status === "paid")
     .reduce((sum, payment) => sum + payment.amount, 0);
-  const loanPrincipalOutstanding = state.loans.reduce((sum, loan) => sum + loanOutstanding(loan), 0);
-  const currentInterestDue = state.loans.reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
+  const loanPrincipalOutstanding = currentLoans().reduce((sum, loan) => sum + loanOutstanding(loan), 0);
+  const currentInterestDue = currentLoans().reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
   const availableBalance = baseBalance + monthlyCredits - loanPrincipalOutstanding;
   return { baseBalance, monthlyCredits, loanPrincipalOutstanding, currentInterestDue, availableBalance };
 }
@@ -714,7 +723,8 @@ function renderDeposits() {
 
 function renderLoans() {
   const user = currentUser();
-  const visibleLoans = isAdmin() ? state.loans : state.loans.filter((loan) => loan.memberId === user.id);
+  const activeLoans = currentLoans();
+  const visibleLoans = isAdmin() ? activeLoans : activeLoans.filter((loan) => loan.memberId === user.id);
   const visibleHistory = isAdmin() ? state.loanHistory : state.loanHistory.filter((loan) => loan.memberId === user.id);
   return `
     <section class="page-title"><p>${t("loans")}</p><h2>Current loans and history</h2></section>
