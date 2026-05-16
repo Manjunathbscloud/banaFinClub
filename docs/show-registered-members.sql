@@ -7,4 +7,4 @@ drop policy if exists "profiles readable by authenticated users" on public.profi
 create policy "profiles readable by authenticated users"
   on public.profiles for select
   to authenticated
-  using (auth_user_id is not null);
+  using (public.is_admin() or auth_user_id is not null);

@@ -15,6 +15,10 @@ create table if not exists public.profiles (
   approved_by uuid references public.profiles(id)
 );
 
+alter table public.profiles drop constraint if exists profiles_status_check;
+alter table public.profiles add constraint profiles_status_check
+  check (status in ('pending', 'active', 'rejected', 'disabled', 'exited'));
+
 create table if not exists public.settings (
   id text primary key,
   value jsonb not null,
@@ -99,13 +103,36 @@ create table if not exists public.loans (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles(id),
   request_id uuid references public.loan_requests(id),
+  legacy_loan_id text,
   principal numeric(12,2) not null,
   principal_paid numeric(12,2) not null default 0,
   interest_rate_monthly numeric(6,3) not null default 1.25,
   is_interest_free boolean not null default false,
   status text not null default 'active' check (status in ('active', 'closed', 'interest_free')),
   purpose text,
+  renewal_or_return_date date,
   disbursed_at date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+alter table public.loans add column if not exists legacy_loan_id text;
+alter table public.loans add column if not exists renewal_or_return_date date;
+
+create table if not exists public.loan_history (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references public.profiles(id),
+  legacy_loan_id text,
+  year text not null,
+  member_name text not null,
+  from_date date,
+  principal numeric(12,2) not null default 0,
+  monthly_interest numeric(12,2) not null default 0,
+  interest_text text,
+  renewal_or_return text,
+  status text not null default 'Clear',
+  total_paid numeric(12,2) not null default 0,
+  is_interest_free boolean not null default false,
+  notes text,
   created_at timestamptz not null default now()
 );
 
@@ -147,6 +174,7 @@ alter table public.deposit_summaries enable row level security;
 alter table public.monthly_payments enable row level security;
 alter table public.loan_requests enable row level security;
 alter table public.loans enable row level security;
+alter table public.loan_history enable row level security;
 alter table public.repayments enable row level security;
 alter table public.bank_transactions enable row level security;
 alter table public.audit_logs enable row level security;
@@ -254,6 +282,7 @@ drop policy if exists "financial records readable by authenticated users" on pub
 drop policy if exists "monthly payments readable by authenticated users" on public.monthly_payments;
 drop policy if exists "loan requests readable by authenticated users" on public.loan_requests;
 drop policy if exists "loans readable by authenticated users" on public.loans;
+drop policy if exists "loan history readable by authenticated users" on public.loan_history;
 drop policy if exists "repayments readable by authenticated users" on public.repayments;
 drop policy if exists "bank transactions readable by authenticated users" on public.bank_transactions;
 drop policy if exists "audit logs readable by authenticated users" on public.audit_logs;
@@ -265,6 +294,7 @@ drop policy if exists "monthly payments admin write" on public.monthly_payments;
 drop policy if exists "loan requests own insert" on public.loan_requests;
 drop policy if exists "loan requests admin update" on public.loan_requests;
 drop policy if exists "loans admin write" on public.loans;
+drop policy if exists "loan history admin write" on public.loan_history;
 drop policy if exists "repayments admin write" on public.repayments;
 drop policy if exists "bank transactions admin read" on public.bank_transactions;
 drop policy if exists "bank transactions admin write" on public.bank_transactions;
@@ -273,7 +303,7 @@ drop policy if exists "audit logs authenticated insert" on public.audit_logs;
 create policy "profiles readable by authenticated users"
   on public.profiles for select
   to authenticated
-  using (auth_user_id is not null);
+  using (public.is_admin() or auth_user_id is not null);
 
 create policy "profiles admin update"
   on public.profiles for update
@@ -342,6 +372,17 @@ create policy "loans readable by authenticated users"
 
 create policy "loans admin write"
   on public.loans for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+create policy "loan history readable by authenticated users"
+  on public.loan_history for select
+  to authenticated
+  using (public.is_admin() or profile_id = public.current_profile_id());
+
+create policy "loan history admin write"
+  on public.loan_history for all
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
