@@ -260,7 +260,7 @@ drop policy if exists "audit logs authenticated insert" on public.audit_logs;
 create policy "profiles readable by authenticated users"
   on public.profiles for select
   to authenticated
-  using (public.is_admin() or id = public.current_profile_id());
+  using (auth_user_id is not null);
 
 create policy "profiles admin update"
   on public.profiles for update

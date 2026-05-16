@@ -285,7 +285,7 @@ async function loadLiveState() {
   const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
   const visibleProfiles = profiles.filter((profile) => {
     if (profile.id === current?.id) return true;
-    return profile.status === "active" && profile.auth_user_id;
+    return profile.auth_user_id && !["rejected", "disabled"].includes(profile.status);
   });
   const members = visibleProfiles.map(liveProfileToMember);
   state = {
@@ -657,7 +657,7 @@ function renderLoans() {
 }
 
 function renderMembers() {
-  const rows = isAdmin() ? state.members : [currentUser()];
+  const rows = state.members;
   return `
     <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2></section>
     <section class="card">
