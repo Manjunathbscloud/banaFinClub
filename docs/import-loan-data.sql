@@ -1,5 +1,8 @@
--- Run this once in Supabase SQL Editor.
--- Imports old loan data from the Sri-Mukkaneshwara sheet into:
+-- Run this in Supabase SQL Editor.
+-- Current active loans are verified from:
+-- /Users/manjunathbanakar/Downloads/Loan_Records_2025-26_2026-05-16.pdf
+--
+-- Imports loan data into:
 -- 1) public.loans for current active loans
 -- 2) public.loan_history for closed/clear historical loans
 --
@@ -52,8 +55,13 @@ where lower(full_name) like 'sarpabhushana%';
 
 delete from public.loans
 where legacy_loan_id in (
-  'SMA-25-007', 'SMA-25-002', 'SMA-25-004', 'SMA-25-005',
-  'SMA-25-001', 'SMA-25-006', 'SMA-25-010', 'SMA-26-001'
+  'SMA-25-001', 'SMA-25-002', 'SMA-25-003', 'SMA-25-004',
+  'SMA-25-005', 'SMA-25-006', 'SMA-25-007', 'SMA-25-008',
+  'SMA-25-009', 'SMA-25-010', 'SMA-26-001'
+)
+or purpose in (
+  'Imported active loan from old records',
+  'Imported active loan from PDF Loan_Records_2025-26_2026-05-16.pdf'
 );
 
 with active_loans(member_name, legacy_loan_id, principal, disbursed_at, renewal_or_return_date) as (
@@ -87,7 +95,7 @@ select
   1.25,
   false,
   'active',
-  'Imported active loan from old records',
+  'Imported active loan from PDF Loan_Records_2025-26_2026-05-16.pdf',
   a.disbursed_at,
   a.renewal_or_return_date
 from active_loans a
@@ -96,7 +104,9 @@ join public.profiles p on lower(p.full_name) like lower(a.member_name) || '%';
 delete from public.loan_history
 where notes in (
   'Imported clear loan from old records',
-  'Exited member record retained for history'
+  'Exited member record retained for history',
+  'Imported clear loan from PDF Loan_Records_2025-26_2026-05-16.pdf',
+  'Exited member record retained from PDF Loan_Records_2025-26_2026-05-16.pdf'
 );
 
 with history(year, legacy_loan_id, member_name, from_date, principal, monthly_interest, interest_text, renewal_or_return, status, total_paid, is_interest_free) as (
@@ -154,6 +164,27 @@ select
   h.status,
   h.total_paid,
   h.is_interest_free,
-  case when lower(h.member_name) = 'sarpabhushana' then 'Exited member record retained for history' else 'Imported clear loan from old records' end
+  case
+    when lower(h.member_name) = 'sarpabhushana' then 'Exited member record retained from PDF Loan_Records_2025-26_2026-05-16.pdf'
+    when h.year = '2025-26' then 'Imported clear loan from PDF Loan_Records_2025-26_2026-05-16.pdf'
+    else 'Imported clear loan from old records'
+  end
 from history h
 left join public.profiles p on lower(p.full_name) like lower(h.member_name) || '%';
+
+select
+  'PDF active loan import summary' as result,
+  count(*) as active_loans,
+  coalesce(sum(principal - principal_paid), 0) as active_principal,
+  coalesce(sum(
+    case
+      when is_interest_free then 0
+      else round((principal - principal_paid) * interest_rate_monthly / 100, 2)
+    end
+  ), 0) as monthly_interest
+from public.loans
+where status = 'active'
+and legacy_loan_id in (
+  'SMA-25-007', 'SMA-25-002', 'SMA-25-004', 'SMA-25-005',
+  'SMA-25-001', 'SMA-25-006', 'SMA-25-010', 'SMA-26-001'
+);
