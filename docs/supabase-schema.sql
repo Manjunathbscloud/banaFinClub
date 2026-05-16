@@ -367,7 +367,7 @@ create policy "bank transactions admin write"
 create policy "audit logs readable by authenticated users"
   on public.audit_logs for select
   to authenticated
-  using (public.is_admin() or actor_profile_id = public.current_profile_id());
+  using (public.is_admin());
 
 create policy "audit logs authenticated insert"
   on public.audit_logs for insert

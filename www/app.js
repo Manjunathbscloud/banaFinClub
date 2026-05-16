@@ -561,6 +561,18 @@ function renderDashboard() {
   const stats = groupStats();
   const expected = expectedMonthlyDeposit(user);
   const interest = memberMonthlyInterest(user.id);
+  const logCard = isAdmin() ? `
+      <div class="card">
+        <div class="card-header">
+          <div><h3>${t("recentActivity")}</h3><p>Audit log</p></div>
+        </div>
+        <div class="card-body row-list">
+          ${state.audit.slice(-5).reverse().map((item) => `
+            <div class="row-item"><div><strong>${escapeHtml(item.text)}</strong><span>${escapeHtml(item.date)}</span></div><span class="badge info">Log</span></div>
+          `).join("")}
+        </div>
+      </div>
+  ` : "";
   return `
     <section class="page-title">
       <p>Banakar FinClub</p>
@@ -573,16 +585,7 @@ function renderDashboard() {
       ${metric(t("pendingApprovals"), String(state.signupRequests.length + state.loanRequests.filter((item) => item.status === "pending").length), "Signup and loan requests")}
     </section>
     <section class="two-col" style="margin-top: 14px;">
-      <div class="card">
-        <div class="card-header">
-          <div><h3>${t("recentActivity")}</h3><p>Audit log</p></div>
-        </div>
-        <div class="card-body row-list">
-          ${state.audit.slice(-5).reverse().map((item) => `
-            <div class="row-item"><div><strong>${escapeHtml(item.text)}</strong><span>${escapeHtml(item.date)}</span></div><span class="badge info">Log</span></div>
-          `).join("")}
-        </div>
-      </div>
+      ${logCard}
       <div class="card">
         <div class="card-header"><div><h3>${t("groupRules")}</h3><p>Current 5-year extension setup</p></div></div>
         <div class="card-body row-list">
