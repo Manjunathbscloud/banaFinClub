@@ -246,6 +246,7 @@ drop policy if exists "repayments readable by authenticated users" on public.rep
 drop policy if exists "bank transactions readable by authenticated users" on public.bank_transactions;
 drop policy if exists "audit logs readable by authenticated users" on public.audit_logs;
 drop policy if exists "profiles admin update" on public.profiles;
+drop policy if exists "profiles admin delete" on public.profiles;
 drop policy if exists "settings admin write" on public.settings;
 drop policy if exists "deposit summaries admin write" on public.deposit_summaries;
 drop policy if exists "monthly payments admin write" on public.monthly_payments;
@@ -267,6 +268,11 @@ create policy "profiles admin update"
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
+
+create policy "profiles admin delete"
+  on public.profiles for delete
+  to authenticated
+  using (public.is_admin() and id <> public.current_profile_id());
 
 create policy "settings readable by authenticated users"
   on public.settings for select

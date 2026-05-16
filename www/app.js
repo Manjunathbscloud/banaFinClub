@@ -665,7 +665,10 @@ function renderMembers() {
         ${rows.map((member) => `
           <div class="row-item">
             <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span></div>
-            ${statusBadge(member.status)}
+            <div class="actions">
+              ${statusBadge(member.status)}
+              ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="delete-member" data-id="${member.id}" type="button">Delete</button>` : ""}
+            </div>
           </div>
         `).join("")}
       </div>
@@ -776,6 +779,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
+    if (action.dataset.action === "delete-member") await deleteMember(action.dataset.id);
   } catch (error) {
     showToast(error.message || "Something went wrong.");
   }
@@ -970,6 +974,41 @@ async function rejectSignup(id) {
   state.signupRequests = state.signupRequests.filter((item) => item.id !== id);
   state.audit.push({ id: uid("a"), date: today(), text: `Rejected signup ${request?.name || id}.` });
   saveState();
+  render();
+}
+
+async function deleteMember(id) {
+  const member = memberById(id);
+  if (!member || !isAdmin()) return;
+  if (member.id === currentProfileId()) {
+    showToast("Admin account cannot delete itself.");
+    return;
+  }
+  const confirmed = window.confirm(`Delete ${member.name} from Banakar FinClub?`);
+  if (!confirmed) return;
+
+  if (liveBackendReady) {
+    const deleteResult = await supabaseClient.from("profiles").delete({ count: "exact" }).eq("id", id);
+    if (deleteResult.error || deleteResult.count === 0) {
+      await liveQuery(supabaseClient.from("profiles").update({ status: "disabled" }).eq("id", id));
+      await addLiveAudit(`Disabled member ${member.name}.`, "member_disabled");
+      await loadLiveState();
+      showToast("Member removed from app access.");
+      render();
+      return;
+    }
+    await addLiveAudit(`Deleted member ${member.name}.`, "member_deleted");
+    await loadLiveState();
+    showToast("Member deleted.");
+    render();
+    return;
+  }
+
+  state.members = state.members.filter((item) => item.id !== id);
+  state.signupRequests = state.signupRequests.filter((item) => item.id !== id);
+  state.audit.push({ id: uid("a"), date: today(), text: `Deleted member ${member.name}.` });
+  saveState();
+  showToast("Member deleted.");
   render();
 }
 
