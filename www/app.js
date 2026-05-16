@@ -665,7 +665,7 @@ function renderMembers() {
         ${rows.map((member) => `
           <div class="row-item">
             <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span></div>
-            <div class="actions">
+            <div class="member-actions">
               ${statusBadge(member.status)}
               ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="delete-member" data-id="${member.id}" type="button">Delete</button>` : ""}
             </div>
@@ -685,25 +685,9 @@ function renderAdmin() {
   }
 
   const pendingLoanRequests = state.loanRequests.filter((request) => request.status === "pending");
-  const manageableMembers = state.members.filter((member) => member.id !== currentProfileId());
   return `
     <section class="page-title"><p>${t("admin")}</p><h2>Operations</h2></section>
     <section class="grid">
-      <div class="card">
-        <div class="card-header"><div><h3>Member management</h3><p>Remove users from app access</p></div></div>
-        <div class="card-body row-list">
-          ${manageableMembers.map((member) => `
-            <div class="row-item">
-              <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span></div>
-              <div class="actions">
-                ${statusBadge(member.status)}
-                <button class="danger" data-action="delete-member" data-id="${member.id}" type="button">Delete</button>
-              </div>
-            </div>
-          `).join("") || `<div class="empty">No other registered members.</div>`}
-        </div>
-      </div>
-
       <div class="card">
         <div class="card-header"><div><h3>Signup approvals</h3><p>Member signup requests</p></div></div>
         <div class="card-body row-list">

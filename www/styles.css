@@ -555,6 +555,26 @@ th {
   gap: 10px;
 }
 
+.member-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.member-actions .badge,
+.member-actions .danger {
+  min-height: 32px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.member-actions .danger {
+  border-color: #ffd3d0;
+}
+
 .alert {
   background: var(--orange-soft);
   border: 1px solid #ffd3a5;
