@@ -603,7 +603,7 @@ function renderDashboard() {
     metric(t("bankBalance"), money(bankBalance()), `From latest statement · ${escapeHtml(state.settings.bankBalanceUpdatedAt || "-")}`),
     metric(t("availableLoan"), money(availableLoanAmount()), `Bank balance - ${money(state.settings.minimumReserve || 5000)} reserve`),
     metric(t("monthlyDue"), money(monthlyDue), isAdmin() ? "Monthly deposits + loan interest" : `${statusText(monthlyPayment?.status || "pending")} · deposit + interest`),
-    metric(t("outstandingLoans"), money(isAdmin() ? stats.loanPrincipalOutstanding : memberOutstanding(user.id)), isAdmin() ? "Group outstanding principal" : "Your outstanding principal"),
+    metric(t("outstandingLoans"), money(memberOutstanding(user.id)), "Your outstanding principal"),
   ];
   if (isAdmin()) {
     dashboardMetrics.push(metric(t("pendingApprovals"), String(approvalCount), "Signup and loan requests"));
