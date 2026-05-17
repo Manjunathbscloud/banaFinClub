@@ -703,10 +703,7 @@ function renderTab() {
 
 function renderDashboard() {
   const user = currentUser();
-  const stats = groupStats();
-  const monthlyDue = isAdmin()
-    ? groupMonthlyDue()
-    : memberMonthlyDue(user);
+  const monthlyDue = memberMonthlyDue(user);
   const monthlyPayment = currentMonthPayment(user.id);
   const ownDeposit = expectedMonthlyDeposit(user);
   const ownInterest = memberMonthlyInterest(user.id);
@@ -715,7 +712,7 @@ function renderDashboard() {
   const dashboardMetrics = [
     metric(t("bankBalance"), money(bankBalance()), `From latest statement · ${escapeHtml(state.settings.bankBalanceUpdatedAt || "-")}`),
     metric(t("availableLoan"), money(availableLoanAmount()), `Bank balance - ${money(state.settings.minimumReserve || 5000)} reserve`),
-    metric(t("monthlyDue"), money(monthlyDue), isAdmin() ? `Deposits ${money(groupMonthlyDepositDue())} + interest ${money(stats.currentInterestDue)}` : `${statusText(monthlyPayment?.status || "pending")} · deposit ${money(ownDeposit)} + interest ${money(ownInterest)}`),
+    metric(t("monthlyDue"), money(monthlyDue), `${statusText(monthlyPayment?.status || "pending")} · deposit ${money(ownDeposit)} + interest ${money(ownInterest)}`),
     metric(t("outstandingLoans"), money(memberOutstanding(user.id)), "Your outstanding principal"),
   ];
   if (isAdmin()) {
@@ -735,16 +732,12 @@ function renderDashboard() {
         </div>
       </div>
   ` : "";
-  const loanRows = isAdmin()
-    ? currentLoans()
-      .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loanMemberName(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))}</span></div><strong>${money(loanOutstanding(loan))}</strong></div>`)
-      .join("")
-    : memberLoans(user.id)
-      .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loan.legacyLoanId || "Loan")}: ${money(loanOutstanding(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))} · return ${escapeHtml(loan.renewalOrReturnDate || "-")}</span></div><span class="badge info">${statusText(loan.status)}</span></div>`)
-      .join("");
+  const loanRows = memberLoans(user.id)
+    .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loanMemberName(loan))}: ${money(loanOutstanding(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))} · renewal ${escapeHtml(loanRenewalDate(loan) || "-")}</span></div><span class="badge info">${statusText(loan.status)}</span></div>`)
+    .join("");
   const loanCard = `
       <div class="card">
-        <div class="card-header"><div><h3>Loan taken</h3><p>${isAdmin() ? "Current member totals" : "Your current loan details"}</p></div></div>
+        <div class="card-header"><div><h3>Loan taken</h3><p>Your current loan details</p></div></div>
         <div class="card-body row-list">
           ${loanRows || `<div class="empty">No current loans.</div>`}
         </div>
