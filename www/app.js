@@ -458,6 +458,17 @@ function calculatedInterestPaid(loan, clearDate = today()) {
   return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
 }
 
+function oneYearFrom(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setFullYear(date.getFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function loanRenewalDate(loan) {
+  return loan.renewalOrReturnDate || oneYearFrom(loan.from);
+}
+
 function normalizedName(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -818,7 +829,7 @@ function renderLoans() {
         <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Renewal</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>${visibleLoans.map((loan) => {
               const actions = isAdmin() ? `
                 <div class="actions">
@@ -826,8 +837,8 @@ function renderLoans() {
                   <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
                 </div>
               ` : "-";
-              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
-            }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
+              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${escapeHtml(loanRenewalDate(loan) || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
+            }).join("") || `<tr><td colspan="9" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -1154,6 +1165,7 @@ async function addManualLoan(data) {
   if (!memberName) throw new Error("Enter member name.");
   const memberPhone = requireValidPhone(data.memberPhone);
   const amount = Number(data.amount || 0);
+  const loanDate = data.from || today();
   if (amount <= 0) throw new Error("Enter loan amount.");
 
   if (liveBackendReady) {
@@ -1165,7 +1177,8 @@ async function addManualLoan(data) {
       interest_paid: 0,
       interest_rate_monthly: state.settings.loanInterestRateMonthly,
       status: "active",
-      disbursed_at: data.from || today(),
+      disbursed_at: loanDate,
+      renewal_or_return_date: oneYearFrom(loanDate),
       created_by: currentProfileId(),
     }));
     await addLiveAudit(`Added current loan ${money(amount)} for ${memberName}.`, "current_loan_added");
@@ -1183,7 +1196,8 @@ async function addManualLoan(data) {
     principalPaid: 0,
     interestPaid: 0,
     interestRateMonthly: state.settings.loanInterestRateMonthly,
-    from: data.from || today(),
+    from: loanDate,
+    renewalOrReturnDate: oneYearFrom(loanDate),
     status: "active",
   });
   state.audit.push({ id: uid("a"), date: today(), text: `Added current loan ${money(amount)} for ${memberName}.` });
