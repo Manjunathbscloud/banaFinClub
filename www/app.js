@@ -464,15 +464,8 @@ function calculatedInterestPaid(loan, clearDate = today()) {
   return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
 }
 
-function oneYearFrom(dateValue) {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setFullYear(date.getFullYear() + 1);
-  return date.toISOString().slice(0, 10);
-}
-
 function loanRenewalDate(loan) {
-  return loan.renewalOrReturnDate || oneYearFrom(loan.from);
+  return loan.renewalOrReturnDate || "";
 }
 
 function normalizedName(value) {
@@ -894,6 +887,7 @@ function renderAdmin() {
             <label class="field"><span>Loan amount</span><input name="amount" inputmode="numeric" pattern="[0-9,]*" required data-loan-amount /></label>
             <label class="field"><span>Interest to be paid / month</span><input value="${money(monthlyInterestPreview)}" readonly data-loan-interest-preview /></label>
             <label class="field"><span>Loan taken date</span><input name="from" type="date" value="${today()}" required /></label>
+            <label class="field"><span>Renewal date</span><input name="renewalOrReturnDate" type="date" required /></label>
             <button class="primary" type="submit">Add loan</button>
           </form>
         </div>
@@ -1172,7 +1166,9 @@ async function addManualLoan(data) {
   const memberPhone = requireValidPhone(data.memberPhone);
   const amount = parseRupeeAmount(data.amount);
   const loanDate = data.from || today();
+  const renewalDate = data.renewalOrReturnDate || "";
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid loan amount.");
+  if (!renewalDate) throw new Error("Enter renewal date.");
 
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("current_loans").insert({
@@ -1184,7 +1180,7 @@ async function addManualLoan(data) {
       interest_rate_monthly: state.settings.loanInterestRateMonthly,
       status: "active",
       disbursed_at: loanDate,
-      renewal_or_return_date: oneYearFrom(loanDate),
+      renewal_or_return_date: renewalDate,
       created_by: currentProfileId(),
     }));
     await addLiveAudit(`Added current loan ${money(amount)} for ${memberName}.`, "current_loan_added");
@@ -1203,7 +1199,7 @@ async function addManualLoan(data) {
     interestPaid: 0,
     interestRateMonthly: state.settings.loanInterestRateMonthly,
     from: loanDate,
-    renewalOrReturnDate: oneYearFrom(loanDate),
+    renewalOrReturnDate: renewalDate,
     status: "active",
   });
   state.audit.push({ id: uid("a"), date: today(), text: `Added current loan ${money(amount)} for ${memberName}.` });
