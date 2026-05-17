@@ -871,8 +871,8 @@ function renderAdmin() {
   return `
     <section class="page-title"><p>${t("admin")}</p><h2>Operations</h2></section>
     <section class="grid">
-      <div class="card">
-        <div class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div></div>
+      <details class="card collapsible" open>
+        <summary class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="manual-loan">
             <label class="field"><span>Member name</span><input name="memberName" required placeholder="Example: Pratap Banakar" /></label>
@@ -884,10 +884,10 @@ function renderAdmin() {
             <button class="primary" type="submit">Add loan</button>
           </form>
         </div>
-      </div>
+      </details>
 
-      <div class="card">
-        <div class="card-header"><div><h3>Signup approvals</h3><p>Member signup requests</p></div></div>
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>Signup approvals</h3><p>Member signup requests</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body row-list">
           ${state.signupRequests.map((request) => `
             <div class="row-item">
@@ -899,10 +899,10 @@ function renderAdmin() {
             </div>
           `).join("") || `<div class="empty">No signup requests.</div>`}
         </div>
-      </div>
+      </details>
 
-      <div class="card">
-        <div class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div></div>
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body row-list">
           ${pendingLoanRequests.map((request) => `
             <div class="row-item">
@@ -914,10 +914,10 @@ function renderAdmin() {
             </div>
           `).join("") || `<div class="empty">No loan requests.</div>`}
         </div>
-      </div>
+      </details>
 
-      <div class="card">
-        <div class="card-header"><div><h3>${t("statementImport")}</h3><p>CSV upload parser for ICICI statement sample</p></div></div>
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>${t("statementImport")}</h3><p>CSV upload parser for ICICI statement sample</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="statement-text">
             <label class="field">
@@ -928,7 +928,7 @@ function renderAdmin() {
             <p class="hint">When you provide a real ICICI sample, I will add exact file upload and matching rules.</p>
           </form>
         </div>
-      </div>
+      </details>
     </section>
   `;
 }
