@@ -802,8 +802,8 @@ function renderLoans() {
   const user = currentUser();
   const visibleLoans = isAdmin() ? currentLoanBookRows() : currentLoanBookRows().filter((loan) => loanBelongsToMember(loan, user));
   const loanRequestForm = `
-      <div class="card">
-        <div class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div></div>
+      <details class="card collapsible" open>
+        <summary class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="loan-request">
             <label class="field"><span>${t("amount")}</span><input name="amount" type="number" min="1" required /></label>
@@ -811,14 +811,14 @@ function renderLoans() {
             <button class="primary" type="submit">${t("submit")}</button>
           </form>
         </div>
-      </div>
+      </details>
   `;
   return `
     <section class="page-title"><p>${t("loans")}</p><h2>Current loan book</h2></section>
     <section class="grid">
       ${loanRequestForm}
-      <div class="card">
-        <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div></div>
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Member</th><th>Loan taken</th><th>Renewal</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
@@ -833,7 +833,7 @@ function renderLoans() {
             }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
-      </div>
+      </details>
     </section>
   `;
 }

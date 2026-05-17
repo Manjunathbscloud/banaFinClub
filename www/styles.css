@@ -420,6 +420,25 @@ button:focus-visible {
   font-size: 12px;
 }
 
+.collapsible summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapse-icon {
+  color: var(--muted);
+  font-size: 18px;
+  transition: transform 0.18s ease;
+}
+
+.collapsible[open] .collapse-icon {
+  transform: rotate(180deg);
+}
+
 .card-body {
   padding: 16px;
 }
