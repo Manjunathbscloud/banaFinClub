@@ -798,15 +798,36 @@ function renderDeposits() {
 function renderLoans() {
   const user = currentUser();
   const visibleLoans = isAdmin() ? currentLoanBookRows() : currentLoanBookRows().filter((loan) => loanBelongsToMember(loan, user));
+  const loanRequestForm = `
+      <div class="card">
+        <div class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div></div>
+        <div class="card-body">
+          <form class="form" data-form="loan-request">
+            <label class="field"><span>${t("amount")}</span><input name="amount" type="number" min="1" required /></label>
+            <label class="field"><span>${t("reason")}</span><textarea name="reason" required></textarea></label>
+            <button class="primary" type="submit">${t("submit")}</button>
+          </form>
+        </div>
+      </div>
+  `;
   return `
     <section class="page-title"><p>${t("loans")}</p><h2>Current loan book</h2></section>
     <section class="grid">
+      ${loanRequestForm}
       <div class="card">
         <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>${visibleLoans.map((loan) => `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${isAdmin() && loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button">Mark clear</button>` : "-"}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
+            <tbody>${visibleLoans.map((loan) => {
+              const actions = isAdmin() ? `
+                <div class="actions">
+                  ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button">Mark clear</button>` : ""}
+                  <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
+                </div>
+              ` : "-";
+              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
+            }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -959,6 +980,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
     if (action.dataset.action === "delete-member") await deleteMember(action.dataset.id);
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
+    if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
   } catch (error) {
     showToast(error.message || "Something went wrong.");
   }
@@ -1198,6 +1220,27 @@ async function clearCurrentLoan(id) {
   state.audit.push({ id: uid("a"), date: today(), text: `Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.` });
   saveState();
   showToast("Loan marked clear.");
+  render();
+}
+
+async function deleteCurrentLoan(id) {
+  if (!isAdmin()) throw new Error("Only admin can delete current loans.");
+  const loan = state.loans.find((item) => item.id === id);
+  if (!loan) throw new Error("Loan not found.");
+
+  if (liveBackendReady) {
+    await liveQuery(supabaseClient.from("current_loans").delete().eq("id", id));
+    await addLiveAudit(`Deleted current loan for ${loanMemberName(loan)}.`, "current_loan_deleted");
+    await loadLiveState();
+    showToast("Current loan deleted.");
+    render();
+    return;
+  }
+
+  state.loans = state.loans.filter((item) => item.id !== id);
+  state.audit.push({ id: uid("a"), date: today(), text: `Deleted current loan for ${loanMemberName(loan)}.` });
+  saveState();
+  showToast("Current loan deleted.");
   render();
 }
 
