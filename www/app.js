@@ -375,6 +375,12 @@ function money(value) {
   return prefix + Math.abs(number).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
+function parseRupeeAmount(value) {
+  const normalized = String(value || "").replace(/,/g, "").trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return NaN;
+  return Math.round(Number(normalized));
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -738,7 +744,7 @@ function renderDashboard() {
   ` : "";
   const loanRows = isAdmin()
     ? currentLoans()
-      .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loanMemberName(loan))}</strong><span>${escapeHtml(loan.memberPhone || "No phone")} · interest ${money(loanMonthlyInterest(loan))}</span></div><strong>${money(loanOutstanding(loan))}</strong></div>`)
+      .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loanMemberName(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))}</span></div><strong>${money(loanOutstanding(loan))}</strong></div>`)
       .join("")
     : memberLoans(user.id)
       .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loan.legacyLoanId || "Loan")}: ${money(loanOutstanding(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))} · return ${escapeHtml(loan.renewalOrReturnDate || "-")}</span></div><span class="badge info">${statusText(loan.status)}</span></div>`)
@@ -829,7 +835,7 @@ function renderLoans() {
         <div class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Member</th><th>Phone</th><th>Loan taken</th><th>Renewal</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Member</th><th>Loan taken</th><th>Renewal</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>${visibleLoans.map((loan) => {
               const actions = isAdmin() ? `
                 <div class="actions">
@@ -837,8 +843,8 @@ function renderLoans() {
                   <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
                 </div>
               ` : "-";
-              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.memberPhone || "-")}</td><td>${escapeHtml(loan.from || "-")}</td><td>${escapeHtml(loanRenewalDate(loan) || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
-            }).join("") || `<tr><td colspan="9" class="empty">No current loans entered yet.</td></tr>`}</tbody>
+              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.from || "-")}</td><td>${escapeHtml(loanRenewalDate(loan) || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
+            }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -885,7 +891,7 @@ function renderAdmin() {
           <form class="form" data-form="manual-loan">
             <label class="field"><span>Member name</span><input name="memberName" required placeholder="Example: Pratap Banakar" /></label>
             <label class="field"><span>Phone number</span><input name="memberPhone" inputmode="numeric" required placeholder="10 digit mobile number" /></label>
-            <label class="field"><span>Loan amount</span><input name="amount" type="number" min="1" required data-loan-amount /></label>
+            <label class="field"><span>Loan amount</span><input name="amount" inputmode="numeric" pattern="[0-9,]*" required data-loan-amount /></label>
             <label class="field"><span>Interest to be paid / month</span><input value="${money(monthlyInterestPreview)}" readonly data-loan-interest-preview /></label>
             <label class="field"><span>Loan taken date</span><input name="from" type="date" value="${today()}" required /></label>
             <button class="primary" type="submit">Add loan</button>
@@ -1003,8 +1009,8 @@ document.addEventListener("input", (event) => {
   const form = amountInput.closest("form");
   const preview = form?.querySelector("[data-loan-interest-preview]");
   if (!preview) return;
-  const amount = Number(amountInput.value || 0);
-  preview.value = money((amount * state.settings.loanInterestRateMonthly) / 100);
+  const amount = parseRupeeAmount(amountInput.value);
+  preview.value = Number.isFinite(amount) ? money((amount * state.settings.loanInterestRateMonthly) / 100) : money(0);
 });
 
 document.addEventListener("submit", async (event) => {
@@ -1164,9 +1170,9 @@ async function addManualLoan(data) {
   const memberName = String(data.memberName || "").trim();
   if (!memberName) throw new Error("Enter member name.");
   const memberPhone = requireValidPhone(data.memberPhone);
-  const amount = Number(data.amount || 0);
+  const amount = parseRupeeAmount(data.amount);
   const loanDate = data.from || today();
-  if (amount <= 0) throw new Error("Enter loan amount.");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid loan amount.");
 
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("current_loans").insert({
