@@ -631,7 +631,8 @@ function navButton(tab, icon, label) {
 }
 
 function renderAuth(mode) {
-  const modeLabels = { login: t("signIn"), signup: t("signUp"), reset: t("reset") };
+  const authMode = mode === "reset" ? "reset" : mode === "signup" ? "signup" : "login";
+  const modeLabels = { login: t("signIn"), signup: t("signUp") };
   document.querySelector("#app").innerHTML = `
     <div class="auth-page">
       <section class="auth-hero">
@@ -649,9 +650,9 @@ function renderAuth(mode) {
       </section>
       <section class="auth-card">
         <div class="segmented">
-          ${["login", "signup", "reset"].map((item) => `<button class="${mode === item ? "active" : ""}" type="button" data-auth-mode="${item}">${modeLabels[item]}</button>`).join("")}
+          ${["login", "signup"].map((item) => `<button class="${authMode === item ? "active" : ""}" type="button" data-auth-mode="${item}">${modeLabels[item]}</button>`).join("")}
         </div>
-        ${mode === "login" ? loginForm() : mode === "signup" ? signupForm() : resetForm()}
+        ${authMode === "login" ? loginForm() : authMode === "signup" ? signupForm() : resetForm()}
       </section>
     </div>
   `;
@@ -663,6 +664,7 @@ function loginForm() {
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
       <label class="field"><span>${t("password")}</span><input name="password" type="password" required placeholder="123456" /></label>
       <button class="primary" type="submit">${t("signIn")}</button>
+      <button class="text-link" type="button" data-auth-mode="reset">${t("forgotPassword")}?</button>
       <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9591382942 / 123456. Add Supabase details in config.js to connect live data."}</p>
     </form>
   `;
