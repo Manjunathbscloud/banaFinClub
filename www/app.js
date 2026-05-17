@@ -593,7 +593,7 @@ function render() {
             <div class="avatar">${initials(user.name)}</div>
             <div>
               <strong>${escapeHtml(user.name)}</strong>
-              <span>${escapeHtml(roleLabel(user.role))} · ${t("ownDetailsOnly")}</span>
+              <span>${escapeHtml(roleLabel(user.role))}</span>
             </div>
           </div>
           <div class="top-actions">
@@ -785,7 +785,7 @@ function renderDeposits() {
             <thead><tr><th>Member</th><th>Month</th><th>Expected</th><th>Status</th><th>Source</th></tr></thead>
             <tbody>${visiblePayments.map((payment) => {
               const member = memberById(payment.memberId);
-              return `<tr><td>${escapeHtml(member?.name || "-")}</td><td>${escapeHtml(payment.month)}</td><td>${money(payment.amount)}</td><td>${statusBadge(payment.status)}</td><td>${escapeHtml(payment.source)}</td></tr>`;
+              return `<tr><td data-label="Member">${escapeHtml(member?.name || "-")}</td><td data-label="Month">${escapeHtml(payment.month)}</td><td data-label="Expected">${money(payment.amount)}</td><td data-label="Status">${statusBadge(payment.status)}</td><td data-label="Source">${escapeHtml(payment.source)}</td></tr>`;
             }).join("") || `<tr><td colspan="5" class="empty">No payments yet.</td></tr>`}</tbody>
           </table>
         </div>
@@ -831,7 +831,7 @@ function renderLoans() {
                   <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
                 </div>
               ` : "-";
-              return `<tr><td>${escapeHtml(loanMemberName(loan))}</td><td>${escapeHtml(loan.from || "-")}</td><td>${escapeHtml(loanRenewalDate(loan) || "-")}</td><td>${money(loan.amount)}</td><td>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td>${money(loan.interestPaid)}</td><td>${statusBadge(loan.status)}</td><td>${actions}</td></tr>`;
+              return `<tr><td data-label="Member">${escapeHtml(loanMemberName(loan))}</td><td data-label="Loan taken">${escapeHtml(loan.from || "-")}</td><td data-label="Renewal">${escapeHtml(loanRenewalDate(loan) || "-")}</td><td data-label="Loan amount">${money(loan.amount)}</td><td data-label="Interest/month">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td data-label="Interest paid">${money(loan.interestPaid)}</td><td data-label="Status">${statusBadge(loan.status)}</td><td data-label="Action">${actions}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
