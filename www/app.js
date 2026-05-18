@@ -560,6 +560,37 @@ function showToast(message) {
   setTimeout(() => toast.remove(), 2800);
 }
 
+function eyeIcon(hidden) {
+  return hidden
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+}
+
+function passwordField(name, label, placeholder = "") {
+  return `
+    <label class="field">
+      <span>${label}</span>
+      <div class="input-wrapper">
+        <input name="${name}" type="password" ${placeholder ? `placeholder="${placeholder}"` : ""} required />
+        <button type="button" class="eye-btn" data-action="toggle-password" aria-label="Toggle password visibility">${eyeIcon(true)}</button>
+      </div>
+    </label>
+  `;
+}
+
+function setFormLoading(form, loading) {
+  const btn = form.querySelector("button.primary[type='submit']");
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.dataset.originalText = btn.innerHTML;
+    btn.innerHTML = `<span class="btn-loading"><span class="spinner"></span>Loading…</span>`;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+  }
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -654,7 +685,7 @@ function loginForm() {
   return `
     <form class="form" data-form="login">
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
-      <label class="field"><span>${t("password")}</span><input name="password" type="password" required placeholder="123456" /></label>
+      ${passwordField("password", t("password"), liveBackendReady ? "" : "123456")}
       <button class="primary" type="submit">${t("signIn")}</button>
       <button class="text-link" type="button" data-auth-mode="reset">${t("forgotPassword")}?</button>
       <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9591382942 / 123456. Add Supabase details in config.js to connect live data."}</p>
@@ -667,7 +698,7 @@ function signupForm() {
     <form class="form" data-form="signup">
       <label class="field"><span>${t("name")}</span><input name="name" type="text" required /></label>
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
-      <label class="field"><span>${t("password")}</span><input name="password" type="password" minlength="6" required /></label>
+      ${passwordField("password", t("password"))}
       <button class="primary" type="submit">${t("requestAccess")}</button>
       <p class="hint">Signup requests stay pending until the president approves them.</p>
     </form>
@@ -958,6 +989,16 @@ document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-action]");
   if (!action) return;
 
+  if (action.dataset.action === "toggle-password") {
+    const wrapper = action.closest(".input-wrapper");
+    const input = wrapper?.querySelector("input");
+    if (!input) return;
+    const isHidden = input.type === "password";
+    input.type = isHidden ? "text" : "password";
+    action.innerHTML = eyeIcon(!isHidden);
+    return;
+  }
+
   if (action.dataset.action === "toggle-lang") {
     state.lang = state.lang === "en" ? "kn" : "en";
     saveState();
@@ -1000,6 +1041,7 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
   const type = form.dataset.form;
+  setFormLoading(form, true);
   try {
     if (type === "login") await login(data);
     if (type === "signup") await signup(data);
@@ -1009,6 +1051,7 @@ document.addEventListener("submit", async (event) => {
     if (type === "statement-text") await importStatement(data);
   } catch (error) {
     showToast(error.message || "Something went wrong.");
+    setFormLoading(form, false);
   }
 });
 
