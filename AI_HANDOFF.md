@@ -277,7 +277,8 @@ Do not:
 
 Current loan book should show only loans manually entered by admin.
 
-Phone number is stored only for matching the logged-in member to the loan record.
+Phone number is stored for matching the logged-in member to the loan record.
+Do not match current loans by name, because demo/test accounts may share the same name as a real member.
 
 Members should only see their own loans.
 

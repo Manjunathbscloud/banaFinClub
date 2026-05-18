@@ -468,10 +468,6 @@ function loanRenewalDate(loan) {
   return loan.renewalOrReturnDate || "";
 }
 
-function normalizedName(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 function loanMemberName(loan) {
   return loan.memberName || memberById(loan.memberId)?.name || "-";
 }
@@ -480,10 +476,7 @@ function loanBelongsToMember(loan, member) {
   if (!loan || !member) return false;
   if (loan.memberId && loan.memberId === member.id) return true;
   const loanPhone = normalizePhone(loan.memberPhone);
-  if (loanPhone && loanPhone === normalizePhone(member.phone)) return true;
-  const loanName = normalizedName(loan.memberName);
-  const memberName = normalizedName(member.name);
-  return Boolean(loanName && memberName && (memberName.startsWith(loanName) || loanName.startsWith(memberName)));
+  return Boolean(loanPhone && loanPhone === normalizePhone(member.phone));
 }
 
 function isCurrentLoan(loan) {

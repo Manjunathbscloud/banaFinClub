@@ -38,16 +38,6 @@ create policy "current loans readable by authenticated users"
     or nullif(member_phone, '') = (
       select phone from public.profiles where id = public.current_profile_id()
     )
-    or exists (
-      select 1
-      from public.profiles
-      where id = public.current_profile_id()
-      and (
-        lower(full_name) = lower(member_name)
-        or lower(full_name) like lower(member_name) || '%'
-        or lower(member_name) like lower(full_name) || '%'
-      )
-    )
   );
 
 create policy "current loans admin write"
