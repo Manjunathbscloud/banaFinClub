@@ -1,60 +1,26 @@
--- Run this in Supabase SQL Editor (requires postgres / superuser access for auth.users updates).
--- Migrates all 7 members to real email addresses and wires up the forgot-password flow.
+-- Run this in Supabase SQL Editor.
+-- Wires up real-email forgot-password support.
+-- Only Manjunath's existing account needs a one-time email fix.
+-- All other members will provide their real email when they sign up.
 
 -- 1. Add email column to profiles (safe to run again if already exists)
 alter table public.profiles add column if not exists email text;
 
 
--- 2. Backfill real emails into profiles + update auth.users for all 7 members
---    auth.users must match so Supabase can send the password-reset email.
+-- 2. Fix Manjunath's existing account (only account created before this change)
+update public.profiles
+  set email = 'manjunathbs.cloud@gmail.com'
+  where phone = '9591382942';
 
--- Manjunath Banakar
-update public.profiles set email = 'manjunathbs.cloud@gmail.com' where phone = '9591382942';
 update auth.users
   set email = 'manjunathbs.cloud@gmail.com', email_confirmed_at = now()
   where id = (select auth_user_id from public.profiles where phone = '9591382942' limit 1);
 
--- Pratap Banakar
-update public.profiles set email = 'pratapbanakar@gmail.com' where phone = '7259907409';
-update auth.users
-  set email = 'pratapbanakar@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '7259907409' limit 1);
-
--- Praveen Banakar
-update public.profiles set email = 'praveenbanakar24@gmail.com' where phone = '9538913204';
-update auth.users
-  set email = 'praveenbanakar24@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '9538913204' limit 1);
-
--- Mukkanna Banakar
-update public.profiles set email = 'banakarms@gmail.com' where phone = '8618600807';
-update auth.users
-  set email = 'banakarms@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '8618600807' limit 1);
-
--- Santosh Banakar
-update public.profiles set email = 'santhoshabanakar1990@gmail.com' where phone = '9739678816';
-update auth.users
-  set email = 'santhoshabanakar1990@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '9739678816' limit 1);
-
--- Pradeep Banakar
-update public.profiles set email = 'pradeepbanakar@gmail.com' where phone = '9663644751';
-update auth.users
-  set email = 'pradeepbanakar@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '9663644751' limit 1);
-
--- Appanna Banakar
-update public.profiles set email = 'halaswamydb@gmail.com' where phone = '8217526323';
-update auth.users
-  set email = 'halaswamydb@gmail.com', email_confirmed_at = now()
-  where id = (select auth_user_id from public.profiles where phone = '8217526323' limit 1);
-
 
 -- 3. Public RPC: get_auth_email_for_phone
 --    Called by the app BEFORE login/reset (no auth token), so granted to anon.
---    Returns the real email stored in profiles.email, or falls back to the fake
---    phone-based email for any member not yet migrated.
+--    Returns the real email stored in profiles.email, or falls back to the
+--    phone-based fake email for any account not yet migrated.
 
 create or replace function public.get_auth_email_for_phone(p_phone text)
 returns text
