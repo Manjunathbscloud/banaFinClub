@@ -113,6 +113,24 @@ Main roles:
 - `member`
 - `onboarding`
 
+Real member phone mapping:
+
+```text
+Manjunath Banakar - 9591382942 - President
+Pratap Banakar - 7259907409 - Vice President
+Praveen Banakar - 9538913204 - Member
+Mukkanna Banakar - 8618600807 - Member
+Santosh Banakar - 9739678816 - Member
+Pradeep Banakar - 9663644751 - Member
+Appanna Banakar - 8217526323 - Member
+```
+
+If live Supabase profiles need correction, run:
+
+```text
+docs/update-real-members.sql
+```
+
 Only president/admin should manage:
 
 - Signup approvals

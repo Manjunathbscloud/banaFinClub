@@ -54,13 +54,12 @@ on conflict (id) do nothing;
 insert into public.profiles (full_name, phone, role, status)
 values
   ('Manjunath Banakar', '9591382942', 'president', 'active'),
-  ('Pratap Banakar', '9000000002', 'vice_president', 'active'),
-  ('Sarpabhushana Banakar', '9000000003', 'member', 'active'),
-  ('Mukkanna Banakar', '9000000004', 'member', 'active'),
-  ('Santosh Banakar', '9000000005', 'member', 'active'),
-  ('Pradeep Banakar', '9000000006', 'member', 'active'),
-  ('Praveen Banakar', '9000000007', 'member', 'active'),
-  ('Appanna Banakar', '9000000008', 'onboarding', 'pending')
+  ('Pratap Banakar', '7259907409', 'vice_president', 'active'),
+  ('Praveen Banakar', '9538913204', 'member', 'active'),
+  ('Mukkanna Banakar', '8618600807', 'member', 'active'),
+  ('Santosh Banakar', '9739678816', 'member', 'active'),
+  ('Pradeep Banakar', '9663644751', 'member', 'active'),
+  ('Appanna Banakar', '8217526323', 'member', 'active')
 on conflict (phone) do nothing;
 
 create table if not exists public.deposit_summaries (
