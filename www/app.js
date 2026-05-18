@@ -139,6 +139,7 @@ const initialState = {
     { id: "q1", memberId: "m7", amount: 25000, reason: "Medical support", status: "pending", date: "2026-05-14" },
   ],
   loanHistory: [],
+  notifications: [],
   statementRows: [],
   audit: [
     { id: "a1", date: "2026-05-14", text: "New Banakar FinClub app created from existing data." },
@@ -285,6 +286,18 @@ function liveLoanRequestToLocal(request) {
   };
 }
 
+function liveNotificationToLocal(n) {
+  return {
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    isRead: n.is_read,
+    relatedId: n.related_id,
+    createdAt: n.created_at,
+  };
+}
+
 function liveAuditToLocal(log) {
   return {
     id: log.id,
@@ -315,7 +328,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("*").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -324,6 +337,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("current_loans").select("*").order("created_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("loan_history").select("*").order("from_date", { ascending: false })),
     liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
+    liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -363,6 +377,7 @@ async function loadLiveState() {
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
+    notifications: notifications.map(liveNotificationToLocal),
     statementRows: [],
     audit: audit.reverse().map(liveAuditToLocal),
   };
@@ -548,6 +563,53 @@ function latestLoanRequest(memberId) {
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
 }
 
+function renderNotificationPanel() {
+  document.querySelector(".notif-panel-wrap")?.remove();
+  const items = (state.notifications || []);
+  const wrap = document.createElement("div");
+  wrap.className = "notif-panel-wrap";
+  wrap.innerHTML = `
+    <div class="notif-overlay" data-action="close-notifications"></div>
+    <div class="notif-panel">
+      <div class="notif-panel-header">
+        <h3>Notifications</h3>
+        <button class="icon-button" type="button" data-action="close-notifications" style="min-height:34px;min-width:34px;">✕</button>
+      </div>
+      <div class="notif-list">
+        ${items.length ? items.map((n) => `
+          <div class="notif-item ${n.isRead ? "" : "unread"}">
+            <div class="notif-content">
+              <strong>${escapeHtml(n.title)}</strong>
+              <span>${escapeHtml(n.body)}</span>
+            </div>
+            <small class="notif-time">${timeAgo(n.createdAt)}</small>
+          </div>
+        `).join("") : `<div class="empty">No notifications yet.</div>`}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  requestAnimationFrame(() => wrap.classList.add("open"));
+}
+
+async function openNotifications() {
+  renderNotificationPanel();
+  const unreadIds = (state.notifications || []).filter((n) => !n.isRead).map((n) => n.id);
+  if (unreadIds.length === 0) return;
+  state.notifications.forEach((n) => { n.isRead = true; });
+  document.querySelector(".notif-badge")?.remove();
+  if (liveBackendReady) {
+    await supabaseClient.from("notifications").update({ is_read: true }).in("id", unreadIds);
+  }
+}
+
+function closeNotificationPanel() {
+  const wrap = document.querySelector(".notif-panel-wrap");
+  if (!wrap) return;
+  wrap.classList.remove("open");
+  setTimeout(() => wrap.remove(), 220);
+}
+
 function showToast(message) {
   const existing = document.querySelector(".toast");
   if (existing) existing.remove();
@@ -558,6 +620,22 @@ function showToast(message) {
   requestAnimationFrame(() => toast.classList.add("show"));
   setTimeout(() => toast.classList.remove("show"), 2400);
   setTimeout(() => toast.remove(), 2800);
+}
+
+function bellIcon() {
+  return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+}
+
+function unreadCount() {
+  return (state.notifications || []).filter((n) => !n.isRead).length;
+}
+
+function timeAgo(dateStr) {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 function eyeIcon(hidden) {
@@ -622,6 +700,10 @@ function render() {
           <div class="top-actions">
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
+            <button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
+              ${bellIcon()}
+              ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
+            </button>
             <button class="icon-button" type="button" data-action="logout" title="${t("logout")}">⎋</button>
           </div>
         </div>
@@ -988,6 +1070,16 @@ document.addEventListener("click", async (event) => {
 
   const action = event.target.closest("[data-action]");
   if (!action) return;
+
+  if (action.dataset.action === "open-notifications") {
+    await openNotifications();
+    return;
+  }
+
+  if (action.dataset.action === "close-notifications") {
+    closeNotificationPanel();
+    return;
+  }
 
   if (action.dataset.action === "toggle-password") {
     const wrapper = action.closest(".input-wrapper");
