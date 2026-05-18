@@ -10,21 +10,52 @@ with real_members(full_name, phone, role, status) as (
     ('Santosh Banakar', '9739678816', 'member', 'active'),
     ('Pradeep Banakar', '9663644751', 'member', 'active'),
     ('Appanna Banakar', '8217526323', 'member', 'active')
-),
-updated as (
-  update public.profiles p
-  set
-    phone = r.phone,
-    role = r.role,
-    status = r.status
-  from real_members r
-  where lower(p.full_name) = lower(r.full_name)
-    and (
-      p.phone = r.phone
-      or p.phone like '900000000%'
-      or p.auth_user_id is null
-    )
-  returning p.full_name
+)
+update public.profiles p
+set
+  full_name = r.full_name,
+  role = r.role,
+  status = r.status
+from real_members r
+where p.phone = r.phone;
+
+with real_members(full_name, phone, role, status) as (
+  values
+    ('Manjunath Banakar', '9591382942', 'president', 'active'),
+    ('Pratap Banakar', '7259907409', 'vice_president', 'active'),
+    ('Praveen Banakar', '9538913204', 'member', 'active'),
+    ('Mukkanna Banakar', '8618600807', 'member', 'active'),
+    ('Santosh Banakar', '9739678816', 'member', 'active'),
+    ('Pradeep Banakar', '9663644751', 'member', 'active'),
+    ('Appanna Banakar', '8217526323', 'member', 'active')
+)
+update public.profiles p
+set
+  phone = r.phone,
+  role = r.role,
+  status = r.status
+from real_members r
+where lower(p.full_name) = lower(r.full_name)
+  and (
+    p.phone like '900000000%'
+    or p.auth_user_id is null
+  )
+  and not exists (
+    select 1
+    from public.profiles existing
+    where existing.phone = r.phone
+      and existing.id <> p.id
+  );
+
+with real_members(full_name, phone, role, status) as (
+  values
+    ('Manjunath Banakar', '9591382942', 'president', 'active'),
+    ('Pratap Banakar', '7259907409', 'vice_president', 'active'),
+    ('Praveen Banakar', '9538913204', 'member', 'active'),
+    ('Mukkanna Banakar', '8618600807', 'member', 'active'),
+    ('Santosh Banakar', '9739678816', 'member', 'active'),
+    ('Pradeep Banakar', '9663644751', 'member', 'active'),
+    ('Appanna Banakar', '8217526323', 'member', 'active')
 )
 insert into public.profiles (full_name, phone, role, status)
 select r.full_name, r.phone, r.role, r.status
