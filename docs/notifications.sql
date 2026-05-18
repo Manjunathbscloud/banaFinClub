@@ -70,41 +70,7 @@ create trigger trg_notify_admin_signup
   for each row execute function public.notify_admin_on_signup();
 
 
--- 3. Trigger: notify member when their signup is approved or rejected
-create or replace function public.notify_member_on_signup_decision()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if OLD.status = NEW.status then return NEW; end if;
-  if OLD.status != 'pending' then return NEW; end if;
-  if NEW.status not in ('active', 'rejected') then return NEW; end if;
-
-  insert into public.notifications (profile_id, type, title, body, related_id)
-  values (
-    NEW.id,
-    case when NEW.status = 'active' then 'signup_approved' else 'signup_rejected' end,
-    case when NEW.status = 'active' then 'Account approved'
-         else 'Account not approved' end,
-    case when NEW.status = 'active'
-         then 'Welcome to Banakar FinClub! Your account is now active. You can login.'
-         else 'Your account request was not approved. Contact Manjunath Banakar.' end,
-    NEW.id
-  );
-
-  return NEW;
-end;
-$$;
-
-drop trigger if exists trg_notify_member_signup_decision on public.profiles;
-create trigger trg_notify_member_signup_decision
-  after update on public.profiles
-  for each row execute function public.notify_member_on_signup_decision();
-
-
--- 4. Trigger: notify admin when a new loan request arrives
+-- 3. Trigger: notify admin when a new loan request arrives
 create or replace function public.notify_admin_on_loan_request()
 returns trigger
 language plpgsql
@@ -145,7 +111,7 @@ create trigger trg_notify_admin_loan_request
   for each row execute function public.notify_admin_on_loan_request();
 
 
--- 5. Trigger: notify member when their loan request is approved or rejected
+-- 4. Trigger: notify member when their loan request is approved or rejected
 create or replace function public.notify_member_on_loan_decision()
 returns trigger
 language plpgsql
