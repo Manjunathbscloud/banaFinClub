@@ -198,6 +198,16 @@ function phoneEmail(phone) {
   return `${normalized}@${AUTH_EMAIL_DOMAIN}`;
 }
 
+async function resolveAuthEmail(phone) {
+  const normalized = normalizePhone(phone);
+  if (normalized === PRESIDENT_PHONE) return PRESIDENT_EMAIL;
+  if (liveBackendReady) {
+    const { data } = await supabaseClient.rpc("get_auth_email_for_phone", { p_phone: normalized });
+    if (data) return data;
+  }
+  return `${normalized}@${AUTH_EMAIL_DOMAIN}`;
+}
+
 async function liveQuery(promise) {
   const { data, error } = await promise;
   if (error) throw error;
@@ -218,6 +228,7 @@ function liveProfileToMember(profile) {
     id: profile.id,
     name: profile.full_name,
     phone: profile.phone,
+    email: profile.email || "",
     role: profile.role,
     status: profile.status,
     authUserId: profile.auth_user_id,
@@ -780,6 +791,7 @@ function signupForm() {
     <form class="form" data-form="signup">
       <label class="field"><span>${t("name")}</span><input name="name" type="text" required /></label>
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
+      <label class="field"><span>Email</span><input name="email" type="email" required placeholder="your@gmail.com" /></label>
       ${passwordField("password", t("password"))}
       <button class="primary" type="submit">${t("requestAccess")}</button>
       <p class="hint">Signup requests stay pending until the president approves them.</p>
@@ -790,10 +802,34 @@ function signupForm() {
 function resetForm() {
   return `
     <form class="form" data-form="reset">
-      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
+      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
       <button class="primary" type="submit">${t("forgotPassword")}</button>
-      <p class="hint">This screen is ready for backend OTP integration. Demo mode records a reset request for admin follow-up.</p>
+      <p class="hint">${liveBackendReady ? "A password reset link will be sent to your registered email." : "Demo mode records a reset request for admin follow-up."}</p>
     </form>
+  `;
+}
+
+function renderSetNewPassword() {
+  document.querySelector("#app").innerHTML = `
+    <div class="auth-page">
+      <section class="auth-hero">
+        <div class="brand-row">
+          <div class="brand-logo"><img src="icon.svg" alt="Banakar FinClub logo" /></div>
+          <div>
+            <h1>Banakar FinClub</h1>
+            <p>${t("privateClub")}</p>
+          </div>
+        </div>
+      </section>
+      <section class="auth-card">
+        <h3 style="margin-bottom:16px;">Set new password</h3>
+        <form class="form" data-form="set-new-password">
+          ${passwordField("password", "New password")}
+          <button class="primary" type="submit">Set password</button>
+          <p class="hint">Password must be at least 6 characters.</p>
+        </form>
+      </section>
+    </div>
   `;
 }
 
@@ -1138,6 +1174,7 @@ document.addEventListener("submit", async (event) => {
     if (type === "login") await login(data);
     if (type === "signup") await signup(data);
     if (type === "reset") await resetPassword(data);
+    if (type === "set-new-password") await setNewPassword(data);
     if (type === "loan-request") await requestLoan(data);
     if (type === "manual-loan") await addManualLoan(data);
     if (type === "statement-text") await importStatement(data);
@@ -1150,8 +1187,9 @@ document.addEventListener("submit", async (event) => {
 async function login(data) {
   const phone = requireValidPhone(data.phone);
   if (liveBackendReady) {
+    const authEmail = await resolveAuthEmail(phone);
     await liveQuery(supabaseClient.auth.signInWithPassword({
-      email: phoneEmail(phone),
+      email: authEmail,
       password: data.password,
     }));
     await loadLiveState();
@@ -1236,8 +1274,9 @@ async function signup(data) {
   }
 
   if (liveBackendReady) {
+    const signupEmail = (data.email || "").trim().toLowerCase() || phoneEmail(phone);
     const { error: signUpError } = await supabaseClient.auth.signUp({
-      email: phoneEmail(phone),
+      email: signupEmail,
       password: data.password,
     });
     if (signUpError) {
@@ -1245,8 +1284,9 @@ async function signup(data) {
       if (msg.includes("already registered") || msg.includes("already exists") || signUpError.status === 422) {
         // Auth account exists — member was previously revoked and is re-registering.
         // Sign in with their credentials to get a session so register_profile can run.
+        const resolvedEmail = await resolveAuthEmail(phone);
         const { error: signInError } = await supabaseClient.auth.signInWithPassword({
-          email: phoneEmail(phone),
+          email: resolvedEmail,
           password: data.password,
         });
         if (signInError) {
@@ -1259,6 +1299,7 @@ async function signup(data) {
     await liveQuery(supabaseClient.rpc("register_profile", {
       p_full_name: name,
       p_phone: phone,
+      p_email: signupEmail,
     }));
     await supabaseClient.auth.signOut();
     await loadLiveState();
@@ -1280,13 +1321,27 @@ async function signup(data) {
 
 async function resetPassword(data) {
   if (liveBackendReady) {
-    showToast("Reset request recorded. Admin can reset the password in Supabase.");
+    const phone = requireValidPhone(data.phone);
+    const email = await resolveAuthEmail(phone);
+    await liveQuery(supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    }));
+    showToast("Password reset email sent. Check your inbox.");
+    renderAuth("login");
     return;
   }
 
   state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.phone}.` });
   saveState();
   showToast("Reset request recorded. Backend OTP will be connected later.");
+}
+
+async function setNewPassword(data) {
+  if (!data.password || data.password.length < 6) throw new Error("Password must be at least 6 characters.");
+  await liveQuery(supabaseClient.auth.updateUser({ password: data.password }));
+  await supabaseClient.auth.signOut();
+  showToast("Password updated. Please login with your new password.");
+  renderAuth("login");
 }
 
 async function requestLoan(data) {
@@ -1609,6 +1664,15 @@ async function importStatement(data) {
 
 async function initApp() {
   if (liveBackendReady) {
+    // If the URL fragment signals a password-reset redirect, show the set-password form.
+    // The Supabase client processes the token asynchronously; we listen for it.
+    if (window.location.hash.includes("type=recovery")) {
+      document.querySelector("#app").innerHTML = `<div style="padding:48px;text-align:center;color:#888;">Loading…</div>`;
+      supabaseClient.auth.onAuthStateChange((event) => {
+        if (event === "PASSWORD_RECOVERY") renderSetNewPassword();
+      });
+      return;
+    }
     try {
       await loadLiveState();
     } catch (error) {
