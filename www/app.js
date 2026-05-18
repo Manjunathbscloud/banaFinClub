@@ -843,7 +843,7 @@ function renderMembers() {
             <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span></div>
             <div class="member-actions">
               ${statusBadge(member.status)}
-              ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="delete-member" data-id="${member.id}" type="button">Delete</button>` : ""}
+              ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
             </div>
           </div>
         `).join("")}
@@ -976,7 +976,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
-    if (action.dataset.action === "delete-member") await deleteMember(action.dataset.id);
+    if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
   } catch (error) {
@@ -1039,6 +1039,13 @@ async function login(data) {
           return;
         }
       }
+      if (profile && profile.status === "exited") {
+        await supabaseClient.auth.signOut();
+        state.currentUserId = null;
+        showToast("Your access has been revoked. Use the Signup form to re-request access.");
+        render();
+        return;
+      }
       if (profile && profile.status !== "active") {
         await supabaseClient.auth.signOut();
         state.currentUserId = null;
@@ -1047,6 +1054,13 @@ async function login(data) {
         return;
       }
       showToast("Profile not found. Please signup first.");
+      return;
+    }
+    if (member.status === "exited") {
+      await supabaseClient.auth.signOut();
+      state.currentUserId = null;
+      showToast("Your access has been revoked. Use the Signup form to re-request access.");
+      render();
       return;
     }
     if (member.status !== "active") {
@@ -1087,10 +1101,26 @@ async function signup(data) {
   }
 
   if (liveBackendReady) {
-    await liveQuery(supabaseClient.auth.signUp({
+    const { error: signUpError } = await supabaseClient.auth.signUp({
       email: phoneEmail(phone),
       password: data.password,
-    }));
+    });
+    if (signUpError) {
+      const msg = signUpError.message?.toLowerCase() || "";
+      if (msg.includes("already registered") || msg.includes("already exists") || signUpError.status === 422) {
+        // Auth account exists — member was previously revoked and is re-registering.
+        // Sign in with their credentials to get a session so register_profile can run.
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+          email: phoneEmail(phone),
+          password: data.password,
+        });
+        if (signInError) {
+          throw new Error("Your account exists with a different password. Use your original password to re-register, or contact Manjunath Banakar.");
+        }
+      } else {
+        throw signUpError;
+      }
+    }
     await liveQuery(supabaseClient.rpc("register_profile", {
       p_full_name: name,
       p_phone: phone,
@@ -1288,38 +1318,30 @@ async function rejectSignup(id) {
   render();
 }
 
-async function deleteMember(id) {
+async function revokeMemberAccess(id) {
   const member = memberById(id);
   if (!member || !isAdmin()) return;
   if (member.id === currentProfileId()) {
-    showToast("Admin account cannot delete itself.");
+    showToast("Cannot revoke your own access.");
     return;
   }
-  const confirmed = window.confirm(`Delete ${member.name} from Banakar FinClub?`);
+  const confirmed = window.confirm(`Revoke ${member.name}'s access?\n\nThey will be blocked from logging in but can signup again to re-request access.`);
   if (!confirmed) return;
 
   if (liveBackendReady) {
-    const deleteResult = await supabaseClient.from("profiles").delete({ count: "exact" }).eq("id", id);
-    if (deleteResult.error || deleteResult.count === 0) {
-      await liveQuery(supabaseClient.from("profiles").update({ status: "disabled" }).eq("id", id));
-      await addLiveAudit(`Disabled member ${member.name}.`, "member_disabled");
-      await loadLiveState();
-      showToast("Member removed from app access.");
-      render();
-      return;
-    }
-    await addLiveAudit(`Deleted member ${member.name}.`, "member_deleted");
+    await liveQuery(supabaseClient.rpc("revoke_member_access", { p_profile_id: id }));
+    await addLiveAudit(`Revoked access for ${member.name}.`, "member_access_revoked");
     await loadLiveState();
-    showToast("Member deleted.");
+    showToast("Access revoked.");
     render();
     return;
   }
 
   state.members = state.members.filter((item) => item.id !== id);
   state.signupRequests = state.signupRequests.filter((item) => item.id !== id);
-  state.audit.push({ id: uid("a"), date: today(), text: `Deleted member ${member.name}.` });
+  state.audit.push({ id: uid("a"), date: today(), text: `Revoked access for ${member.name}.` });
   saveState();
-  showToast("Member deleted.");
+  showToast("Access revoked.");
   render();
 }
 
