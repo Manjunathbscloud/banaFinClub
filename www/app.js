@@ -48,6 +48,7 @@ const translations = {
     ownDetailsOnly: "Members see own details and group balance.",
     demoMode: "Demo mode",
     liveMode: "Live mode",
+    meetings: "Meetings",
   },
   kn: {
     privateClub: "ಖಾಸಗಿ ಸದಸ್ಯರ ಹಣಕಾಸು ಕ್ಲಬ್",
@@ -90,6 +91,7 @@ const translations = {
     ownDetailsOnly: "ಸದಸ್ಯರು ತಮ್ಮ ವಿವರಗಳು ಮತ್ತು ಗುಂಪು ಬ್ಯಾಲೆನ್ಸ್ ಮಾತ್ರ ನೋಡುತ್ತಾರೆ.",
     demoMode: "ಡೆಮೊ ಮೋಡ್",
     liveMode: "ಲೈವ್ ಮೋಡ್",
+    meetings: "ಸಭೆಗಳು",
   },
 };
 
@@ -141,6 +143,40 @@ const initialState = {
   loanHistory: [],
   notifications: [],
   statementRows: [],
+  meetings: [
+    {
+      id: "meet5", year: 5, label: "5th Annual Meeting (2025)",
+      date: "October 2025", venue: "Sandur Wonder Valley Resort",
+      expenditure: 20580,
+      decisions: [
+        "Association extended to 10 years total (5 more years remaining)",
+        "Per member share: ₹1,21,833.57 (Total balance ₹8,52,835 ÷ 7 members)",
+        "New member Appanna Banakar joined — paid ₹1,34,016.93 (share + 10%). EMI option chosen: ₹7,445.38/month × 18 months starting January 2026",
+        "Sarpabhushana Banakar exited — net settlement of ₹25,166 payable by member to association (loans exceeded share value)",
+        "Monthly deposit continues at ₹2,000. Yearly renewal fee ₹3,000 per member from November 2025",
+      ],
+    },
+    {
+      id: "meet4", year: 4, label: "4th Annual Meeting (2024-2025)",
+      date: "December 8, 2024", venue: "Jungle Vibes Resort, Dandeli",
+      expenditure: 33385, decisions: [],
+    },
+    {
+      id: "meet3", year: 3, label: "3rd Annual Meeting (2023-2024)",
+      date: "April 6, 2024", venue: "Cotton County Club and Resort, Hubballi",
+      expenditure: 17750, decisions: [],
+    },
+    {
+      id: "meet2", year: 2, label: "2nd Annual Meeting (2022-2023)",
+      date: "March 18, 2023", venue: "Sampige Heritage Resort, Koppal District",
+      expenditure: 13000, decisions: [],
+    },
+    {
+      id: "meet1", year: 1, label: "1st Annual Meeting (2021-2022)",
+      date: "January 22, 2022", venue: "M Thumbaraguddi (Native Place)",
+      expenditure: 5600, decisions: [],
+    },
+  ],
   audit: [
     { id: "a1", date: "2026-05-14", text: "New Banakar FinClub app created from existing data." },
   ],
@@ -727,6 +763,7 @@ function render() {
         ${navButton("deposits", "₹", t("deposits"))}
         ${navButton("loans", "⇄", t("loans"))}
         ${navButton("members", "☷", t("members"))}
+        ${navButton("meetings", "◎", t("meetings"))}
         ${navButton("admin", "⚙", t("admin"))}
       </nav>
     </div>
@@ -839,6 +876,7 @@ function renderTab() {
     deposits: renderDeposits,
     loans: renderLoans,
     members: renderMembers,
+    meetings: renderMeetings,
     admin: renderAdmin,
   };
   return (tabs[state.activeTab] || renderDashboard)();
@@ -913,9 +951,22 @@ function metric(label, value, help) {
   return `<article class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(help)}</small></article>`;
 }
 
+function appannaEmiProgress() {
+  const startYear = 2026, startMon = 1;
+  const totalMonths = 18;
+  const monthlyEmi = 7445.38;
+  const now = new Date();
+  const elapsed = (now.getFullYear() - startYear) * 12 + (now.getMonth() + 1 - startMon) + 1;
+  const paid = Math.min(Math.max(elapsed, 0), totalMonths);
+  return { paid, remaining: totalMonths - paid, totalMonths, monthlyEmi, totalAmount: monthlyEmi * totalMonths };
+}
+
 function renderDeposits() {
   const user = currentUser();
   const visiblePayments = isAdmin() ? state.monthlyPayments : state.monthlyPayments.filter((payment) => payment.memberId === user.id);
+  const emi = appannaEmiProgress();
+  const pct = Math.round((emi.paid / emi.totalMonths) * 100);
+
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Monthly collections</h2></section>
     <section class="two-col">
@@ -931,12 +982,39 @@ function renderDeposits() {
           </table>
         </div>
       </div>
+
       <div class="card">
-        <div class="card-header"><div><h3>Historical balances</h3><p>First 5 years migrated from old website</p></div></div>
+        <div class="card-header"><div><h3>Appanna Banakar — Joining EMI</h3><p>₹1,34,016.93 joining fee · 18 months from Jan 2026</p></div></div>
+        <div class="card-body">
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-size:13px;color:#666;">${emi.paid} of ${emi.totalMonths} months paid</span>
+              <span style="font-size:13px;font-weight:600;">${pct}%</span>
+            </div>
+            <div style="background:#eee;border-radius:6px;height:8px;overflow:hidden;">
+              <div style="background:#22c55e;height:100%;width:${pct}%;border-radius:6px;transition:width .3s;"></div>
+            </div>
+          </div>
+          <div class="row-list">
+            <div class="row-item"><div><strong>Monthly EMI</strong><span>Jan 2026 – Jun 2027</span></div><strong>${money(emi.monthlyEmi)}</strong></div>
+            <div class="row-item"><div><strong>Collected so far</strong><span>${emi.paid} months × ${money(emi.monthlyEmi)}</span></div><strong>${money(emi.paid * emi.monthlyEmi)}</strong></div>
+            <div class="row-item"><div><strong>Remaining</strong><span>${emi.remaining} months left</span></div><strong>${money(emi.remaining * emi.monthlyEmi)}</strong></div>
+            <div class="row-item"><div><strong>Total amount</strong><span>Share + 10%</span></div><strong>${money(emi.totalAmount)}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div><h3>Historical balances</h3><p>Year-wise summary · 6th year in progress</p></div></div>
         <div class="card-body row-list">
+          <div class="row-item" style="background:#f0fdf4;border-radius:8px;padding:10px 12px;">
+            <div><strong>Sixth Year (2026–2027)</strong><span>Nov 2025 renewal ₹3,000/member · Monthly ₹2,000 · Appanna EMI ${money(emi.monthlyEmi)}/month</span></div>
+            <span class="badge warn">In Progress</span>
+          </div>
           ${state.deposits.map((item) => `<div class="row-item"><div><strong>${escapeHtml(item.label)}</strong><span>Principal ${money(item.principal)} · Interest ${money(item.interest)}</span></div><strong>${money(item.balance)}</strong></div>`).join("")}
         </div>
       </div>
+
     </section>
   `;
 }
@@ -997,6 +1075,50 @@ function renderMembers() {
           </div>
         `).join("")}
       </div>
+    </section>
+  `;
+}
+
+function renderMeetings() {
+  const meetings = state.meetings || [];
+  const totalExpenditure = meetings.reduce((sum, m) => sum + (m.expenditure || 0), 0);
+  return `
+    <section class="page-title"><p>${t("meetings")}</p><h2>Annual meetings</h2></section>
+    <section class="grid">
+      <div class="card">
+        <div class="card-header"><div><h3>Meeting summary</h3><p>Sri Mukkanneshwara Associate</p></div></div>
+        <div class="card-body row-list">
+          <div class="row-item"><div><strong>Total meetings held</strong></div><strong>${meetings.length}</strong></div>
+          <div class="row-item"><div><strong>Total expenditure</strong><span>Across all meetings</span></div><strong>${money(totalExpenditure)}</strong></div>
+          <div class="row-item"><div><strong>Frequency</strong></div><span>Annual · end of year</span></div>
+          <div class="row-item"><div><strong>Association duration</strong><span>Extended to 10 years at 5th meeting</span></div><span class="badge info">Year 6 of 10</span></div>
+        </div>
+      </div>
+
+      ${meetings.map((m) => `
+        <details class="card collapsible" ${m.year === 5 ? "open" : ""}>
+          <summary class="card-header">
+            <div>
+              <h3>${escapeHtml(m.label)}</h3>
+              <p>${escapeHtml(m.date)} · ${escapeHtml(m.venue)}</p>
+            </div>
+            <span class="collapse-icon">⌄</span>
+          </summary>
+          <div class="card-body row-list">
+            <div class="row-item"><div><strong>Date</strong></div><span>${escapeHtml(m.date)}</span></div>
+            <div class="row-item"><div><strong>Venue</strong></div><span>${escapeHtml(m.venue)}</span></div>
+            <div class="row-item"><div><strong>Meeting expenditure</strong></div><strong>${money(m.expenditure)}</strong></div>
+            ${m.decisions.length ? `
+              <div style="padding:8px 0 4px;"><strong style="font-size:13px;color:#555;">Key decisions</strong></div>
+              ${m.decisions.map((d) => `
+                <div class="row-item" style="align-items:flex-start;">
+                  <div><span style="line-height:1.5;">· ${escapeHtml(d)}</span></div>
+                </div>
+              `).join("")}
+            ` : ""}
+          </div>
+        </details>
+      `).join("")}
     </section>
   `;
 }
