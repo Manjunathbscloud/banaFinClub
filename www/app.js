@@ -124,11 +124,58 @@ const initialState = {
   allMembers: [],
   signupRequests: [],
   deposits: [
-    { id: "d2021", year: 2021, label: "First Year (2021-2022)", principal: 111000, interest: 8700, expenditure: 5600, balance: 114100 },
-    { id: "d2022", year: 2022, label: "Second Year (2022-2023)", principal: 149000, interest: 33600, expenditure: 13000, balance: 169600 },
-    { id: "d2023", year: 2023, label: "Third Year (2023-2024)", principal: 159500, interest: 45700, expenditure: 17750, balance: 187450 },
-    { id: "d2024", year: 2024, label: "Fourth Year (2024-2025)", principal: 126000, interest: 57300, expenditure: 33385, balance: 149915 },
-    { id: "d2025", year: 2025, label: "Fifth Year (2025)", principal: 149000, interest: 103350, expenditure: 20580, balance: 231770 },
+    {
+      id: "d2021", year: 2021, label: "First Year (2021-2022)", principal: 111000, interest: 8700, expenditure: 5600, balance: 114100,
+      breakdown: [
+        { description: "Initial Contribution", details: "February 2021 · ₹5,000 × 7 members", amount: 35000 },
+        { description: "Monthly Deposits", details: "March – November 2021 · ₹1,000 × 7 × 9 months", amount: 63000 },
+        { description: "December 2021", details: "6 members · President exempt", amount: 6000 },
+        { description: "January 2022", details: "All 7 members · ₹1,000 each", amount: 7000 },
+        { description: "Interest Earned", details: "Bank interest on deposits", amount: 8700 },
+        { description: "Annual Meeting Expense", details: "1st meeting · M Thumbaraguddi", amount: -5600 },
+      ],
+    },
+    {
+      id: "d2022", year: 2022, label: "Second Year (2022-2023)", principal: 149000, interest: 33600, expenditure: 13000, balance: 169600,
+      breakdown: [
+        { description: "January 2022", details: "All 7 members · ₹2,000 each", amount: 14000 },
+        { description: "February 2022", details: "New rate begins · ₹1,500 × 7", amount: 10500 },
+        { description: "Monthly Deposits", details: "March – November 2022 · ₹1,500 × 7 × 9 months", amount: 94500 },
+        { description: "December 2022", details: "6 members · President exempt · ₹1,500 each", amount: 9000 },
+        { description: "Monthly Deposits", details: "January – February 2023 · ₹1,500 × 7 × 2 months", amount: 21000 },
+        { description: "Interest Earned", details: "Bank interest on deposits", amount: 33600 },
+        { description: "Annual Meeting Expense", details: "2nd meeting · Sampige Heritage Resort, Koppal", amount: -13000 },
+      ],
+    },
+    {
+      id: "d2023", year: 2023, label: "Third Year (2023-2024)", principal: 159500, interest: 45700, expenditure: 17750, balance: 187450,
+      breakdown: [
+        { description: "Yearly Renewal Fee", details: "March 2023 · ₹5,000 × 7 members", amount: 35000 },
+        { description: "Monthly Deposits", details: "April – November 2023 · ₹1,500 × 7 × 8 months", amount: 84000 },
+        { description: "December 2023", details: "6 members · President exempt · ₹1,500 each", amount: 9000 },
+        { description: "Monthly Deposits", details: "January – March 2024 · ₹1,500 × 7 × 3 months", amount: 31500 },
+        { description: "Interest Earned", details: "Bank interest on deposits", amount: 45700 },
+        { description: "Annual Meeting Expense", details: "3rd meeting · Cotton County Club, Hubballi", amount: -17750 },
+      ],
+    },
+    {
+      id: "d2024", year: 2024, label: "Fourth Year (2024-2025)", principal: 126000, interest: 57300, expenditure: 33385, balance: 149915,
+      breakdown: [
+        { description: "Yearly Renewal Fee", details: "April 2024 · ₹6,000 × 7 members", amount: 42000 },
+        { description: "Monthly Deposits", details: "April – November 2024 · ₹1,500 × 7 × 8 months", amount: 84000 },
+        { description: "Interest Earned", details: "Bank interest until November 2024", amount: 57300 },
+        { description: "Annual Meeting Expense", details: "4th meeting · Jungle Vibes Resort, Dandeli", amount: -33385 },
+      ],
+    },
+    {
+      id: "d2025", year: 2025, label: "Fifth Year (2025)", principal: 149000, interest: 103350, expenditure: 20580, balance: 231770,
+      breakdown: [
+        { description: "December 2024", details: "₹1,500 × 6 members · President exempt", amount: 9000 },
+        { description: "Monthly Deposits", details: "January – October 2025 · ₹2,000 × 7 × 10 months", amount: 140000 },
+        { description: "Interest Earned", details: "Bank interest on deposits", amount: 103350 },
+        { description: "Annual Meeting Expense", details: "5th meeting · Sandur Wonder Valley Resort", amount: -20580 },
+      ],
+    },
   ],
   monthlyPayments: [
     { id: "p1", memberId: "m1", month: "2026-05", amount: 2000, status: "paid", source: "manual" },
@@ -1006,12 +1053,53 @@ function renderDeposits() {
 
       <div class="card">
         <div class="card-header"><div><h3>Historical balances</h3><p>Year-wise summary · 6th year in progress</p></div></div>
-        <div class="card-body row-list">
-          <div class="row-item" style="background:#f0fdf4;border-radius:8px;padding:10px 12px;">
+        <div class="card-body">
+          <div class="row-item" style="background:#f0fdf4;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
             <div><strong>Sixth Year (2026–2027)</strong><span>Nov 2025 renewal ₹3,000/member · Monthly ₹2,000 · Appanna EMI ${money(emi.monthlyEmi)}/month</span></div>
             <span class="badge warn">In Progress</span>
           </div>
-          ${state.deposits.map((item) => `<div class="row-item"><div><strong>${escapeHtml(item.label)}</strong><span>Principal ${money(item.principal)} · Interest ${money(item.interest)}</span></div><strong>${money(item.balance)}</strong></div>`).join("")}
+          ${[...state.deposits].reverse().map((item) => {
+            return `
+            <details class="collapsible" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;overflow:hidden;">
+              <summary style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;background:#fafafa;list-style:none;">
+                <div>
+                  <strong style="font-size:14px;">${escapeHtml(item.label)}</strong>
+                  <span style="display:block;font-size:12px;color:#666;margin-top:2px;">
+                    Principal ${money(item.principal)} · Interest ${money(item.interest)} · Meeting ${money(Math.abs(item.expenditure))}
+                  </span>
+                </div>
+                <div style="text-align:right;">
+                  <strong style="font-size:15px;color:#16a34a;">${money(item.balance)}</strong>
+                  <span style="display:block;font-size:11px;color:#999;">closing balance</span>
+                </div>
+              </summary>
+              <div style="padding:12px 14px;background:#fff;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                  <thead>
+                    <tr style="border-bottom:1px solid #e5e7eb;">
+                      <th style="text-align:left;padding:6px 8px;font-weight:600;color:#555;">Description</th>
+                      <th style="text-align:left;padding:6px 8px;font-weight:600;color:#555;">Details</th>
+                      <th style="text-align:right;padding:6px 8px;font-weight:600;color:#555;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${item.breakdown.map((row) => `
+                    <tr style="border-bottom:1px solid #f3f4f6;">
+                      <td style="padding:7px 8px;">${escapeHtml(row.description)}</td>
+                      <td style="padding:7px 8px;color:#666;">${escapeHtml(row.details)}</td>
+                      <td style="padding:7px 8px;text-align:right;font-weight:500;color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</td>
+                    </tr>`).join("")}
+                  </tbody>
+                  <tfoot>
+                    <tr style="border-top:2px solid #e5e7eb;background:#f9fafb;">
+                      <td colspan="2" style="padding:8px 8px;font-weight:600;">Closing Balance</td>
+                      <td style="padding:8px 8px;text-align:right;font-weight:700;color:#16a34a;">${money(item.balance)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </details>`;
+          }).join("")}
         </div>
       </div>
 
