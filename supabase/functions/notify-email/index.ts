@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
+const GMAIL_USER = "srimukkaneshwara@gmail.com";
+const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const FROM = "Banakar FinClub <onboarding@resend.dev>";
 
 serve(async (req) => {
   try {
@@ -39,28 +39,28 @@ serve(async (req) => {
       </div>
     `;
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
+    const client = new SMTPClient({
+      connection: {
+        hostname: "smtp.gmail.com",
+        port: 465,
+        tls: true,
+        auth: {
+          username: GMAIL_USER,
+          password: GMAIL_APP_PASSWORD,
+        },
       },
-      body: JSON.stringify({
-        from: FROM,
-        to: [profile.email],
-        subject: record.title,
-        html,
-      }),
     });
 
-    const result = await res.json();
+    await client.send({
+      from: `Banakar FinClub <${GMAIL_USER}>`,
+      to: profile.email,
+      subject: record.title,
+      html,
+    });
 
-    if (!res.ok) {
-      console.error("Resend error:", result);
-      return new Response(JSON.stringify(result), { status: 500 });
-    }
+    await client.close();
 
-    return new Response(JSON.stringify({ ok: true, id: result.id }), {
+    return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
