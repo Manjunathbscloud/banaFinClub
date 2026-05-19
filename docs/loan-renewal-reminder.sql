@@ -6,7 +6,7 @@
 create extension if not exists pg_cron;
 
 
--- 2. Function that finds loans due this month and notifies the member
+-- 2. Function that finds loans due this month and notifies the member + admin
 create or replace function public.notify_members_loan_renewal_due()
 returns void
 language plpgsql
@@ -16,7 +16,13 @@ as $$
 declare
   loan_rec   record;
   profile_id uuid;
+  admin_id   uuid;
 begin
+  select id into admin_id
+  from public.profiles
+  where role = 'president' and status = 'active'
+  limit 1;
+
   for loan_rec in
     select *
     from public.current_loans
@@ -34,16 +40,29 @@ begin
       limit 1;
     end if;
 
-    if profile_id is null then continue; end if;
+    -- Notify the member
+    if profile_id is not null then
+      insert into public.notifications (profile_id, type, title, body, related_id)
+      values (
+        profile_id,
+        'loan_renewal_due',
+        'Loan renewal due this month',
+        'Your loan of ₹' || loan_rec.principal::text || ' is due for renewal this month. Please contact the president.',
+        loan_rec.id
+      );
+    end if;
 
-    insert into public.notifications (profile_id, type, title, body, related_id)
-    values (
-      profile_id,
-      'loan_renewal_due',
-      'Loan renewal due this month',
-      'Your loan of ₹' || loan_rec.principal::text || ' is due for renewal this month. Please contact the president.',
-      loan_rec.id
-    );
+    -- Notify the admin with full details
+    if admin_id is not null then
+      insert into public.notifications (profile_id, type, title, body, related_id)
+      values (
+        admin_id,
+        'loan_renewal_due_admin',
+        'Loan renewal due: ' || coalesce(loan_rec.member_name, 'Unknown'),
+        coalesce(loan_rec.member_name, 'A member') || ' (Ph: ' || coalesce(loan_rec.member_phone, '-') || ') has a loan of ₹' || loan_rec.principal::text || ' due for renewal on ' || loan_rec.renewal_or_return_date::text || '.',
+        loan_rec.id
+      );
+    end if;
   end loop;
 end;
 $$;
