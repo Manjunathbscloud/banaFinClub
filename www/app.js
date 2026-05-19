@@ -1059,6 +1059,7 @@ function renderDeposits() {
             <span class="badge warn">In Progress</span>
           </div>
           ${[...state.deposits].reverse().map((item) => {
+            const rows = item.breakdown || initialState.deposits.find((d) => d.id === item.id)?.breakdown || [];
             return `
             <details class="collapsible" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;overflow:hidden;">
               <summary style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;background:#fafafa;list-style:none;">
@@ -1083,7 +1084,7 @@ function renderDeposits() {
                     </tr>
                   </thead>
                   <tbody>
-                    ${item.breakdown.map((row) => `
+                    ${rows.map((row) => `
                     <tr style="border-bottom:1px solid #f3f4f6;">
                       <td style="padding:7px 8px;">${escapeHtml(row.description)}</td>
                       <td style="padding:7px 8px;color:#666;">${escapeHtml(row.details)}</td>
