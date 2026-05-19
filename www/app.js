@@ -126,86 +126,91 @@ const initialState = {
   deposits: [
     {
       id: "d2021", year: 2021, label: "First Year (2021-2022)", principal: 111000, interest: 8700, expenditure: 5600, balance: 114100,
+      intro: "In the inaugural year, the association established its financial foundation as follows:",
       history: [
         "Initial contribution: Each member deposited ₹5,000 in February 2021",
         "Regular monthly deposits: ₹1,000 per member from March 2021 to January 2022",
         "Special consideration: The President was exempted from December 2021 deposit",
         "Additional income: Earned ₹8,700 through interest",
-        "Annual expenses: ₹5,600 spent on 1st year-end meeting at M Thumbaraguddi",
+        "Annual expenses: ₹5,600 spent on year-end meeting at M Thumbaraguddi",
       ],
       breakdown: [
         { description: "Initial Contribution", details: "February 2021 (₹5,000 × 7 members)", amount: 35000 },
-        { description: "Monthly Deposits", details: "March 2021 – November 2021 (₹1,000 × 7 members × 9 months)", amount: 63000 },
+        { description: "Monthly Deposits", details: "March 2021 - November 2021 (₹1,000 × 7 members × 9 months)", amount: 63000 },
         { description: "December 2021", details: "6 members (President exempt)", amount: 6000 },
         { description: "January 2022", details: "All 7 members", amount: 7000 },
-        { description: "Interest Earned", details: "Bank interest on deposits", amount: 8700 },
-        { description: "Annual Meeting Expense", details: "1st meeting · M Thumbaraguddi", amount: -5600 },
+        { description: "Interest Earned", details: "Total interest for the year", amount: 8700 },
+        { description: "Annual Meeting Expense", details: "Year-end meeting cost · M Thumbaraguddi", amount: -5600 },
       ],
     },
     {
       id: "d2022", year: 2022, label: "Second Year (2022-2023)", principal: 149000, interest: 33600, expenditure: 13000, balance: 169600,
+      intro: "In the second year, the association continued with enhanced financial activities:",
       history: [
-        "Monthly deposit increased to: ₹1,500 per member from February 2022",
+        "Monthly deposit increased to: ₹1,500 per member",
         "Special consideration: President exempted from December 2022 deposit",
         "Additional income: Earned ₹33,600 through interest",
-        "Annual expenses: ₹13,000 spent on 2nd meeting at Sampige Heritage Resort, Koppal",
+        "Annual expenses: ₹13,000 spent on year-end meeting at Sampige Heritage Resort, Koppal",
       ],
       breakdown: [
-        { description: "January 2022", details: "All 7 members (₹2,000 each)", amount: 14000 },
+        { description: "January 2022", details: "All 7 members", amount: 14000 },
         { description: "February 2022", details: "First month with new rate (₹1,500 × 7 members)", amount: 10500 },
-        { description: "Monthly Deposits", details: "March 2022 – November 2022 (₹1,500 × 7 members × 9 months)", amount: 94500 },
+        { description: "Monthly Deposits", details: "March 2022 - November 2022 (₹1,500 × 7 members × 9 months)", amount: 94500 },
         { description: "December 2022", details: "6 members (President exempt)", amount: 9000 },
-        { description: "Monthly Deposits", details: "January 2023 – February 2023 (₹1,500 × 7 members × 2 months)", amount: 21000 },
-        { description: "Interest Earned", details: "Bank interest on deposits", amount: 33600 },
-        { description: "Annual Meeting Expense", details: "2nd meeting · Sampige Heritage Resort, Koppal", amount: -13000 },
+        { description: "Monthly Deposits", details: "January 2023 - February 2023 (₹1,500 × 7 members × 2 months)", amount: 21000 },
+        { description: "Interest Earned", details: "Total interest for the year", amount: 33600 },
+        { description: "Annual Meeting Expense", details: "Year-end meeting cost · Sampige Heritage Resort, Koppal", amount: -13000 },
       ],
     },
     {
       id: "d2023", year: 2023, label: "Third Year (2023-2024)", principal: 159500, interest: 45700, expenditure: 17750, balance: 187450,
+      intro: "In the third year, the association updated its financial structure:",
       history: [
-        "Yearly renewal fee introduced: ₹5,000 per member (March 2023)",
-        "Monthly deposit continued at: ₹1,500 per member",
+        "Yearly renewal fee: ₹5,000 per member",
+        "Monthly deposit: ₹1,500 per member",
         "Special consideration: President exempted from December 2023 deposit",
         "Additional income: Earned ₹45,700 through interest",
-        "Annual expenses: ₹17,750 spent on 3rd meeting at Cotton County Club, Hubballi",
+        "Annual expenses: ₹17,750 spent on year-end meeting at Cotton County Club, Hubballi",
       ],
       breakdown: [
         { description: "Renewal Fee", details: "March 2023 (₹5,000 × 7 members)", amount: 35000 },
-        { description: "Monthly Deposits", details: "April 2023 – November 2023 (₹1,500 × 7 members × 8 months)", amount: 84000 },
+        { description: "Monthly Deposits", details: "April 2023 - November 2023 (₹1,500 × 7 members × 8 months)", amount: 84000 },
         { description: "December 2023", details: "6 members (President exempt)", amount: 9000 },
-        { description: "Monthly Deposits", details: "January 2024 – March 2024 (₹1,500 × 7 members × 3 months)", amount: 31500 },
-        { description: "Interest Earned", details: "Bank interest on deposits", amount: 45700 },
-        { description: "Annual Meeting Expense", details: "3rd meeting · Cotton County Club, Hubballi", amount: -17750 },
+        { description: "Monthly Deposits", details: "January 2024 - March 2024 (₹1,500 × 7 members × 3 months)", amount: 31500 },
+        { description: "Interest Earned", details: "Total interest for the year", amount: 45700 },
+        { description: "Annual Meeting Expense", details: "Year-end meeting cost · Cotton County Club, Hubballi", amount: -17750 },
       ],
     },
     {
       id: "d2024", year: 2024, label: "Fourth Year (2024-2025)", principal: 126000, interest: 57300, expenditure: 33385, balance: 149915,
+      intro: "In the fourth year, the association further enhanced its financial structure:",
       history: [
-        "Yearly renewal fee increased to: ₹6,000 per member (April 2024)",
+        "Yearly renewal fee increased to: ₹6,000 per member",
         "Monthly deposit continued at: ₹1,500 per member",
         "Additional income: Earned ₹57,300 through interest (until November 2024)",
-        "Annual expenses: ₹33,385 spent on 4th meeting at Jungle Vibes Resort, Dandeli",
+        "Annual expenses: ₹33,385 spent on year-end meeting at Jungle Vibes Resort, Dandeli",
       ],
       breakdown: [
         { description: "Renewal Fee", details: "April 2024 (₹6,000 × 7 members)", amount: 42000 },
-        { description: "Monthly Deposits", details: "April 2024 – November 2024 (₹1,500 × 7 members × 8 months)", amount: 84000 },
-        { description: "Interest Earned", details: "Bank interest until November 2024", amount: 57300 },
-        { description: "Annual Meeting Expense", details: "4th meeting · Jungle Vibes Resort, Dandeli", amount: -33385 },
+        { description: "Monthly Deposits", details: "April 2024 - November 2024 (₹1,500 × 7 members × 8 months)", amount: 84000 },
+        { description: "Interest Earned", details: "Total interest until November 2024", amount: 57300 },
+        { description: "Annual Meeting Expense", details: "Year-end meeting cost · Jungle Vibes Resort, Dandeli", amount: -33385 },
       ],
     },
     {
       id: "d2025", year: 2025, label: "Fifth Year (2025)", principal: 149000, interest: 103350, expenditure: 20580, balance: 231770,
+      intro: "In the fifth year, the association continued its financial progress:",
       history: [
         "Principal Amount: ₹1,49,000 (total monthly deposits collected)",
-        "Interest Earned: ₹1,03,350 — significant growth in interest income",
-        "Expenditure: ₹20,580 on 5th meeting at Sandur Wonder Valley Resort",
-        "Total Balance: ₹2,31,770 — strong financial position",
+        "Interest Earned: ₹1,03,350 (significant growth in interest income)",
+        "Expenditure: ₹20,580 (annual meeting at Sandur Wonder Valley Resort)",
+        "Total Balance: ₹2,31,770 (strong financial position)",
       ],
       breakdown: [
         { description: "Monthly Deposits", details: "December 2024 (₹1,500 × 6 members)", amount: 9000 },
-        { description: "Monthly Deposits", details: "January 2025 – October 2025 (₹2,000 × 7 members × 10 months)", amount: 140000 },
-        { description: "Interest Earned", details: "Bank interest on deposits", amount: 103350 },
-        { description: "Annual Meeting Expense", details: "5th meeting · Sandur Wonder Valley Resort", amount: -20580 },
+        { description: "Monthly Deposits", details: "January - October 2025 (₹2,000 × 7 members × 10 months)", amount: 140000 },
+        { description: "Interest Earned", details: "Total interest earned on deposits", amount: 103350 },
+        { description: "Annual Meeting Expense", details: "5th Year Annual Meeting (October 2025) · Sandur Wonder Valley Resort", amount: -20580 },
       ],
     },
   ],
@@ -1040,6 +1045,51 @@ function appannaEmiProgress() {
   return { paid, remaining: totalMonths - paid, totalMonths, monthlyEmi, totalAmount: monthlyEmi * totalMonths };
 }
 
+function depositYearCard(item) {
+  const src = initialState.deposits.find((d) => d.id === item.id) || item;
+  const rows = item.breakdown?.length ? item.breakdown : (src.breakdown || []);
+  const bullets = src.history || [];
+  const intro = src.intro || "";
+  const ordinals = { d2021: "First", d2022: "Second", d2023: "Third", d2024: "Fourth", d2025: "Fifth" };
+  const ordinal = ordinals[item.id] || "";
+  return `
+  <details class="card collapsible">
+    <summary class="card-header">
+      <div>
+        <h3>${escapeHtml(item.label)}</h3>
+        <p>Principal ${money(item.principal)} · Interest <span style="color:#16a34a;">${money(item.interest)}</span> · Expenditure <span style="color:#dc2626;">${money(item.expenditure)}</span> · Balance <strong style="color:#2563eb;">${money(item.balance)}</strong></p>
+      </div>
+      <span class="collapse-icon">⌄</span>
+    </summary>
+    <div class="card-body">
+      ${intro ? `<p style="margin:0 0 10px;font-size:13px;color:#444;">${escapeHtml(intro)}</p>` : ""}
+      ${bullets.length ? `<ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#444;line-height:1.8;">${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
+      <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed ${escapeHtml(ordinal)} Year Summary</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Description</th><th>Details</th><th>Amount</th></tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+            <tr>
+              <td data-label="Description">${escapeHtml(row.description)}</td>
+              <td data-label="Details">${escapeHtml(row.details)}</td>
+              <td data-label="Amount" style="font-weight:600;color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "-₹" + Math.abs(row.amount).toLocaleString("en-IN") : money(row.amount)}</td>
+            </tr>`).join("")}
+          </tbody>
+          <tfoot>
+            <tr style="font-weight:700;">
+              <td colspan="2" data-label="Total Balance">Total Balance</td>
+              <td data-label="Balance" style="color:#2563eb;">${money(item.balance)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </details>`;
+}
+
 function renderDeposits() {
   const user = currentUser();
   const visiblePayments = isAdmin() ? state.monthlyPayments : state.monthlyPayments.filter((payment) => payment.memberId === user.id);
@@ -1047,7 +1097,8 @@ function renderDeposits() {
   const pct = Math.round((emi.paid / emi.totalMonths) * 100);
 
   return `
-    <section class="page-title"><p>${t("deposits")}</p><h2>Monthly collections</h2></section>
+    <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
+
     <section class="two-col">
       <div class="card">
         <div class="card-header"><div><h3>Payment status</h3><p>Current month and imported rows</p></div></div>
@@ -1082,7 +1133,9 @@ function renderDeposits() {
           </div>
         </div>
       </div>
+    </section>
 
+    <section class="grid">
       <details class="card collapsible">
         <summary class="card-header"><div><h3>Account Balance Summary</h3><p>First 5 years · 2021 – 2025</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="table-wrap">
@@ -1090,8 +1143,8 @@ function renderDeposits() {
             <thead>
               <tr>
                 <th>Year</th>
-                <th>Principal</th>
-                <th style="color:#16a34a;">Interest</th>
+                <th>Principal Amount</th>
+                <th style="color:#16a34a;">Interest Earned</th>
                 <th style="color:#dc2626;">Expenditure</th>
                 <th style="color:#2563eb;">Total Balance</th>
               </tr>
@@ -1100,17 +1153,17 @@ function renderDeposits() {
               ${state.deposits.map((item) => `
               <tr>
                 <td data-label="Year">${item.year}</td>
-                <td data-label="Principal">${money(item.principal)}</td>
-                <td data-label="Interest" style="color:#16a34a;font-weight:600;">${money(item.interest)}</td>
+                <td data-label="Principal Amount">${money(item.principal)}</td>
+                <td data-label="Interest Earned" style="color:#16a34a;font-weight:600;">${money(item.interest)}</td>
                 <td data-label="Expenditure" style="color:#dc2626;font-weight:600;">${money(item.expenditure)}</td>
                 <td data-label="Total Balance" style="color:#2563eb;font-weight:700;">${money(item.balance)}</td>
               </tr>`).join("")}
             </tbody>
             <tfoot>
-              <tr style="font-weight:700;border-top:2px solid #e5e7eb;">
+              <tr style="font-weight:700;">
                 <td data-label="Year">Total (2021–2025)</td>
-                <td data-label="Principal">${money(state.deposits.reduce((s,d)=>s+d.principal,0))}</td>
-                <td data-label="Interest" style="color:#16a34a;">${money(state.deposits.reduce((s,d)=>s+d.interest,0))}</td>
+                <td data-label="Principal Amount">${money(state.deposits.reduce((s,d)=>s+d.principal,0))}</td>
+                <td data-label="Interest Earned" style="color:#16a34a;">${money(state.deposits.reduce((s,d)=>s+d.interest,0))}</td>
                 <td data-label="Expenditure" style="color:#dc2626;">${money(state.deposits.reduce((s,d)=>s+d.expenditure,0))}</td>
                 <td data-label="Total Balance" style="color:#2563eb;">${money(state.deposits.reduce((s,d)=>s+d.balance,0))}</td>
               </tr>
@@ -1119,56 +1172,43 @@ function renderDeposits() {
         </div>
       </details>
 
-      ${[...state.deposits].reverse().map((item) => {
-        const rows = item.breakdown || initialState.deposits.find((d) => d.id === item.id)?.breakdown || [];
-        const bullets = item.history || initialState.deposits.find((d) => d.id === item.id)?.history || [];
-        return `
-        <details class="card collapsible">
-          <summary class="card-header">
-            <div>
-              <h3>${escapeHtml(item.label)}</h3>
-              <p>Principal ${money(item.principal)} · Interest ${money(item.interest)} · Balance <strong style="color:#16a34a;">${money(item.balance)}</strong></p>
-            </div>
-            <span class="collapse-icon">⌄</span>
-          </summary>
-          <div class="card-body">
-            ${bullets.length ? `<ul style="margin:0 0 14px;padding-left:18px;font-size:13px;color:#444;line-height:1.7;">${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Description</th><th>Details</th><th style="text-align:right;">Amount</th></tr>
-                </thead>
-                <tbody>
-                  ${rows.map((row) => `
-                  <tr>
-                    <td data-label="Description">${escapeHtml(row.description)}</td>
-                    <td data-label="Details" style="color:#666;">${escapeHtml(row.details)}</td>
-                    <td data-label="Amount" style="text-align:right;font-weight:600;color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</td>
-                  </tr>`).join("")}
-                </tbody>
-                <tfoot>
-                  <tr style="font-weight:700;border-top:2px solid #e5e7eb;">
-                    <td colspan="2" data-label="Total Balance">Total Balance</td>
-                    <td data-label="Balance" style="text-align:right;color:#2563eb;">${money(item.balance)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        </details>`;
-      }).join("")}
+      ${[...state.deposits].reverse().map((item) => depositYearCard(item)).join("")}
 
-      <div class="card">
-        <div class="card-header"><div><h3>Sixth Year (2026–2027)</h3><p>In Progress</p></div><span class="badge warn">Active</span></div>
+      <details class="card collapsible">
+        <summary class="card-header">
+          <div><h3>Sixth Year (2026–2027)</h3><p>In Progress · <span class="badge warn">Active</span></p></div>
+          <span class="collapse-icon">⌄</span>
+        </summary>
         <div class="card-body">
-          <ul style="margin:0 0 10px;padding-left:18px;font-size:13px;color:#444;line-height:1.7;">
-            <li>Yearly renewal fee: ₹3,000 per member (November 2025)</li>
-            <li>Monthly deposits: ₹2,000 per member · President exempt in December · Vice-President ₹1,250 in December</li>
+          <p style="margin:0 0 10px;font-size:13px;color:#444;">In the sixth year, the association continues its financial progress with updated membership and fee structure:</p>
+          <ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#444;line-height:1.8;">
+            <li>Yearly renewal fee: ₹3,000 for 7 members (November 2025)</li>
+            <li>Monthly deposits: ₹2,000 per member from November to November</li>
+            <li>President exemption: No payment in December month</li>
+            <li>Vice President concession: ₹1,250 in December month</li>
+            <li>Regular members: ₹2,000 per month throughout the year</li>
             <li>New member: Appanna Banakar joining via 18-month EMI of ${money(emi.monthlyEmi)}/month</li>
           </ul>
+          <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed Sixth Year Summary</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Description</th><th>Details</th><th>Amount</th></tr></thead>
+              <tbody>
+                <tr><td data-label="Description">Yearly Renewal Fee</td><td data-label="Details">November 2025 (₹3,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹21,000</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">November 2025 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹14,000</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">December 2025 (5 members ₹2,000, 6th member ₹1,250, 7th member exempted)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹11,250</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">January – November 2026 (₹2,000 × 7 members × 11 months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹1,54,000</td></tr>
+                <tr><td data-label="Description">New Member EMI</td><td data-label="Details">Appanna Banakar – ${money(emi.monthlyEmi)}/month × 18 months</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹1,34,016.84</td></tr>
+                <tr><td data-label="Description">Interest Earned</td><td data-label="Details">Total interest earned (to be calculated)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
+                <tr><td data-label="Description">Annual Meeting Expense</td><td data-label="Details">Year-end meeting cost</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
+              </tbody>
+              <tfoot>
+                <tr style="font-weight:700;"><td colspan="2" data-label="Total Balance">Total Balance</td><td data-label="Balance" style="color:#888;">As of November 2026 – TBD</td></tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
-      </div>
-
+      </details>
     </section>
   `;
 }
