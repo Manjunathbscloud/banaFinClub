@@ -1045,43 +1045,36 @@ function appannaEmiProgress() {
   return { paid, remaining: totalMonths - paid, totalMonths, monthlyEmi, totalAmount: monthlyEmi * totalMonths };
 }
 
-function depositYearCard(item) {
-  const src = initialState.deposits.find((d) => d.id === item.id) || item;
-  const rows = item.breakdown?.length ? item.breakdown : (src.breakdown || []);
-  const bullets = src.history || [];
-  const intro = src.intro || "";
+function depositYearCard(d) {
   const ordinals = { d2021: "First", d2022: "Second", d2023: "Third", d2024: "Fourth", d2025: "Fifth" };
-  const ordinal = ordinals[item.id] || "";
   return `
   <details class="card collapsible">
     <summary class="card-header">
       <div>
-        <h3>${escapeHtml(item.label)}</h3>
-        <p>Principal ${money(item.principal)} · Interest <span style="color:#16a34a;">${money(item.interest)}</span> · Expenditure <span style="color:#dc2626;">${money(item.expenditure)}</span> · Balance <strong style="color:#2563eb;">${money(item.balance)}</strong></p>
+        <h3>${escapeHtml(d.label)}</h3>
+        <p>Principal ${money(d.principal)} · Interest <span style="color:#16a34a;">${money(d.interest)}</span> · Expenditure <span style="color:#dc2626;">${money(d.expenditure)}</span> · Balance <strong style="color:#2563eb;">${money(d.balance)}</strong></p>
       </div>
       <span class="collapse-icon">⌄</span>
     </summary>
     <div class="card-body">
-      ${intro ? `<p style="margin:0 0 10px;font-size:13px;color:#444;">${escapeHtml(intro)}</p>` : ""}
-      ${bullets.length ? `<ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#444;line-height:1.8;">${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
-      <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed ${escapeHtml(ordinal)} Year Summary</p>
+      ${d.intro ? `<p style="margin:0 0 10px;font-size:13px;color:#444;">${escapeHtml(d.intro)}</p>` : ""}
+      ${d.history?.length ? `<ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#444;line-height:1.8;">${d.history.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
+      <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed ${escapeHtml(ordinals[d.id] || "")} Year Summary</p>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr><th>Description</th><th>Details</th><th>Amount</th></tr>
-          </thead>
+          <thead><tr><th>Description</th><th>Details</th><th>Amount</th></tr></thead>
           <tbody>
-            ${rows.map((row) => `
+            ${(d.breakdown || []).map((row) => `
             <tr>
               <td data-label="Description">${escapeHtml(row.description)}</td>
               <td data-label="Details">${escapeHtml(row.details)}</td>
-              <td data-label="Amount" style="font-weight:600;color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "-₹" + Math.abs(row.amount).toLocaleString("en-IN") : money(row.amount)}</td>
+              <td data-label="Amount" style="font-weight:600;color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "-" + money(Math.abs(row.amount)) : money(row.amount)}</td>
             </tr>`).join("")}
           </tbody>
           <tfoot>
             <tr style="font-weight:700;">
               <td colspan="2" data-label="Total Balance">Total Balance</td>
-              <td data-label="Balance" style="color:#2563eb;">${money(item.balance)}</td>
+              <td data-label="Balance" style="color:#2563eb;">${money(d.balance)}</td>
             </tr>
           </tfoot>
         </table>
@@ -1172,7 +1165,7 @@ function renderDeposits() {
         </div>
       </details>
 
-      ${[...state.deposits].reverse().map((item) => depositYearCard(item)).join("")}
+      ${[...initialState.deposits].reverse().map((d) => depositYearCard(d)).join("")}
 
       <details class="card collapsible">
         <summary class="card-header">
