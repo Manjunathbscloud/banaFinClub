@@ -850,9 +850,11 @@ function render() {
   document.body.classList.toggle("kannada", state.lang === "kn");
   const user = currentUser();
   if (!user) {
+    clearTimeout(idleTimer);
     renderAuth("login");
     return;
   }
+  resetIdleTimer();
 
   document.querySelector("#app").innerHTML = `
     <div class="shell">
@@ -2283,6 +2285,28 @@ async function importStatement(data) {
   showToast(`Imported ${rows.length} rows, matched ${matchedPayments.length}.`);
   render();
 }
+
+// ── Session idle timeout (40 minutes) ────────────────────────────────────────
+const IDLE_TIMEOUT_MS = 40 * 60 * 1000;
+let idleTimer = null;
+
+function resetIdleTimer() {
+  if (!state.currentUserId) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    if (!state.currentUserId) return;
+    if (liveBackendReady) await supabaseClient.auth.signOut();
+    state.currentUserId = null;
+    saveState();
+    showToast("You have been logged out due to inactivity.");
+    render();
+  }, IDLE_TIMEOUT_MS);
+}
+
+["click", "touchstart", "keydown", "scroll", "mousemove"].forEach((evt) =>
+  document.addEventListener(evt, resetIdleTimer, { passive: true })
+);
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function initApp() {
   if (liveBackendReady) {
