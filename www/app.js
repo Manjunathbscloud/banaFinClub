@@ -1192,7 +1192,7 @@ function showRulesModal() {
             <h3>📜 Rules &amp; Regulations</h3>
             <p>Sri Mukkanneshwara Associate · Updated Oct 2025</p>
           </div>
-          <button class="rules-modal-close" onclick="document.getElementById('rules-modal').remove()">✕</button>
+          <button class="rules-modal-close" onclick="document.getElementById('rules-modal').remove();document.body.style.overflow=''">✕</button>
         </div>
         <div class="rules-modal-body">
           ${rules.map(section => `
