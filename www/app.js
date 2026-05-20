@@ -1266,6 +1266,36 @@ function renderDeposits() {
               <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Post-exit pool</strong><span>Association pool after member exit settled</span></div><strong style="color:#2563eb;">${money(postExitPool)}</strong></div>
               <div class="row-item"><div><strong>Year 6 deposits (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</strong><span>Renewal + monthly deposits + Appanna EMI</span></div><strong style="color:#16a34a;">+${money(yr6Deposits)}</strong></div>
               <div class="row-item"><div><strong>Interest collected (Year 6)</strong><span>Monthly interest from borrowers · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</span></div><strong style="color:#16a34a;">+${money(interestCollected)}</strong></div>
+              ${(() => {
+                const yr6Start = "2025-11-01";
+                const rows = currentLoans().map(loan => {
+                  if (!loan.from) return "";
+                  const effectiveFrom = loan.from > yr6Start ? loan.from : yr6Start;
+                  const start = new Date(effectiveFrom);
+                  const months = (_now.getFullYear() - start.getFullYear()) * 12 + (_now.getMonth() - start.getMonth()) + 1;
+                  const monthlyInt = loanBaseMonthlyInterest(loan);
+                  const loanInterest = Math.max(0, months) * monthlyInt;
+                  return `<tr>
+                    <td data-label="Member">${escapeHtml(loanMemberName(loan))}</td>
+                    <td data-label="Loan Amount">${money(loan.amount)}</td>
+                    <td data-label="Rate">1.25%/mo</td>
+                    <td data-label="From">${escapeHtml(effectiveFrom)}</td>
+                    <td data-label="Months">${Math.max(0, months)}</td>
+                    <td data-label="Monthly Interest">${money(Math.round(monthlyInt))}</td>
+                    <td data-label="Year 6 Interest" style="color:#16a34a;font-weight:600;">${money(Math.round(loanInterest))}</td>
+                  </tr>`;
+                }).join("");
+                return rows ? `
+                <details style="margin:4px 0 0 0;">
+                  <summary style="font-size:12px;color:#6b7280;cursor:pointer;list-style:none;padding:4px 0;">▸ See interest breakdown per loan</summary>
+                  <div class="table-wrap" style="margin-top:8px;">
+                    <table>
+                      <thead><tr><th>Member</th><th>Loan Amount</th><th>Rate</th><th>Counted From</th><th>Months</th><th>Monthly Interest</th><th>Year 6 Interest</th></tr></thead>
+                      <tbody>${rows}</tbody>
+                    </table>
+                  </div>
+                </details>` : "";
+              })()}
               <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(postExitPool + yr6Deposits + interestCollected)}</strong></div>
               <div class="row-item"><div><strong>Active loans outstanding</strong><span>${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</span></div><strong style="color:#dc2626;">−${money(totalOutstanding)}</strong></div>
             </div>
