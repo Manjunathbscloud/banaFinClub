@@ -596,6 +596,19 @@ function loanBaseMonthlyInterest(loan) {
   return (Number(loan.amount || 0) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
 }
 
+function year6InterestCollected() {
+  const yr6Start = "2025-11-01";
+  const now = new Date();
+  return currentLoans().reduce((sum, loan) => {
+    if (!loan.from) return sum;
+    const effectiveFrom = loan.from > yr6Start ? loan.from : yr6Start;
+    const start = new Date(effectiveFrom);
+    if (now <= start) return sum;
+    const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+    return sum + Math.max(0, months) * loanMonthlyInterest(loan);
+  }, 0);
+}
+
 function monthDiff(startDate, endDate) {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -668,8 +681,29 @@ function bankBalance() {
   return Number(state.settings.bankBalance ?? latestHistoricalBalance());
 }
 
+function expectedBankBalance() {
+  const sarpaShare = 121834;
+  const sarpaSettlement = 25166;
+  const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
+  const postExitPool = pool5y - sarpaShare + sarpaSettlement;
+  const now = new Date();
+  const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
+  let yr6Deposits = 0;
+  if (nowYM >= 202511) yr6Deposits += 35000;
+  if (nowYM >= 202512) yr6Deposits += 11250;
+  if (nowYM >= 202601) {
+    const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
+    yr6Deposits += 7 * 2000 * jMonths;
+    const emi = appannaEmiProgress();
+    yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
+  }
+  const interestCollected = year6InterestCollected();
+  const totalOutstanding = currentLoans().reduce((s, loan) => s + loanOutstanding(loan), 0);
+  return Math.round(postExitPool + yr6Deposits + interestCollected - totalOutstanding);
+}
+
 function availableLoanAmount() {
-  return Math.max(0, bankBalance() - Number(state.settings.minimumReserve || 5000));
+  return Math.max(0, expectedBankBalance() - Number(state.settings.minimumReserve || 5000));
 }
 
 function currentMonthPayment(memberId) {
@@ -975,7 +1009,7 @@ function renderDashboard() {
   const request = latestLoanRequest(user.id);
   const approvalCount = state.signupRequests.length + state.loanRequests.filter((item) => item.status === "pending").length;
   const dashboardMetrics = [
-    metric(t("bankBalance"), money(bankBalance()), `From latest statement · ${escapeHtml(state.settings.bankBalanceUpdatedAt || "-")}`),
+    metric(t("bankBalance"), money(expectedBankBalance()), `Estimated · deposits + interest − loans`),
     metric(t("availableLoan"), money(availableLoanAmount()), `Bank balance - ${money(state.settings.minimumReserve || 5000)} reserve`),
     metric(t("monthlyDue"), money(monthlyDue), `${statusText(monthlyPayment?.status || "pending")} · deposit ${money(ownDeposit)} + interest ${money(ownInterest)}`),
     metric(t("outstandingLoans"), money(memberOutstanding(user.id)), "Your outstanding principal"),
@@ -1088,6 +1122,12 @@ function renderDeposits() {
   const visiblePayments = isAdmin() ? state.monthlyPayments : state.monthlyPayments.filter((payment) => payment.memberId === user.id);
   const emi = appannaEmiProgress();
   const pct = Math.round((emi.paid / emi.totalMonths) * 100);
+  const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const _now = new Date();
+  const _nowYM = _now.getFullYear() * 100 + (_now.getMonth() + 1);
+  const _jMonths = _nowYM >= 202601 ? (_now.getFullYear() - 2026) * 12 + _now.getMonth() + 1 : 0;
+  const _jLabel = _jMonths > 0 ? `January – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}` : "January onwards";
+  const _emiLabel = `Jan – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`;
 
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
@@ -1188,16 +1228,16 @@ function renderDeposits() {
                 <tr><td data-label="Description">Yearly Renewal Fee</td><td data-label="Details">November 2025 (₹3,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(21000)}</td></tr>
                 <tr><td data-label="Description">Monthly Deposits – November</td><td data-label="Details">November 2025 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
                 <tr><td data-label="Description">Monthly Deposits – December</td><td data-label="Details">December 2025 (President exempt · VP ₹1,250 · 5 members ₹2,000)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(11250)}</td></tr>
-                <tr><td data-label="Description">Monthly Deposits – Jan to May</td><td data-label="Details">January – May 2026 (₹2,000 × 7 members × 5 months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(70000)}</td></tr>
-                <tr><td data-label="Description">Appanna Banakar EMI</td><td data-label="Details">Share buy-in EMI · Jan – May 2026 · ${emi.paid} × ${money(emi.monthlyEmi)}/month</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(Math.round(emi.paid * emi.monthlyEmi))}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits – Jan onwards</td><td data-label="Details">${_jLabel} (₹2,000 × 7 members × ${_jMonths} months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(7 * 2000 * _jMonths)}</td></tr>
+                <tr><td data-label="Description">Appanna Banakar EMI</td><td data-label="Details">Share buy-in EMI · ${_emiLabel} · ${emi.paid} × ${money(emi.monthlyEmi)}/month</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(Math.round(emi.paid * emi.monthlyEmi))}</td></tr>
                 <tr style="background:#f0fdf4;"><td data-label="Description">Member Exit Settlement</td><td data-label="Details">Sarpabhushana Banakar – net settlement received (October 2025)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(25166)}</td></tr>
-                <tr><td data-label="Description">Interest Earned</td><td data-label="Details">Bank interest Year 6 (to be updated)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
+                <tr><td data-label="Description">Interest from Loans</td><td data-label="Details">Monthly interest collected from borrowers (Year 6 · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(Math.round(year6InterestCollected()))}</td></tr>
                 <tr><td data-label="Description">Annual Meeting Expense</td><td data-label="Details">6th year meeting (Nov 2026)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
               </tbody>
               <tfoot>
                 <tr style="font-weight:700;">
-                  <td colspan="2" data-label="Collected so far">Collected so far (Nov 2025 – May 2026)</td>
-                  <td data-label="Amount" style="color:#2563eb;">${money(21000+14000+11250+70000+Math.round(emi.paid*emi.monthlyEmi)+25166)}</td>
+                  <td colspan="2" data-label="Collected so far">Collected so far (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</td>
+                  <td data-label="Amount" style="color:#2563eb;">${money(21000+14000+11250+(7*2000*_jMonths)+Math.round(emi.paid*emi.monthlyEmi)+25166+Math.round(year6InterestCollected()))}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1206,32 +1246,33 @@ function renderDeposits() {
       </details>
 
       <div class="card">
-        <div class="card-header"><div><h3>Expected Bank Balance — As of May 2026</h3><p>5-year pool − Sarpabhushana exit + Year 6 inflows − outstanding loans</p></div></div>
+        <div class="card-header"><div><h3>Expected Bank Balance — ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</h3><p>5-year pool − member exit + Year 6 deposits + interest − outstanding loans</p></div></div>
         <div class="card-body">
           ${(() => {
             const sarpaShare = 121834;
             const sarpaSettlement = 25166;
             const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
             const postExitPool = pool5y - sarpaShare + sarpaSettlement;
-            const yr6 = 21000 + 14000 + 11250 + 70000 + Math.round(emi.paid * emi.monthlyEmi);
-            const gross = postExitPool + yr6;
+            const yr6Deposits = 35000 + 11250 + (7 * 2000 * _jMonths) + Math.round(emi.paid * emi.monthlyEmi);
+            const interestCollected = Math.round(year6InterestCollected());
             const activeLoans = currentLoans();
             const totalOutstanding = activeLoans.reduce((s, loan) => s + loanOutstanding(loan), 0);
-            const expected = gross - totalOutstanding;
+            const expected = expectedBankBalance();
             return `
             <div class="row-list">
               <div class="row-item"><div><strong>5-year accumulated pool</strong><span>Sum of all 5 year balances (2021–2025)</span></div><strong style="color:#16a34a;">${money(pool5y)}</strong></div>
               <div class="row-item"><div><strong>Less: Sarpabhushana's share</strong><span>Member share removed from pool on exit (Oct 2025)</span></div><strong style="color:#dc2626;">−${money(sarpaShare)}</strong></div>
               <div class="row-item"><div><strong>Plus: Exit settlement received</strong><span>Net amount paid by Sarpabhushana to association</span></div><strong style="color:#16a34a;">+${money(sarpaSettlement)}</strong></div>
               <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Post-exit pool</strong><span>Association pool after member exit settled</span></div><strong style="color:#2563eb;">${money(postExitPool)}</strong></div>
-              <div class="row-item"><div><strong>Year 6 deposits (Nov 2025 – May 2026)</strong><span>Renewal + monthly deposits + Appanna EMI</span></div><strong style="color:#16a34a;">+${money(yr6)}</strong></div>
-              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(gross)}</strong></div>
+              <div class="row-item"><div><strong>Year 6 deposits (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</strong><span>Renewal + monthly deposits + Appanna EMI</span></div><strong style="color:#16a34a;">+${money(yr6Deposits)}</strong></div>
+              <div class="row-item"><div><strong>Interest collected (Year 6)</strong><span>Monthly interest from borrowers · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</span></div><strong style="color:#16a34a;">+${money(interestCollected)}</strong></div>
+              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(postExitPool + yr6Deposits + interestCollected)}</strong></div>
               <div class="row-item"><div><strong>Active loans outstanding</strong><span>${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</span></div><strong style="color:#dc2626;">−${money(totalOutstanding)}</strong></div>
             </div>
             <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
               <div>
                 <p style="margin:0;font-size:13px;font-weight:700;color:#166534;">Expected Bank Balance</p>
-                <p style="margin:4px 0 0;font-size:12px;color:#166534;">Bank interest Year 6 not yet included · update when statement arrives</p>
+                <p style="margin:4px 0 0;font-size:12px;color:#166534;">Updated automatically each month · verify against bank statement</p>
               </div>
               <strong style="font-size:22px;color:#166534;">${money(expected)}</strong>
             </div>`;
