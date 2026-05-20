@@ -385,43 +385,64 @@ button:focus-visible {
 .dash-tile {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 16px 14px;
+  padding: 14px 12px 14px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.13s ease, box-shadow 0.13s ease, background 0.13s ease;
+}
+
+.dash-tile:active {
+  transform: scale(0.96);
+  background: var(--hover, #f0f4ff);
+  box-shadow: none;
+}
+
+.dash-tile-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .dash-tile strong {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--ink);
   letter-spacing: 0.3px;
 }
 
 .dash-tile p {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   font-size: 11px;
   color: var(--muted);
   line-height: 1.4;
 }
 
 .tile-icon {
-  font-size: 28px;
+  font-size: 26px;
   flex-shrink: 0;
   line-height: 1;
 }
 
-.dash-tile-clickable {
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+.tile-chevron {
+  font-size: 20px;
+  color: var(--muted);
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: 2px;
 }
 
-.dash-tile-clickable:active {
-  transform: scale(0.97);
+.dash-tile-clickable {
+  cursor: pointer;
 }
 
 /* ── Rules modal ──────────────────────────────── */

@@ -1053,14 +1053,14 @@ function renderDashboard() {
   const payStatusColor = paymentStatus === "paid" ? "#16a34a" : "#b45309";
 
   const tiles = [
-    { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records" },
-    { icon: "💳", title: "LOANS", sub: "Current loan book" },
-    { icon: "👥", title: "MEMBERS", sub: "Association members" },
-    { icon: "📅", title: "MEETINGS", sub: "Meeting records" },
+    { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
+    { icon: "💳", title: "LOANS", sub: "View your loan details", tab: "loans" },
+    { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
+    { icon: "📅", title: "MEETINGS", sub: "Meeting records", tab: "meetings" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     isAdmin()
-      ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : "") }
-      : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status" },
+      ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : ""), tab: "admin" }
+      : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status", tab: "members" },
   ];
 
   return `
@@ -1074,12 +1074,17 @@ function renderDashboard() {
 
     <section class="dash-tiles">
       ${tiles.map(tile => `
-        <div class="dash-tile${tile.action ? " dash-tile-clickable" : ""}" ${tile.action ? `data-action="${tile.action}"` : ""}>
-          <div>
-            <strong>${escapeHtml(tile.title)}</strong>
-            <p>${escapeHtml(tile.sub)}</p>
+        <div class="dash-tile dash-tile-clickable"
+          ${tile.action ? `data-action="${tile.action}"` : ""}
+          ${tile.tab ? `data-tab="${tile.tab}"` : ""}>
+          <div class="dash-tile-body">
+            <span class="tile-icon">${tile.icon}</span>
+            <div>
+              <strong>${escapeHtml(tile.title)}</strong>
+              <p>${escapeHtml(tile.sub)}</p>
+            </div>
           </div>
-          <span class="tile-icon">${tile.icon}</span>
+          <span class="tile-chevron">›</span>
         </div>`).join("")}
     </section>
 
