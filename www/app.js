@@ -1099,7 +1099,7 @@ function renderDashboard() {
         <div class="dash-summary-col">
           <p>Available Loan</p>
           <strong>${money(availableLoanAmount())}</strong>
-          <small>After ₹5k reserve</small>
+          <small>For new loans</small>
         </div>
         <div class="dash-summary-divider"></div>
         <div class="dash-summary-col">
