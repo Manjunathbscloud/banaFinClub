@@ -227,6 +227,7 @@ const initialState = {
   loanHistory: [],
   notifications: [],
   statementRows: [],
+  rules: [],
   meetings: [
     {
       id: "meet5", year: 5, label: "5th Annual Meeting (2025)",
@@ -459,7 +460,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("*").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -469,6 +470,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("loan_history").select("*").order("from_date", { ascending: false })),
     liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
     liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
+    liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -510,6 +512,7 @@ async function loadLiveState() {
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
     notifications: notifications.map(liveNotificationToLocal),
     statementRows: [],
+    rules: rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 })),
     audit: audit.reverse().map(liveAuditToLocal),
   };
 }
@@ -1133,56 +1136,13 @@ function showRulesModal() {
   const existing = document.getElementById("rules-modal");
   if (existing) existing.remove();
 
-  const rules = [
-    {
-      icon: "👥", title: "Membership Rules", items: [
-        "All members must attend monthly meetings",
-        "Monthly contribution of ₹2,000 is mandatory by the 15th of each month",
-        "Members must maintain active participation in association activities",
-        "New members require approval from all existing members",
-        "Members may exit by settling all outstanding loans; share value will be calculated at exit",
-      ],
-    },
-    {
-      icon: "💳", title: "Loan Rules", items: [
-        "Loan interest rate is 1.25% per month on the total loan amount",
-        "Interest is collected monthly from the borrower",
-        "Loans are subject to renewal; renewal date set at the time of loan approval",
-        "Loan applications require approval from the President",
-        "Repayment of principal is made at renewal or as agreed",
-        "A member's outstanding loan is offset against their share value upon exit",
-      ],
-    },
-    {
-      icon: "🆕", title: "New Member Rules", items: [
-        "New members require unanimous approval from existing members",
-        "Joining amount equals the current share value plus an additional 10%",
-        "EMI installments over 18 months are available for the joining amount",
-        "New member also pays monthly deposit and yearly renewal fee from the joining month",
-        "Yearly renewal fee is ₹3,000 per member from Year 6 onwards",
-      ],
-    },
-    {
-      icon: "📋", title: "Administrative Guidelines", items: [
-        "President and Vice President are elected at the annual meeting",
-        "Monthly meetings are held on the first Sunday of each month",
-        "Annual meeting is held in October/November each year",
-        "All major financial decisions require majority vote at the annual meeting",
-        "Financial records must be maintained transparently and shared with all members",
-        "The association was established in February 2021 for an initial 5-year period, extended to 10 years at the 5th annual meeting (October 2025)",
-        "President is exempt from December monthly deposit; Vice President pays ₹1,250 in December",
-      ],
-    },
-    {
-      icon: "🚪", title: "Exit Rules", items: [
-        "A member wishing to exit must inform the President at least one month in advance",
-        "Outstanding loans will be deducted from the member's share value",
-        "If loans exceed share value, the net amount is payable by the member to the association",
-        "If share value exceeds loans, the net amount is paid to the exiting member",
-        "Exit settlement is final and agreed upon by all members",
-      ],
-    },
-  ];
+  const sectionIcons = { "Membership Rules": "👥", "Loan Rules": "💳", "New Member Rules": "🆕", "Administrative Guidelines": "📋", "Exit Rules": "🚪" };
+  const grouped = state.rules.reduce((acc, r) => {
+    if (!acc[r.section]) acc[r.section] = [];
+    acc[r.section].push(r.item);
+    return acc;
+  }, {});
+  const rules = Object.entries(grouped).map(([title, items]) => ({ icon: sectionIcons[title] || "📌", title, items }));
 
   const html = `
     <div id="rules-modal" class="rules-modal-overlay" data-action="close-rules">
@@ -1632,6 +1592,40 @@ function renderAdmin() {
           </form>
         </div>
       </details>
+
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>📜 Rules Management</h3><p>Add, edit or delete association rules</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body">
+          <form class="form" data-form="add-rule" style="margin-bottom:20px;">
+            <label class="field">
+              <span>Section</span>
+              <input name="section" list="rule-sections-list" placeholder="e.g. Membership Rules" required />
+              <datalist id="rule-sections-list">
+                ${[...new Set(state.rules.map((r) => r.section))].map((s) => `<option value="${escapeHtml(s)}">`).join("")}
+              </datalist>
+            </label>
+            <label class="field"><span>Rule text</span><textarea name="item" rows="2" placeholder="Enter the rule..." required></textarea></label>
+            <button class="primary" type="submit">Add Rule</button>
+          </form>
+
+          ${(() => {
+            const grouped = state.rules.reduce((acc, r) => { if (!acc[r.section]) acc[r.section] = []; acc[r.section].push(r); return acc; }, {});
+            return Object.entries(grouped).map(([section, items]) => `
+              <p style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--ink);">${escapeHtml(section)}</p>
+              ${items.map((r) => `
+                <div class="row-item" id="rule-row-${r.id}">
+                  <div style="flex:1;" id="rule-text-${r.id}">
+                    <span style="font-size:13px;">${escapeHtml(r.item)}</span>
+                  </div>
+                  <div class="actions" id="rule-actions-${r.id}">
+                    <button class="secondary" data-action="edit-rule" data-id="${r.id}" data-item="${escapeHtml(r.item)}" type="button">Edit</button>
+                    <button class="danger" data-action="delete-rule" data-id="${r.id}" type="button">Delete</button>
+                  </div>
+                </div>`).join("")}
+            `).join("") || `<div class="empty">No rules yet. Add one above.</div>`;
+          })()}
+        </div>
+      </details>
     </section>
   `;
 }
@@ -1711,6 +1705,29 @@ document.addEventListener("click", async (event) => {
     render();
   }
 
+  if (action.dataset.action === "edit-rule") {
+    const id = action.dataset.id;
+    const textDiv = document.getElementById(`rule-text-${id}`);
+    const actionsDiv = document.getElementById(`rule-actions-${id}`);
+    if (!textDiv || !actionsDiv) return;
+    const currentItem = action.dataset.item;
+    textDiv.innerHTML = `<textarea class="inline-edit-input" id="rule-edit-input-${id}" rows="2" style="width:100%;font-size:13px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;resize:vertical;">${escapeHtml(currentItem)}</textarea>`;
+    actionsDiv.innerHTML = `<button class="primary" data-action="save-rule" data-id="${id}" type="button">Save</button><button class="secondary" data-action="cancel-edit-rule" data-id="${id}" data-item="${escapeHtml(currentItem)}" type="button">Cancel</button>`;
+    document.getElementById(`rule-edit-input-${id}`)?.focus();
+    return;
+  }
+
+  if (action.dataset.action === "cancel-edit-rule") {
+    const id = action.dataset.id;
+    const textDiv = document.getElementById(`rule-text-${id}`);
+    const actionsDiv = document.getElementById(`rule-actions-${id}`);
+    if (!textDiv || !actionsDiv) return;
+    const originalItem = action.dataset.item;
+    textDiv.innerHTML = `<span style="font-size:13px;">${escapeHtml(originalItem)}</span>`;
+    actionsDiv.innerHTML = `<button class="secondary" data-action="edit-rule" data-id="${id}" data-item="${escapeHtml(originalItem)}" type="button">Edit</button><button class="danger" data-action="delete-rule" data-id="${id}" type="button">Delete</button>`;
+    return;
+  }
+
   try {
     if (action.dataset.action === "approve-signup") await approveSignup(action.dataset.id);
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
@@ -1719,6 +1736,29 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
+
+    if (action.dataset.action === "save-rule") {
+      const id = action.dataset.id;
+      const input = document.getElementById(`rule-edit-input-${id}`);
+      const newItem = (input?.value || "").trim();
+      if (!newItem) { showToast("Rule text cannot be empty."); return; }
+      if (!liveBackendReady) { showToast("Live backend required."); return; }
+      action.disabled = true;
+      await liveQuery(supabaseClient.from("rules").update({ item: newItem }).eq("id", id));
+      await loadLiveState();
+      render();
+      showToast("Rule updated.");
+    }
+
+    if (action.dataset.action === "delete-rule") {
+      const id = action.dataset.id;
+      if (!liveBackendReady) { showToast("Live backend required."); return; }
+      action.disabled = true;
+      await liveQuery(supabaseClient.from("rules").delete().eq("id", id));
+      await loadLiveState();
+      render();
+      showToast("Rule deleted.");
+    }
   } catch (error) {
     showToast(error.message || "Something went wrong.");
   }
@@ -1749,6 +1789,17 @@ document.addEventListener("submit", async (event) => {
     if (type === "loan-request") await requestLoan(data);
     if (type === "manual-loan") await addManualLoan(data);
     if (type === "statement-text") await importStatement(data);
+    if (type === "add-rule") {
+      const section = (data.section || "").trim();
+      const item = (data.item || "").trim();
+      if (!section || !item) throw new Error("Section and rule text are required.");
+      if (!liveBackendReady) throw new Error("Live backend required.");
+      const maxOrder = Math.max(0, ...state.rules.filter((r) => r.section === section).map((r) => r.sort_order || 0));
+      await liveQuery(supabaseClient.from("rules").insert({ section, item, sort_order: maxOrder + 1 }));
+      await loadLiveState();
+      render();
+      showToast("Rule added.");
+    }
   } catch (error) {
     showToast(error.message || "Something went wrong.");
     setFormLoading(form, false);
