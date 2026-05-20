@@ -1052,7 +1052,7 @@ function renderDashboard() {
     { icon: "💳", title: "LOANS", sub: "Current loan book" },
     { icon: "👥", title: "MEMBERS", sub: "Association members" },
     { icon: "📅", title: "MEETINGS", sub: "Meeting records" },
-    { icon: "📜", title: "RULES", sub: "Association guidelines", onclick: "showRulesModal()" },
+    { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     isAdmin()
       ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : "") }
       : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status" },
@@ -1069,7 +1069,7 @@ function renderDashboard() {
 
     <section class="dash-tiles">
       ${tiles.map(tile => `
-        <div class="dash-tile${tile.onclick ? " dash-tile-clickable" : ""}" ${tile.onclick ? `onclick="${tile.onclick}"` : ""}>
+        <div class="dash-tile${tile.action ? " dash-tile-clickable" : ""}" ${tile.action ? `data-action="${tile.action}"` : ""}>
           <div>
             <strong>${escapeHtml(tile.title)}</strong>
             <p>${escapeHtml(tile.sub)}</p>
@@ -1185,14 +1185,14 @@ function showRulesModal() {
   ];
 
   const html = `
-    <div id="rules-modal" class="rules-modal-overlay" onclick="closeRulesModal(event)">
+    <div id="rules-modal" class="rules-modal-overlay" data-action="close-rules">
       <div class="rules-modal-sheet">
         <div class="rules-modal-header">
           <div>
             <h3>📜 Rules &amp; Regulations</h3>
             <p>Sri Mukkanneshwara Associate · Updated Oct 2025</p>
           </div>
-          <button class="rules-modal-close" onclick="document.getElementById('rules-modal').remove();document.body.style.overflow=''">✕</button>
+          <button class="rules-modal-close" data-action="close-rules">✕</button>
         </div>
         <div class="rules-modal-body">
           ${rules.map(section => `
@@ -1212,12 +1212,6 @@ function showRulesModal() {
   document.body.style.overflow = "hidden";
 }
 
-function closeRulesModal(event) {
-  if (event.target.id === "rules-modal") {
-    document.getElementById("rules-modal").remove();
-    document.body.style.overflow = "";
-  }
-}
 
 function appannaEmiProgress() {
   const startYear = 2026, startMon = 1;
@@ -1672,6 +1666,17 @@ document.addEventListener("click", async (event) => {
 
   const action = event.target.closest("[data-action]");
   if (!action) return;
+
+  if (action.dataset.action === "show-rules") {
+    showRulesModal();
+    return;
+  }
+
+  if (action.dataset.action === "close-rules") {
+    const modal = document.getElementById("rules-modal");
+    if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
 
   if (action.dataset.action === "open-notifications") {
     await openNotifications();
