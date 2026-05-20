@@ -1281,8 +1281,7 @@ function depositYearCard(d) {
 }
 
 function renderDeposits() {
-  const user = currentUser();
-  const visiblePayments = isAdmin() ? state.monthlyPayments : state.monthlyPayments.filter((payment) => payment.memberId === user.id);
+  const visiblePayments = state.monthlyPayments;
   const emi = appannaEmiProgress();
   const pct = Math.round((emi.paid / emi.totalMonths) * 100);
   const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
