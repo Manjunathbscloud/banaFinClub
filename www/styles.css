@@ -939,9 +939,75 @@ th {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dash-tiles {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (min-width: 760px) {
+  .dash-hero {
+    margin-bottom: 24px;
+  }
+
+  .dash-greeting h2 {
+    font-size: 28px;
+  }
+
+  .dash-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 18px;
+  }
+
+  .dash-tiles {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .dash-tile {
+    padding: 20px 18px;
+    border-radius: 14px;
+  }
+
+  .dash-tile strong {
+    font-size: 15px;
+  }
+
+  .dash-tile p {
+    font-size: 12px;
+  }
+
+  .tile-icon {
+    font-size: 36px;
+  }
+
+  .dash-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .dash-summary-top {
+    flex: 1;
+    margin-bottom: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .dash-summary-row {
+    flex: 1;
+  }
+
+  .dash-summary-col strong {
+    font-size: 22px;
+  }
+
+
   .auth-copy {
     margin-top: 44px;
   }
