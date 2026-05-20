@@ -1054,7 +1054,7 @@ function renderDashboard() {
 
   const tiles = [
     { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
-    { icon: "💳", title: "LOANS", sub: "View your loan details", tab: "loans" },
+    { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" },
     { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
     { icon: "📅", title: "MEETINGS", sub: "Meeting records", tab: "meetings" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
@@ -1179,6 +1179,58 @@ function showRulesModal() {
   document.body.style.overflow = "hidden";
 }
 
+
+function showLoansModal() {
+  const existing = document.getElementById("loans-modal");
+  if (existing) existing.remove();
+
+  const user = currentUser();
+  const myLoans = currentLoanBookRows().filter((loan) => loanBelongsToMember(loan, user));
+
+  const noLoans = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;">You have no active or past loans.</div>`;
+
+  const loansHtml = myLoans.length === 0 ? noLoans : myLoans.map((loan) => {
+    const isActive = loan.status === "active";
+    const outstanding = loanOutstanding(loan);
+    const monthlyInt = loanBaseMonthlyInterest(loan);
+    const statusColor = isActive ? "#16a34a" : "#6b7280";
+    return `
+      <div class="rules-section-block" style="border-left:3px solid ${statusColor};">
+        <h4 style="margin-bottom:12px;">💳 ${isActive ? "Active Loan" : "Cleared Loan"}</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:13px;">
+          <div><span style="color:var(--muted);">Loan Amount</span><br/><strong>${money(loan.amount)}</strong></div>
+          <div><span style="color:var(--muted);">Outstanding</span><br/><strong>${money(outstanding)}</strong></div>
+          <div><span style="color:var(--muted);">Monthly Interest</span><br/><strong>${money(monthlyInt)}</strong></div>
+          <div><span style="color:var(--muted);">Interest Paid</span><br/><strong>${money(loan.interestPaid || 0)}</strong></div>
+          <div><span style="color:var(--muted);">Loan Taken</span><br/><strong>${escapeHtml(loan.from || "-")}</strong></div>
+          <div><span style="color:var(--muted);">Renewal Date</span><br/><strong>${escapeHtml(loanRenewalDate(loan) || "-")}</strong></div>
+        </div>
+        <div style="margin-top:12px;">
+          <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
+        </div>
+      </div>`;
+  }).join("");
+
+  const html = `
+    <div id="loans-modal" class="rules-modal-overlay" data-action="close-loans">
+      <div class="rules-modal-sheet">
+        <div class="rules-modal-header">
+          <div>
+            <h3>💳 My Loans</h3>
+            <p>${escapeHtml(user?.name || "")} · Loan details</p>
+          </div>
+          <button class="rules-modal-close" data-action="close-loans">✕</button>
+        </div>
+        <div class="rules-modal-body">
+          ${loansHtml}
+          <p class="rules-footer-note">Interest rate: ${state.settings.loanInterestRateMonthly}% per month on total loan amount</p>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+}
 
 function appannaEmiProgress() {
   const startYear = 2026, startMon = 1;
@@ -1680,6 +1732,17 @@ document.addEventListener("click", async (event) => {
 
   if (action.dataset.action === "close-rules") {
     const modal = document.getElementById("rules-modal");
+    if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
+
+  if (action.dataset.action === "show-loans") {
+    showLoansModal();
+    return;
+  }
+
+  if (action.dataset.action === "close-loans") {
+    const modal = document.getElementById("loans-modal");
     if (modal) { modal.remove(); document.body.style.overflow = ""; }
     return;
   }
