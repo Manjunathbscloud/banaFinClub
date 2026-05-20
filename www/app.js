@@ -1052,7 +1052,7 @@ function renderDashboard() {
     { icon: "💳", title: "LOANS", sub: "Current loan book" },
     { icon: "👥", title: "MEMBERS", sub: "Association members" },
     { icon: "📅", title: "MEETINGS", sub: "Meeting records" },
-    { icon: "📜", title: "RULES", sub: "Association guidelines" },
+    { icon: "📜", title: "RULES", sub: "Association guidelines", onclick: "showRulesModal()" },
     isAdmin()
       ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : "") }
       : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status" },
@@ -1069,7 +1069,7 @@ function renderDashboard() {
 
     <section class="dash-tiles">
       ${tiles.map(tile => `
-        <div class="dash-tile">
+        <div class="dash-tile${tile.onclick ? " dash-tile-clickable" : ""}" ${tile.onclick ? `onclick="${tile.onclick}"` : ""}>
           <div>
             <strong>${escapeHtml(tile.title)}</strong>
             <p>${escapeHtml(tile.sub)}</p>
@@ -1127,6 +1127,96 @@ function renderDashboard() {
 
 function metric(label, value, help) {
   return `<article class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(help)}</small></article>`;
+}
+
+function showRulesModal() {
+  const existing = document.getElementById("rules-modal");
+  if (existing) existing.remove();
+
+  const rules = [
+    {
+      icon: "👥", title: "Membership Rules", items: [
+        "All members must attend monthly meetings",
+        "Monthly contribution of ₹2,000 is mandatory by the 15th of each month",
+        "Members must maintain active participation in association activities",
+        "New members require approval from all existing members",
+        "Members may exit by settling all outstanding loans; share value will be calculated at exit",
+      ],
+    },
+    {
+      icon: "💳", title: "Loan Rules", items: [
+        "Loan interest rate is 1.25% per month on the total loan amount",
+        "Interest is collected monthly from the borrower",
+        "Loans are subject to renewal; renewal date set at the time of loan approval",
+        "Loan applications require approval from the President",
+        "Repayment of principal is made at renewal or as agreed",
+        "A member's outstanding loan is offset against their share value upon exit",
+      ],
+    },
+    {
+      icon: "🆕", title: "New Member Rules", items: [
+        "New members require unanimous approval from existing members",
+        "Joining amount equals the current share value plus an additional 10%",
+        "EMI installments over 18 months are available for the joining amount",
+        "New member also pays monthly deposit and yearly renewal fee from the joining month",
+        "Yearly renewal fee is ₹3,000 per member from Year 6 onwards",
+      ],
+    },
+    {
+      icon: "📋", title: "Administrative Guidelines", items: [
+        "President and Vice President are elected at the annual meeting",
+        "Monthly meetings are held on the first Sunday of each month",
+        "Annual meeting is held in October/November each year",
+        "All major financial decisions require majority vote at the annual meeting",
+        "Financial records must be maintained transparently and shared with all members",
+        "The association was established in February 2021 for an initial 5-year period, extended to 10 years at the 5th annual meeting (October 2025)",
+        "President is exempt from December monthly deposit; Vice President pays ₹1,250 in December",
+      ],
+    },
+    {
+      icon: "🚪", title: "Exit Rules", items: [
+        "A member wishing to exit must inform the President at least one month in advance",
+        "Outstanding loans will be deducted from the member's share value",
+        "If loans exceed share value, the net amount is payable by the member to the association",
+        "If share value exceeds loans, the net amount is paid to the exiting member",
+        "Exit settlement is final and agreed upon by all members",
+      ],
+    },
+  ];
+
+  const html = `
+    <div id="rules-modal" class="rules-modal-overlay" onclick="closeRulesModal(event)">
+      <div class="rules-modal-sheet">
+        <div class="rules-modal-header">
+          <div>
+            <h3>📜 Rules &amp; Regulations</h3>
+            <p>Sri Mukkanneshwara Associate · Updated Oct 2025</p>
+          </div>
+          <button class="rules-modal-close" onclick="document.getElementById('rules-modal').remove()">✕</button>
+        </div>
+        <div class="rules-modal-body">
+          ${rules.map(section => `
+            <div class="rules-section-block">
+              <h4>${section.icon} ${escapeHtml(section.title)}</h4>
+              <ul>
+                ${section.items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </div>
+          `).join("")}
+          <p class="rules-footer-note">Last updated: October 2025 · After 5th Year Annual Meeting</p>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+}
+
+function closeRulesModal(event) {
+  if (event.target.id === "rules-modal") {
+    document.getElementById("rules-modal").remove();
+    document.body.style.overflow = "";
+  }
 }
 
 function appannaEmiProgress() {
