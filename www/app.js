@@ -605,7 +605,7 @@ function year6InterestCollected() {
     const start = new Date(effectiveFrom);
     if (now <= start) return sum;
     const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
-    return sum + Math.max(0, months) * loanMonthlyInterest(loan);
+    return sum + Math.max(0, months) * loanBaseMonthlyInterest(loan);
   }, 0);
 }
 
