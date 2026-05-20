@@ -1601,11 +1601,16 @@ function renderAdmin() {
           <form class="form" data-form="add-rule" style="margin-bottom:20px;">
             <label class="field">
               <span>Section</span>
-              <input name="section" list="rule-sections-list" placeholder="e.g. Membership Rules" required />
-              <datalist id="rule-sections-list">
-                ${[...new Set(state.rules.map((r) => r.section))].map((s) => `<option value="${escapeHtml(s)}">`).join("")}
-              </datalist>
+              <select name="section-pick" data-action="rule-section-pick" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--ink);">
+                ${[...new Set(state.rules.map((r) => r.section))].map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+                <option value="__new__">+ New section…</option>
+              </select>
             </label>
+            <label class="field" id="rule-new-section-field" style="display:none;">
+              <span>New section name</span>
+              <input name="section-custom" id="rule-new-section-input" placeholder="e.g. Investment Rules" />
+            </label>
+            <input type="hidden" name="section" id="rule-section-hidden" value="${escapeHtml([...new Set(state.rules.map((r) => r.section))][0] || "")}" />
             <label class="field"><span>Rule text</span><textarea name="item" rows="2" placeholder="Enter the rule..." required></textarea></label>
             <button class="primary" type="submit">Add Rule</button>
           </form>
@@ -1766,7 +1771,27 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("change", (event) => {
+  const sel = event.target.closest("[data-action='rule-section-pick']");
+  if (!sel) return;
+  const newField = document.getElementById("rule-new-section-field");
+  const hiddenInput = document.getElementById("rule-section-hidden");
+  if (sel.value === "__new__") {
+    newField.style.display = "";
+    hiddenInput.value = "";
+  } else {
+    newField.style.display = "none";
+    hiddenInput.value = sel.value;
+  }
+});
+
 document.addEventListener("input", (event) => {
+  const customInput = event.target.closest("#rule-new-section-input");
+  if (customInput) {
+    const hiddenInput = document.getElementById("rule-section-hidden");
+    if (hiddenInput) hiddenInput.value = customInput.value.trim();
+    return;
+  }
   const amountInput = event.target.closest("[data-loan-amount]");
   if (!amountInput) return;
   const form = amountInput.closest("form");
