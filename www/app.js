@@ -1169,39 +1169,74 @@ function renderDeposits() {
 
       <details class="card collapsible">
         <summary class="card-header">
-          <div><h3>Sixth Year (2026–2027)</h3><p>In Progress · <span class="badge warn">Active</span></p></div>
+          <div><h3>Sixth Year (2026–2027)</h3><p>Actual figures Nov 2025 – May 2026 · <span class="badge warn">Active</span></p></div>
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          <p style="margin:0 0 10px;font-size:13px;color:#444;">In the sixth year, the association continues its financial progress with updated membership and fee structure:</p>
+          <p style="margin:0 0 10px;font-size:13px;color:#444;">In the sixth year, the association continues with an updated fee structure, a new member joining via EMI, and one member exit settlement.</p>
           <ul style="margin:0 0 16px;padding-left:18px;font-size:13px;color:#444;line-height:1.8;">
-            <li>Yearly renewal fee: ₹3,000 for 7 members (November 2025)</li>
-            <li>Monthly deposits: ₹2,000 per member from November to November</li>
-            <li>President exemption: No payment in December month</li>
-            <li>Vice President concession: ₹1,250 in December month</li>
-            <li>Regular members: ₹2,000 per month throughout the year</li>
-            <li>New member: Appanna Banakar joining via 18-month EMI of ${money(emi.monthlyEmi)}/month</li>
+            <li>Yearly renewal fee: ₹3,000 per member (November 2025)</li>
+            <li>Monthly deposits: ₹2,000 per member · President exempt in December · Vice President ₹1,250 in December</li>
+            <li>New member: Appanna Banakar joining via 18-month EMI of ${money(emi.monthlyEmi)}/month (Jan 2026)</li>
+            <li>Member exit: Sarpabhushana Banakar exited 16 March 2026 · Net settlement ₹25,166 paid to association</li>
           </ul>
-          <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed Sixth Year Summary</p>
+          <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111;">Detailed Sixth Year Summary (Nov 2025 – May 2026)</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Description</th><th>Details</th><th>Amount</th></tr></thead>
               <tbody>
-                <tr><td data-label="Description">Yearly Renewal Fee</td><td data-label="Details">November 2025 (₹3,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹21,000</td></tr>
-                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">November 2025 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹14,000</td></tr>
-                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">December 2025 (5 members ₹2,000, 6th member ₹1,250, 7th member exempted)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹11,250</td></tr>
-                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">January – November 2026 (₹2,000 × 7 members × 11 months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹1,54,000</td></tr>
-                <tr><td data-label="Description">New Member EMI</td><td data-label="Details">Appanna Banakar – ${money(emi.monthlyEmi)}/month × 18 months</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">₹1,34,016.84</td></tr>
-                <tr><td data-label="Description">Interest Earned</td><td data-label="Details">Total interest earned (to be calculated)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
-                <tr><td data-label="Description">Annual Meeting Expense</td><td data-label="Details">Year-end meeting cost</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
+                <tr><td data-label="Description">Yearly Renewal Fee</td><td data-label="Details">November 2025 (₹3,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(21000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">November 2025 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">December 2025 (5 members ₹2,000 + VP ₹1,250 + President exempt)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(11250)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">January 2026 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">February 2026 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">March 2026 – 6 members (Sarpabhushana exited 16th)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(12000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">April 2026 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
+                <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">May 2026 (₹2,000 × 7 members)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(14000)}</td></tr>
+                <tr><td data-label="Description">Appanna Banakar EMI</td><td data-label="Details">Jan – May 2026 · ${emi.paid} × ${money(emi.monthlyEmi)}/month</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(Math.round(emi.paid * emi.monthlyEmi))}</td></tr>
+                <tr style="background:#f0fdf4;"><td data-label="Description">Member Exit Settlement</td><td data-label="Details">Sarpabhushana Banakar – net amount paid to association (16 Mar 2026)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(25166)}</td></tr>
+                <tr><td data-label="Description">Interest Earned</td><td data-label="Details">Bank interest Year 6 (to be updated)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
+                <tr><td data-label="Description">Annual Meeting Expense</td><td data-label="Details">6th year meeting (Nov 2026)</td><td data-label="Amount" style="color:#888;">TBD</td></tr>
               </tbody>
               <tfoot>
-                <tr style="font-weight:700;"><td colspan="2" data-label="Total Balance">Total Balance</td><td data-label="Balance" style="color:#888;">As of November 2026 – TBD</td></tr>
+                <tr style="font-weight:700;">
+                  <td colspan="2" data-label="Collected so far">Collected so far (Nov 2025 – May 2026)</td>
+                  <td data-label="Amount" style="color:#2563eb;">${money(21000+14000+11250+14000+14000+12000+14000+14000+Math.round(emi.paid*emi.monthlyEmi)+25166)}</td>
+                </tr>
               </tfoot>
             </table>
           </div>
         </div>
       </details>
+
+      <div class="card">
+        <div class="card-header"><div><h3>Expected Bank Balance — As of May 2026</h3><p>5-year pool + Year 6 inflows − outstanding loans</p></div></div>
+        <div class="card-body">
+          ${(() => {
+            const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
+            const yr6 = 21000+14000+11250+14000+14000+12000+14000+14000+Math.round(emi.paid*emi.monthlyEmi)+25166;
+            const gross = pool5y + yr6;
+            const activeLoans = currentLoans();
+            const totalOutstanding = activeLoans.reduce((s, loan) => s + loanOutstanding(loan), 0);
+            const expected = gross - totalOutstanding;
+            return `
+            <div class="row-list">
+              <div class="row-item"><div><strong>5-year accumulated pool</strong><span>Sum of all 5 year balances (2021–2025)</span></div><strong style="color:#16a34a;">${money(pool5y)}</strong></div>
+              <div class="row-item"><div><strong>Year 6 inflows (Nov 2025 – May 2026)</strong><span>Deposits + Appanna EMI + Sarpabhushana settlement</span></div><strong style="color:#16a34a;">+${money(yr6)}</strong></div>
+              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(gross)}</strong></div>
+              <div class="row-item"><div><strong>Active loans outstanding</strong><span>${activeLoans.length} active loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</span></div><strong style="color:#dc2626;">−${money(totalOutstanding)}</strong></div>
+              <div class="row-item"><div><strong>Member exit (Sarpabhushana)</strong><span>Net settlement already included in Year 6 inflows above</span></div><strong style="color:#888;">Settled ✓</strong></div>
+            </div>
+            <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <p style="margin:0;font-size:13px;font-weight:700;color:#166534;">Expected Bank Balance</p>
+                <p style="margin:4px 0 0;font-size:12px;color:#166534;">Bank interest Year 6 not yet included · update when statement arrives</p>
+              </div>
+              <strong style="font-size:22px;color:#166534;">${money(expected)}</strong>
+            </div>`;
+          })()}
+        </div>
+      </div>
     </section>
   `;
 }
