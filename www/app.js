@@ -1042,19 +1042,73 @@ function renderDashboard() {
         </div>
       </div>
   `;
+  const initials = (user.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening"; })();
+  const paymentStatus = monthlyPayment?.status || "pending";
+  const payStatusColor = paymentStatus === "paid" ? "#16a34a" : "#b45309";
+
+  const tiles = [
+    { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records" },
+    { icon: "💳", title: "LOANS", sub: "Current loan book" },
+    { icon: "👥", title: "MEMBERS", sub: "Association members" },
+    { icon: "📅", title: "MEETINGS", sub: "Meeting records" },
+    { icon: "📜", title: "RULES", sub: "Association guidelines" },
+    isAdmin()
+      ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : "") }
+      : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status" },
+  ];
+
   return `
-    <section class="page-title">
-      <p>Banakar FinClub</p>
-      <h2>${t("dashboard")}</h2>
+    <section class="dash-hero">
+      <div class="dash-greeting">
+        <p>${greeting}</p>
+        <h2>${escapeHtml(user.name || "Member")}</h2>
+      </div>
+      <div class="dash-avatar">${escapeHtml(initials)}</div>
     </section>
-    <section class="metrics">
-      ${dashboardMetrics.join("")}
+
+    <section class="dash-tiles">
+      ${tiles.map(tile => `
+        <div class="dash-tile">
+          <div>
+            <strong>${escapeHtml(tile.title)}</strong>
+            <p>${escapeHtml(tile.sub)}</p>
+          </div>
+          <span class="tile-icon">${tile.icon}</span>
+        </div>`).join("")}
     </section>
-    <section class="two-col" style="margin-top: 14px;">
+
+    <div class="dash-summary-card">
+      <div class="dash-summary-top">
+        <div class="dash-summary-brand">
+          <span class="dash-summary-dot">●</span>
+          <div>
+            <p class="dash-summary-label">Banakar FinClub · Year 6 of 10</p>
+            <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
+          </div>
+        </div>
+        <span class="badge warn">Active</span>
+      </div>
+      <div class="dash-summary-row">
+        <div class="dash-summary-col">
+          <p>Bank Balance</p>
+          <strong>${money(expectedBankBalance())}</strong>
+          <small>Estimated</small>
+        </div>
+        <div class="dash-summary-divider"></div>
+        <div class="dash-summary-col">
+          <p>Monthly Due</p>
+          <strong>${money(monthlyDue)}</strong>
+          <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
+        </div>
+      </div>
+    </div>
+
+    <section class="two-col" style="margin-top:14px;">
       ${logCard}
       ${loanCard}
       <div class="card">
-        <div class="card-header"><div><h3>${t("groupRules")}</h3><p>Current 5-year extension setup</p></div></div>
+        <div class="card-header"><div><h3>${t("groupRules")}</h3><p>Current setup</p></div></div>
         <div class="card-body row-list">
           <div class="row-item"><div><strong>${money(state.settings.monthlyDeposit)}</strong><span>Monthly deposit by 15th</span></div><span class="badge good">Active</span></div>
           <div class="row-item"><div><strong>${state.settings.loanInterestLabel}</strong><span>Loan interest rule</span></div><span class="badge info">1.25%</span></div>
