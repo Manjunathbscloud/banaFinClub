@@ -1097,6 +1097,12 @@ function renderDashboard() {
         </div>
         <div class="dash-summary-divider"></div>
         <div class="dash-summary-col">
+          <p>Available Loan</p>
+          <strong>${money(availableLoanAmount())}</strong>
+          <small>After ₹5k reserve</small>
+        </div>
+        <div class="dash-summary-divider"></div>
+        <div class="dash-summary-col">
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
           <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
