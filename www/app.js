@@ -1443,8 +1443,7 @@ function renderDeposits() {
 }
 
 function renderLoans() {
-  const user = currentUser();
-  const visibleLoans = isAdmin() ? currentLoanBookRows() : currentLoanBookRows().filter((loan) => loanBelongsToMember(loan, user));
+  const visibleLoans = currentLoanBookRows();
   const loanRequestForm = `
       <details class="card collapsible" open>
         <summary class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div><span class="collapse-icon">⌄</span></summary>
