@@ -2347,19 +2347,33 @@ async function importStatement(data) {
 
 // ── Session idle timeout (40 minutes) ────────────────────────────────────────
 const IDLE_TIMEOUT_MS = 40 * 60 * 1000;
+const IDLE_TS_KEY = "bfc_last_activity";
 let idleTimer = null;
 
 function resetIdleTimer() {
   if (!state.currentUserId) return;
+  localStorage.setItem(IDLE_TS_KEY, Date.now().toString());
   clearTimeout(idleTimer);
   idleTimer = setTimeout(async () => {
     if (!state.currentUserId) return;
     if (liveBackendReady) await supabaseClient.auth.signOut();
     state.currentUserId = null;
+    localStorage.removeItem(IDLE_TS_KEY);
     saveState();
     showToast("You have been logged out due to inactivity.");
     render();
   }, IDLE_TIMEOUT_MS);
+}
+
+async function checkIdleExpiry() {
+  const last = parseInt(localStorage.getItem(IDLE_TS_KEY) || "0", 10);
+  if (!last) return;
+  if (Date.now() - last > IDLE_TIMEOUT_MS) {
+    if (liveBackendReady) await supabaseClient.auth.signOut();
+    state.currentUserId = null;
+    localStorage.removeItem(IDLE_TS_KEY);
+    saveState();
+  }
 }
 
 ["click", "touchstart", "keydown", "scroll", "mousemove"].forEach((evt) =>
@@ -2368,17 +2382,20 @@ function resetIdleTimer() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function initApp() {
+  document.querySelector("#app").innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;">
+      <div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <p style="font-size:13px;color:#9ca3af;margin:0;">Loading…</p>
+    </div>`;
   if (liveBackendReady) {
-    // If the URL fragment signals a password-reset redirect, show the set-password form.
-    // The Supabase client processes the token asynchronously; we listen for it.
     if (window.location.hash.includes("type=recovery")) {
-      document.querySelector("#app").innerHTML = `<div style="padding:48px;text-align:center;color:#888;">Loading…</div>`;
       supabaseClient.auth.onAuthStateChange((event) => {
         if (event === "PASSWORD_RECOVERY") renderSetNewPassword();
       });
       return;
     }
     try {
+      await checkIdleExpiry();
       await loadLiveState();
     } catch (error) {
       showToast(error.message || "Could not load live data.");
