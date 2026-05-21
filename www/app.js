@@ -1041,13 +1041,16 @@ function renderDashboard() {
       </div>
   ` : "";
   const loanRows = memberLoans(user.id)
-    .map((loan) => `<div class="row-item"><div><strong>${escapeHtml(loanMemberName(loan))}: ${money(loanOutstanding(loan))}</strong><span>Interest ${money(loanMonthlyInterest(loan))} · renewal ${escapeHtml(loanRenewalDate(loan) || "-")}</span></div><span class="badge info">${statusText(loan.status)}</span></div>`)
+    .map((loan) => `<tr><td data-label="Loan">${money(loan.amount)}</td><td data-label="Outstanding">${money(loanOutstanding(loan))}</td><td data-label="Interest/mo">${money(loanMonthlyInterest(loan))}</td><td data-label="Renewal">${escapeHtml(fmtMonthYear(loanRenewalDate(loan)))}</td><td data-label="Status">${statusBadge(loan.status)}</td></tr>`)
     .join("");
   const loanCard = `
       <div class="card">
         <div class="card-header"><div><h3>Loan taken</h3><p>Your current loan details</p></div></div>
-        <div class="card-body row-list">
-          ${loanRows || `<div class="empty">No current loans.</div>`}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Loan</th><th>Outstanding</th><th>Interest/mo</th><th>Renewal</th><th>Status</th></tr></thead>
+            <tbody>${loanRows || `<tr><td colspan="5" class="empty">No current loans.</td></tr>`}</tbody>
+          </table>
         </div>
       </div>
   `;
@@ -1322,11 +1325,15 @@ function renderDeposits() {
               <div style="background:#22c55e;height:100%;width:${pct}%;border-radius:6px;transition:width .3s;"></div>
             </div>
           </div>
-          <div class="row-list">
-            <div class="row-item"><div><strong>Monthly EMI</strong><span>Jan 2026 – Jun 2027</span></div><strong>${money(emi.monthlyEmi)}</strong></div>
-            <div class="row-item"><div><strong>Collected so far</strong><span>${emi.paid} months × ${money(emi.monthlyEmi)}</span></div><strong>${money(emi.paid * emi.monthlyEmi)}</strong></div>
-            <div class="row-item"><div><strong>Remaining</strong><span>${emi.remaining} months left</span></div><strong>${money(emi.remaining * emi.monthlyEmi)}</strong></div>
-            <div class="row-item"><div><strong>Total amount</strong><span>Share + 10%</span></div><strong>${money(emi.totalAmount)}</strong></div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                <tr><td data-label="Description">Monthly EMI <small>Jan 2026 – Jun 2027</small></td><td data-label="Amount"><strong>${money(emi.monthlyEmi)}</strong></td></tr>
+                <tr><td data-label="Description">Collected so far <small>${emi.paid} months × ${money(emi.monthlyEmi)}</small></td><td data-label="Amount"><strong>${money(emi.paid * emi.monthlyEmi)}</strong></td></tr>
+                <tr><td data-label="Description">Remaining <small>${emi.remaining} months left</small></td><td data-label="Amount"><strong>${money(emi.remaining * emi.monthlyEmi)}</strong></td></tr>
+                <tr><td data-label="Description">Total amount <small>Share + 10%</small></td><td data-label="Amount"><strong>${money(emi.totalAmount)}</strong></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1423,23 +1430,23 @@ function renderDeposits() {
             const totalOutstanding = activeLoans.reduce((s, loan) => s + loanOutstanding(loan), 0);
             const expected = expectedBankBalance();
             return `
-            <div class="row-list">
-              <div class="row-item"><div><strong>5-year accumulated pool (2021–2025)</strong><span>Sum of all 5 year closing balances</span></div><strong style="color:#16a34a;">${money(pool5y)}</strong></div>
-              <div class="row-item"><div><strong>Less: Sarpabhushana's share</strong><span>Exited member share removed (Oct 2025)</span></div><strong style="color:#dc2626;">− ${money(sarpaShare)}</strong></div>
-              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Post-exit pool</strong><span>₹8,52,835 − ₹1,21,833</span></div><strong style="color:#2563eb;">${money(postExitPool)}</strong></div>
-              <div class="row-item"><div><strong>Plus: Exit settlement received</strong><span>Net paid by Sarpabhushana to association (loans > share)</span></div><strong style="color:#16a34a;">+ ${money(sarpaSettlement)}</strong></div>
-              <div class="row-item"><div><strong>Plus: 6th year deposits (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</strong><span>Renewal + monthly deposits + Appanna EMI</span></div><strong style="color:#16a34a;">+ ${money(yr6Deposits)}</strong></div>
-              <div class="row-item"><div><strong>Plus: Interest earned (Year 6)</strong><span>Monthly interest from borrowers · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</span></div><strong style="color:#16a34a;">+ ${money(interestCollected - 8125)}</strong></div>
-              <div class="row-item"><div><strong>Plus: Additional interest collected</strong><span>Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)</span></div><strong style="color:#16a34a;">+ ${money(8125 + 3046)}</strong></div>
-              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(postExitPool + sarpaSettlement + yr6Total + 3046)}</strong></div>
-              <div class="row-item"><div><strong>Less: Active loans outstanding</strong><span>${activeLoans.length} loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</span></div><strong style="color:#dc2626;">− ${money(totalOutstanding)}</strong></div>
-            </div>
-            <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <p style="margin:0;font-size:13px;font-weight:700;color:#166534;">Expected Bank Balance</p>
-                <p style="margin:4px 0 0;font-size:12px;color:#166534;">Auto-updates each month · verify against bank statement</p>
-              </div>
-              <strong style="font-size:22px;color:#166534;">${money(expected)}</strong>
+            <div class="table-wrap">
+              <table>
+                <tbody>
+                  <tr><td data-label="Description">5-year accumulated pool (2021–2025) <small>Sum of all 5 year closing balances</small></td><td data-label="Amount"><strong style="color:#16a34a;">${money(pool5y)}</strong></td></tr>
+                  <tr><td data-label="Description">Less: Sarpabhushana's share <small>Exited member share removed (Oct 2025)</small></td><td data-label="Amount"><strong style="color:#dc2626;">− ${money(sarpaShare)}</strong></td></tr>
+                  <tr style="border-top:2px solid #e5e7eb;"><td data-label="Description"><strong>Post-exit pool</strong> <small>₹8,52,835 − ₹1,21,833</small></td><td data-label="Amount"><strong style="color:#2563eb;">${money(postExitPool)}</strong></td></tr>
+                  <tr><td data-label="Description">Plus: Exit settlement received <small>Net paid by Sarpabhushana to association (loans > share)</small></td><td data-label="Amount"><strong style="color:#16a34a;">+ ${money(sarpaSettlement)}</strong></td></tr>
+                  <tr><td data-label="Description">Plus: 6th year deposits (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}) <small>Renewal + monthly deposits + Appanna EMI</small></td><td data-label="Amount"><strong style="color:#16a34a;">+ ${money(yr6Deposits)}</strong></td></tr>
+                  <tr><td data-label="Description">Plus: Interest earned (Year 6) <small>Monthly interest from borrowers · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</small></td><td data-label="Amount"><strong style="color:#16a34a;">+ ${money(interestCollected - 8125)}</strong></td></tr>
+                  <tr><td data-label="Description">Plus: Additional interest collected <small>Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)</small></td><td data-label="Amount"><strong style="color:#16a34a;">+ ${money(8125 + 3046)}</strong></td></tr>
+                  <tr style="border-top:2px solid #e5e7eb;"><td data-label="Description"><strong>Gross pool</strong> <small>Before deducting outstanding loans</small></td><td data-label="Amount"><strong style="color:#2563eb;">${money(postExitPool + sarpaSettlement + yr6Total + 3046)}</strong></td></tr>
+                  <tr><td data-label="Description">Less: Active loans outstanding <small>${activeLoans.length} loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</small></td><td data-label="Amount"><strong style="color:#dc2626;">− ${money(totalOutstanding)}</strong></td></tr>
+                </tbody>
+                <tfoot>
+                  <tr style="background:#f0fdf4;"><td data-label="Description" style="color:#166534;font-weight:700;">Expected Bank Balance <small style="font-weight:400;">Auto-updates each month · verify against bank statement</small></td><td data-label="Amount" style="color:#166534;"><strong style="font-size:18px;">${money(expected)}</strong></td></tr>
+                </tfoot>
+              </table>
             </div>`;
           })()}
         </div>
