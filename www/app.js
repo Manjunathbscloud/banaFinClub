@@ -599,17 +599,20 @@ function loanBaseMonthlyInterest(loan) {
   return (Number(loan.amount || 0) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
 }
 
-function year6InterestCollected() {
-  const yr6Start = "2025-11-01";
+function yr6InterestMonths(loan) {
+  if (!loan.from) return 0;
+  const loanDate = new Date(loan.from);
+  // Interest starts from the 1st of the month AFTER the loan was taken
+  const interestStart = new Date(loanDate.getFullYear(), loanDate.getMonth() + 1, 1);
+  const yr6StartDate = new Date("2025-11-01");
+  const effectiveStart = interestStart > yr6StartDate ? interestStart : yr6StartDate;
   const now = new Date();
-  return currentLoans().reduce((sum, loan) => {
-    if (!loan.from) return sum;
-    const effectiveFrom = loan.from > yr6Start ? loan.from : yr6Start;
-    const start = new Date(effectiveFrom);
-    if (now <= start) return sum;
-    const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
-    return sum + Math.max(0, months) * loanBaseMonthlyInterest(loan);
-  }, 0);
+  if (now < effectiveStart) return 0;
+  return Math.max(0, (now.getFullYear() - effectiveStart.getFullYear()) * 12 + (now.getMonth() - effectiveStart.getMonth()) + 1);
+}
+
+function year6InterestCollected() {
+  return currentLoans().reduce((sum, loan) => sum + yr6InterestMonths(loan) * loanBaseMonthlyInterest(loan), 0);
 }
 
 function monthDiff(startDate, endDate) {
