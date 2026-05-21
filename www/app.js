@@ -704,8 +704,9 @@ function expectedBankBalance() {
     yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
   }
   const interestCollected = year6InterestCollected();
+  const extraInterest = 8125 + 3046; // Sarpabhushana + Appanna extra interest (yr6, outside loan table)
   const totalOutstanding = currentLoans().reduce((s, loan) => s + loanOutstanding(loan), 0);
-  return Math.round(postExitPool + sarpaSettlement + yr6Deposits + interestCollected - totalOutstanding);
+  return Math.round(postExitPool + sarpaSettlement + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
 }
 
 function availableLoanAmount() {
@@ -1393,11 +1394,12 @@ function renderDeposits() {
                 <tr><td data-label="Description">Monthly Deposits</td><td data-label="Details">January – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()} (₹2,000 × 7 members × ${_jMonths} months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(_yr6JDeposits)}</td></tr>
                 <tr><td data-label="Description">New Member EMI Deposits</td><td data-label="Details">Appanna Banakar – Monthly EMI payments (${money(emi.monthlyEmi)}/month × ${emi.paid} months)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(_yr6Emi)}</td></tr>
                 <tr><td data-label="Description">Interest Earned</td><td data-label="Details">Total interest earned · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(_yr6Interest)}</td></tr>
+                <tr><td data-label="Description">Additional Interest</td><td data-label="Details">Sarpabhushana Banakar ₹8,125 + Appanna Banakar ₹3,046 (collected outside loan table)</td><td data-label="Amount" style="color:#16a34a;font-weight:600;">${money(8125 + 3046)}</td></tr>
               </tbody>
               <tfoot>
                 <tr style="font-weight:700;">
                   <td colspan="2" data-label="Total">Total Collected – Sixth Year (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</td>
-                  <td data-label="Amount" style="color:#2563eb;">${money(_yr6Total)}</td>
+                  <td data-label="Amount" style="color:#2563eb;">${money(_yr6Total + 8125 + 3046)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1428,7 +1430,8 @@ function renderDeposits() {
               <div class="row-item"><div><strong>Plus: Exit settlement received</strong><span>Net paid by Sarpabhushana to association (loans > share)</span></div><strong style="color:#16a34a;">+ ${money(sarpaSettlement)}</strong></div>
               <div class="row-item"><div><strong>Plus: 6th year deposits (Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()})</strong><span>Renewal + monthly deposits + Appanna EMI</span></div><strong style="color:#16a34a;">+ ${money(yr6Deposits)}</strong></div>
               <div class="row-item"><div><strong>Plus: Interest earned (Year 6)</strong><span>Monthly interest from borrowers · Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}</span></div><strong style="color:#16a34a;">+ ${money(interestCollected)}</strong></div>
-              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(postExitPool + sarpaSettlement + yr6Total)}</strong></div>
+              <div class="row-item"><div><strong>Plus: Additional interest collected</strong><span>Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)</span></div><strong style="color:#16a34a;">+ ${money(8125 + 3046)}</strong></div>
+              <div class="row-item" style="border-top:1px solid #e5e7eb;padding-top:10px;"><div><strong>Gross pool</strong><span>Before deducting outstanding loans</span></div><strong style="color:#2563eb;">${money(postExitPool + sarpaSettlement + yr6Total + 8125 + 3046)}</strong></div>
               <div class="row-item"><div><strong>Less: Active loans outstanding</strong><span>${activeLoans.length} loan${activeLoans.length !== 1 ? "s" : ""} · principal not yet returned</span></div><strong style="color:#dc2626;">− ${money(totalOutstanding)}</strong></div>
             </div>
             <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
