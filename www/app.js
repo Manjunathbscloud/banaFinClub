@@ -1442,6 +1442,13 @@ function renderDeposits() {
   `;
 }
 
+function fmtMonthYear(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "-");
+}
+
 function renderLoans() {
   const visibleLoans = currentLoanBookRows();
   const loanRequestForm = `
@@ -1472,7 +1479,7 @@ function renderLoans() {
                   <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
                 </div>
               ` : "-";
-              return `<tr><td data-label="Member">${escapeHtml(loanMemberName(loan))}</td><td data-label="Loan taken">${escapeHtml(loan.from || "-")}</td><td data-label="Renewal">${escapeHtml(loanRenewalDate(loan) || "-")}</td><td data-label="Loan amount">${money(loan.amount)}</td><td data-label="Interest/month">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td data-label="Interest paid">${money(loan.interestPaid)}</td><td data-label="Status">${statusBadge(loan.status)}</td><td data-label="Action">${actions}</td></tr>`;
+              return `<tr><td data-label="Member">${escapeHtml(loanMemberName(loan))}</td><td data-label="Loan taken">${fmtMonthYear(loan.from)}</td><td data-label="Renewal">${fmtMonthYear(loanRenewalDate(loan))}</td><td data-label="Loan amount">${money(loan.amount)}</td><td data-label="Interest/month">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td data-label="Interest paid">${money(loan.interestPaid)}</td><td data-label="Status">${statusBadge(loan.status)}</td><td data-label="Action">${actions}</td></tr>`;
             }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
           </table>
         </div>
