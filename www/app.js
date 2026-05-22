@@ -707,13 +707,10 @@ function expectedBankBalance() {
   if (nowYM >= 202511) yr6Deposits += 21000 + 14000; // Nov renewal + Nov deposits
   if (nowYM >= 202512) yr6Deposits += 11250;          // Dec deposits
   if (nowYM >= 202601) {
-    // Jan–May 2026: hardcoded (before payment tracking was live)
-    yr6Deposits += 7 * 2000 * 5;
-    // June 2026 onwards: use actual admin-confirmed payments (includes Appanna's EMI)
-    const liveDeposits = state.monthlyPayments
-      .filter((p) => p.status === "paid" && p.month >= "2026-06")
-      .reduce((sum, p) => sum + p.amount, 0);
-    yr6Deposits += liveDeposits;
+    const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
+    yr6Deposits += 7 * 2000 * jMonths;
+    const emiLoan = state.loans.find((l) => l.notes === "emi_entry");
+    if (emiLoan) yr6Deposits += Number(emiLoan.principalPaid || 0);
   }
   const interestCollected = year6InterestCollected();
   const extraInterest = 8125 + 3046; // Sarpa ₹8,125 + Appanna ₹3,046 pre-year-6 interest
@@ -1890,6 +1887,7 @@ function renderAdmin() {
         </div>
       </details>
 
+      ${new Date().getDate() <= 20 ? `
       <details class="card collapsible" open>
         <summary class="card-header"><div><h3>Payment Collection</h3><p>${new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} · Mark members as paid</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body row-list">
@@ -1909,6 +1907,7 @@ function renderAdmin() {
           }).join("")}
         </div>
       </details>
+      ` : ""}
 
       <details class="card collapsible">
         <summary class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div><span class="collapse-icon">⌄</span></summary>
@@ -2827,14 +2826,6 @@ async function markPaymentPaid(memberId) {
       source: "manual",
     }, { onConflict: "profile_id,month" }));
     if (error) { showToast("Failed to mark as paid."); return; }
-    // If this is Appanna's EMI, also increment principal_paid on his emi_entry row
-    const emiLoan = state.loans.find((l) => l.notes === "emi_entry" && loanBelongsToMember(l, member));
-    if (emiLoan) {
-      const newPrincipalPaid = Number(emiLoan.principalPaid || 0) + Number(emiLoan.interest || 0);
-      await liveQuery(supabaseClient.from("current_loans")
-        .update({ principal_paid: newPrincipalPaid })
-        .eq("id", emiLoan.id));
-    }
     await loadLiveState();
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
