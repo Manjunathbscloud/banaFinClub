@@ -1125,7 +1125,7 @@ function renderDashboard() {
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
           <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
-          ${paymentStatus !== "paid" && new Date().getDate() <= 5 ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
+          ${paymentStatus !== "paid" ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
         </div>
       </div>
     </div>
