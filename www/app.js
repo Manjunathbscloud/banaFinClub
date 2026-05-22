@@ -1492,26 +1492,21 @@ function showLoanYearModal(yearKey) {
   if (yearKey === "l2026") {
     title = "Sixth Year (2025-26) · Current";
     const loans = currentLoanBookRows();
-    const rows = loans.map(loan => {
-      const actions = isAdmin() ? `
-        <div class="actions" style="margin-top:4px;">
-          ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:4px 8px;">Mark clear</button>` : ""}
-          <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:4px 8px;">Delete</button>
-        </div>` : "";
-      return `<li class="year-modal-item" style="flex-direction:column;gap:6px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
-          <div><span class="year-modal-label">${escapeHtml(loanMemberName(loan))}</span><span class="year-modal-detail">Taken ${fmtMonthYear(loan.from)} · Renewal ${fmtMonthYear(loanRenewalDate(loan))}</span></div>
-          ${statusBadge(loan.status)}
-        </div>
-        <div style="display:flex;gap:16px;font-size:12px;color:#444;">
-          <span>Loan: <strong>${money(loan.amount)}</strong></span>
-          <span>Interest/mo: <strong>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</strong></span>
-          <span>Paid: <strong>${money(loan.interestPaid)}</strong></span>
-        </div>
-        ${actions}
-      </li>`;
-    }).join("") || `<li class="year-modal-meta">No loans entered yet.</li>`;
-    bodyHtml = `<ul class="year-modal-list">${rows}</ul>`;
+    const tableRows = loans.map(loan => {
+      const actions = isAdmin()
+        ? `${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Clear</button> ` : ""}<button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Del</button>`
+        : "-";
+      return `<tr>
+        <td data-label="Member"><strong>${escapeHtml(loanMemberName(loan))}</strong><br><small style="color:#9ca3af;">${fmtMonthYear(loan.from)}</small></td>
+        <td data-label="Amount">${money(loan.amount)}</td>
+        <td data-label="Interest/mo">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td>
+        <td data-label="Renewal">${fmtMonthYear(loanRenewalDate(loan))}</td>
+        <td data-label="Status">${statusBadge(loan.status)}</td>
+        ${isAdmin() ? `<td data-label="Action">${actions}</td>` : ""}
+      </tr>`;
+    }).join("") || `<tr><td colspan="6" class="empty">No loans entered yet.</td></tr>`;
+    const thead = `<thead><tr><th>Member</th><th>Amount</th><th>Interest/mo</th><th>Renewal</th><th>Status</th>${isAdmin() ? "<th>Action</th>" : ""}</tr></thead>`;
+    bodyHtml = `<div class="table-wrap" style="overflow-x:auto;"><table style="min-width:0;width:100%;">${thead}<tbody>${tableRows}</tbody></table></div>`;
   } else {
     const data = HISTORICAL[yearKey];
     if (!data) return;
