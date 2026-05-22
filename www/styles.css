@@ -557,6 +557,72 @@ button:focus-visible {
   text-align: center;
 }
 
+.year-modal-intro {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #444;
+  line-height: 1.6;
+}
+
+.year-modal-list {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.year-modal-meta {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.year-modal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.year-modal-item div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.year-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.year-modal-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.year-modal-amount {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.year-modal-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
 /* ── Summary card ─────────────────────────────── */
 .dash-summary-card {
   background: var(--blue);
