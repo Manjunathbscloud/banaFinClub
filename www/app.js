@@ -1131,6 +1131,7 @@ function renderDashboard() {
               <div class="journey-content">
                 <strong>Year 1 · 2021</strong>
                 <p>Started at ₹1,000/month. First annual meeting at M Thumbaraguddi (native place).</p>
+                <button class="photos-btn" data-action="show-meeting-photos" data-year="1">📸 4 photos</button>
               </div>
             </div>
             <div class="journey-item">
@@ -1138,6 +1139,7 @@ function renderDashboard() {
               <div class="journey-content">
                 <strong>Year 2 · 2022</strong>
                 <p>Increased to ₹1,500/month. Annual meeting at Sampige Heritage Resort, Koppal.</p>
+                <button class="photos-btn" data-action="show-meeting-photos" data-year="2">📸 3 photos</button>
               </div>
             </div>
             <div class="journey-item">
@@ -1145,6 +1147,7 @@ function renderDashboard() {
               <div class="journey-content">
                 <strong>Year 3 · 2023</strong>
                 <p>Added ₹5,000 yearly renewal fee. Annual meeting at Cotton County Club, Hubballi.</p>
+                <button class="photos-btn" data-action="show-meeting-photos" data-year="3">📸 3 photos</button>
               </div>
             </div>
             <div class="journey-item">
@@ -1152,6 +1155,7 @@ function renderDashboard() {
               <div class="journey-content">
                 <strong>Year 4 · 2024</strong>
                 <p>Renewal fee raised to ₹6,000. Annual meeting at Jungle Vibes Resort, Dandeli.</p>
+                <button class="photos-btn" data-action="show-meeting-photos" data-year="4">📸 3 photos</button>
               </div>
             </div>
             <div class="journey-item">
@@ -1263,6 +1267,62 @@ function showLoansModal() {
 
   document.body.insertAdjacentHTML("beforeend", html);
   document.body.style.overflow = "hidden";
+}
+
+function showMeetingPhotosModal(year) {
+  const existing = document.getElementById("photos-modal");
+  if (existing) existing.remove();
+
+  const photoCounts = { 1: 4, 2: 3, 3: 3, 4: 3 };
+  const labels = {
+    1: "Year 1 · 2021 · M Thumbaraguddi",
+    2: "Year 2 · 2022 · Sampige Heritage Resort, Koppal",
+    3: "Year 3 · 2023 · Cotton County Club, Hubballi",
+    4: "Year 4 · 2024 · Jungle Vibes Resort, Dandeli",
+  };
+  const count = photoCounts[year] || 0;
+  const label = labels[year] || `Year ${year}`;
+
+  const photosHtml = Array.from({ length: count }, (_, i) => `
+    <div class="photo-thumb-wrap" data-action="open-photo" data-src="./images/meetings/yr${year}/meeting${i + 1}.jpg">
+      <img src="./images/meetings/yr${year}/meeting${i + 1}.jpg" class="photo-thumb" loading="lazy" alt="Meeting photo ${i + 1}" />
+    </div>
+  `).join("");
+
+  const html = `
+    <div id="photos-modal" class="rules-modal-overlay" data-action="close-photos">
+      <div class="rules-modal-sheet">
+        <div class="rules-modal-header">
+          <div>
+            <h3>📸 Meeting Photos</h3>
+            <p>${escapeHtml(label)}</p>
+          </div>
+          <button class="rules-modal-close" data-action="close-photos">✕</button>
+        </div>
+        <div class="rules-modal-body">
+          <div class="photo-grid">${photosHtml}</div>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => {
+    const sheet = document.querySelector("#photos-modal .rules-modal-sheet");
+    if (sheet) sheet.style.transform = "translateY(0)";
+  });
+}
+
+function openPhotoLightbox(src) {
+  const existing = document.getElementById("photo-lightbox");
+  if (existing) existing.remove();
+
+  const html = `
+    <div id="photo-lightbox" class="photo-lightbox" data-action="close-lightbox">
+      <button class="photo-lightbox-close" data-action="close-lightbox">✕</button>
+      <img src="${escapeHtml(src)}" class="photo-lightbox-img" alt="Meeting photo" />
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
 }
 
 function appannaEmiProgress() {
@@ -1887,6 +1947,28 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "close-loan-year") {
     const modal = document.getElementById("loan-year-modal");
     if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
+
+  if (action.dataset.action === "show-meeting-photos") {
+    showMeetingPhotosModal(Number(action.dataset.year));
+    return;
+  }
+
+  if (action.dataset.action === "close-photos") {
+    const modal = document.getElementById("photos-modal");
+    if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
+
+  if (action.dataset.action === "open-photo") {
+    openPhotoLightbox(action.dataset.src);
+    return;
+  }
+
+  if (action.dataset.action === "close-lightbox") {
+    const lb = document.getElementById("photo-lightbox");
+    if (lb) lb.remove();
     return;
   }
 
