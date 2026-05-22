@@ -1397,9 +1397,20 @@ function fmtMonthYear(dateStr) {
 }
 
 function renderLoans() {
-  const visibleLoans = currentLoanBookRows();
-  const loanRequestForm = `
-      <details class="card collapsible" open>
+  const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const _now = new Date();
+  const activeCount = currentLoanBookRows().length;
+  const loanYears = [
+    { key: "l2021", label: "First Year",  sub: "2021 – 2022", tag: "Summary only", allClear: true },
+    { key: "l2022", label: "Second Year", sub: "2022 – 2023", tag: "Summary only", allClear: true },
+    { key: "l2023", label: "Third Year",  sub: "2023 – 2024", count: 8,  allClear: true },
+    { key: "l2024", label: "Fourth Year", sub: "2024 – 2025", count: 13, allClear: true },
+    { key: "l2026", label: "Sixth Year",  sub: `Oct 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`, count: activeCount, active: true },
+  ];
+  return `
+    <section class="page-title"><p>${t("loans")}</p><h2>Loan records</h2></section>
+    <section class="grid">
+      <details class="card collapsible">
         <summary class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="loan-request">
@@ -1409,30 +1420,143 @@ function renderLoans() {
           </form>
         </div>
       </details>
-  `;
-  return `
-    <section class="page-title"><p>${t("loans")}</p><h2>Current loan book</h2></section>
-    <section class="grid">
-      ${loanRequestForm}
-      <details class="card collapsible">
-        <summary class="card-header"><div><h3>Current loan book</h3><p>Only loans entered by admin</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Member</th><th>Loan taken</th><th>Renewal</th><th>Loan amount</th><th>Interest/month</th><th>Interest paid</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>${visibleLoans.map((loan) => {
-              const actions = isAdmin() ? `
-                <div class="actions">
-                  ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button">Mark clear</button>` : ""}
-                  <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
-                </div>
-              ` : "-";
-              return `<tr><td data-label="Member">${escapeHtml(loanMemberName(loan))}</td><td data-label="Loan taken">${fmtMonthYear(loan.from)}</td><td data-label="Renewal">${fmtMonthYear(loanRenewalDate(loan))}</td><td data-label="Loan amount">${money(loan.amount)}</td><td data-label="Interest/month">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td><td data-label="Interest paid">${money(loan.interestPaid)}</td><td data-label="Status">${statusBadge(loan.status)}</td><td data-label="Action">${actions}</td></tr>`;
-            }).join("") || `<tr><td colspan="8" class="empty">No current loans entered yet.</td></tr>`}</tbody>
-          </table>
+      ${loanYears.map(y => `
+        <div class="dash-tile dash-tile-clickable" data-action="show-loan-year" data-year="${y.key}">
+          <div class="dash-tile-body">
+            <span class="tile-icon">💳</span>
+            <div>
+              <strong>${y.label}</strong>
+              <p>${y.sub}${y.active ? ' · <span class="badge warn" style="font-size:10px;">Active</span>' : ""}${y.tag ? ` · <small style="color:#9ca3af;">${y.tag}</small>` : ""}</p>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+            ${y.allClear ? `<span class="badge good" style="font-size:10px;">All Cleared</span>` : `<span class="badge info" style="font-size:10px;">${y.count} loan${y.count !== 1 ? "s" : ""}</span>`}
+            <span class="tile-chevron">›</span>
+          </div>
+        </div>`).join("")}
+    </section>`;
+}
+
+function showLoanYearModal(yearKey) {
+  const existing = document.getElementById("loan-year-modal");
+  if (existing) existing.remove();
+
+  const HISTORICAL = {
+    l2021: {
+      label: "First Year (2021-22)", note: "Summary data — individual records not available",
+      loans: [
+        { member: "Example Member", amount: 30000, interest: 450, renewal: "Jul-2021", status: "clear", totalPaid: 8700 },
+      ]
+    },
+    l2022: {
+      label: "Second Year (2022-23)", note: "Summary data — individual records not available",
+      loans: [
+        { member: "Example Member", amount: 50000, interest: 750, renewal: "Nov-2022", status: "clear", totalPaid: 33600 },
+      ]
+    },
+    l2023: {
+      label: "Third Year (2023-24)",
+      loans: [
+        { member: "Santosh",    amount: 30000,  interest: 450,  renewal: "May-2024", status: "clear", totalPaid: 450 },
+        { member: "Pratap",     amount: 140000, interest: 2100, renewal: "Jun-2025", status: "clear", totalPaid: 14700 },
+        { member: "Manjunath",  amount: 100000, interest: 1500, renewal: "Dec-2024", status: "clear", totalPaid: 10500 },
+        { member: "Pratap",     amount: 50000,  interest: 750,  renewal: "Dec-2024", status: "clear", totalPaid: 5250 },
+        { member: "Pradeep",    amount: 100000, interest: 1500, renewal: "Mar-2025", status: "clear", totalPaid: 10500 },
+        { member: "Santosh",    amount: 100000, interest: 1500, renewal: "Apr-2025", status: "clear", totalPaid: 10500 },
+        { member: "Pratap",     amount: 60000,  interest: 900,  renewal: "May-2025", status: "clear", totalPaid: 5400 },
+        { member: "Pradeep",    amount: 100000, interest: 1500, renewal: "Nov-2025", status: "clear", totalPaid: 0 },
+      ]
+    },
+    l2024: {
+      label: "Fourth Year (2024-25)",
+      loans: [
+        { member: "Manjunath",      amount: 100000, interest: 1500, renewal: "Dec-2024", status: "clear", totalPaid: 1500 },
+        { member: "Santosh",        amount: 100000, interest: 1500, renewal: "Apr-2025", status: "clear", totalPaid: 6000 },
+        { member: "Pratap",         amount: 140000, interest: 2100, renewal: "Jun-2026", status: "clear", totalPaid: 21000 },
+        { member: "Pratap",         amount: 50000,  interest: 750,  renewal: "Dec-2025", status: "clear", totalPaid: 7500 },
+        { member: "Pradeep",        amount: 100000, interest: 1500, renewal: "Mar-2026", status: "clear", totalPaid: 15000 },
+        { member: "Pratap",         amount: 60000,  interest: 900,  renewal: "May-2026", status: "clear", totalPaid: 9000 },
+        { member: "Pradeep",        amount: 100000, interest: 1500, renewal: "Nov-2025", status: "clear", totalPaid: 16500 },
+        { member: "Sarpabhushana",  amount: 30000,  interest: 450,  renewal: "Dec-2025", status: "clear", totalPaid: 4500 },
+        { member: "Santosh",        amount: 40000,  interest: 600,  renewal: "Jul-2025", status: "clear", totalPaid: 4200 },
+        { member: "Praveen",        amount: 70000,  interest: 1050, renewal: "May-2026", status: "clear", totalPaid: 3150 },
+        { member: "Manjunath",      amount: 100000, interest: 1500, renewal: "Jul-2025", status: "clear", totalPaid: 4500 },
+        { member: "Manjunath",      amount: 100000, interest: 1500, renewal: "Jun-2026", status: "clear", totalPaid: 6000 },
+        { member: "Praveen",        amount: 100000, interest: 1500, renewal: "Oct-2025", status: "clear", totalPaid: 4500 },
+      ]
+    }
+  };
+
+  let title = "", bodyHtml = "";
+
+  if (yearKey === "l2026") {
+    title = "Sixth Year (2025-26) · Current";
+    const loans = currentLoanBookRows();
+    const rows = loans.map(loan => {
+      const actions = isAdmin() ? `
+        <div class="actions" style="margin-top:4px;">
+          ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:4px 8px;">Mark clear</button>` : ""}
+          <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:4px 8px;">Delete</button>
+        </div>` : "";
+      return `<li class="year-modal-item" style="flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <div><span class="year-modal-label">${escapeHtml(loanMemberName(loan))}</span><span class="year-modal-detail">Taken ${fmtMonthYear(loan.from)} · Renewal ${fmtMonthYear(loanRenewalDate(loan))}</span></div>
+          ${statusBadge(loan.status)}
         </div>
-      </details>
-    </section>
-  `;
+        <div style="display:flex;gap:16px;font-size:12px;color:#444;">
+          <span>Loan: <strong>${money(loan.amount)}</strong></span>
+          <span>Interest/mo: <strong>${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</strong></span>
+          <span>Paid: <strong>${money(loan.interestPaid)}</strong></span>
+        </div>
+        ${actions}
+      </li>`;
+    }).join("") || `<li class="year-modal-meta">No loans entered yet.</li>`;
+    bodyHtml = `<ul class="year-modal-list">${rows}</ul>`;
+  } else {
+    const data = HISTORICAL[yearKey];
+    if (!data) return;
+    title = data.label;
+    const totalAmount = data.loans.reduce((s, l) => s + l.amount, 0);
+    const totalPaid = data.loans.reduce((s, l) => s + l.totalPaid, 0);
+    const rows = data.loans.map(l => `
+      <li class="year-modal-item">
+        <div>
+          <span class="year-modal-label">${escapeHtml(l.member)}</span>
+          <span class="year-modal-detail">Renewal ${escapeHtml(l.renewal)} · Interest ${money(l.interest)}/mo · Paid ${money(l.totalPaid)}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+          <strong class="year-modal-amount" style="color:#2563eb;">${money(l.amount)}</strong>
+          <span class="badge good" style="font-size:10px;">Cleared</span>
+        </div>
+      </li>`).join("");
+    bodyHtml = `
+      ${data.note ? `<p class="year-modal-intro" style="color:#f59e0b;">${escapeHtml(data.note)}</p>` : ""}
+      <ul class="year-modal-list">${rows}</ul>
+      <div class="year-modal-total" style="margin-top:10px;">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span>Total Loan Amount</span>
+          <small style="font-weight:400;color:#6b7280;">Interest paid: ${money(totalPaid)}</small>
+        </div>
+        <strong>${money(totalAmount)}</strong>
+      </div>`;
+  }
+
+  const html = `
+    <div id="loan-year-modal" class="rules-modal-overlay" data-action="close-loan-year">
+      <div class="rules-modal-sheet">
+        <div class="rules-modal-header">
+          <div><h3>💳 ${escapeHtml(title)}</h3><p>Sri Mukkanneshwara Associate</p></div>
+          <button class="rules-modal-close" data-action="close-loan-year">✕</button>
+        </div>
+        <div class="rules-modal-body">${bodyHtml}</div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => {
+    const sheet = document.querySelector("#loan-year-modal .rules-modal-sheet");
+    if (sheet) sheet.style.transform = "translateY(0)";
+  });
 }
 
 function renderMembers() {
@@ -1673,6 +1797,17 @@ document.addEventListener("click", async (event) => {
 
   if (action.dataset.action === "close-deposit-year") {
     const modal = document.getElementById("deposit-year-modal");
+    if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
+
+  if (action.dataset.action === "show-loan-year") {
+    showLoanYearModal(action.dataset.year);
+    return;
+  }
+
+  if (action.dataset.action === "close-loan-year") {
+    const modal = document.getElementById("loan-year-modal");
     if (modal) { modal.remove(); document.body.style.overflow = ""; }
     return;
   }
