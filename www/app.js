@@ -868,7 +868,6 @@ function render() {
       <header class="topbar">
         <div class="topbar-inner">
           <div class="user-chip">
-            ${memberAvatarHtml(user)}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
               <span>${escapeHtml(roleLabel(user.role))}</span>
@@ -881,7 +880,7 @@ function render() {
               ${bellIcon()}
               ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
             </button>
-            <button class="icon-button" type="button" data-action="logout" title="${t("logout")}">⎋</button>
+            <button class="logout-btn" type="button" data-action="logout">${t("logout")}</button>
           </div>
         </div>
       </header>
