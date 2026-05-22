@@ -381,6 +381,7 @@ function liveLoanToLocal(loan) {
     amount: Number(loan.principal || 0),
     principalPaid: Number(loan.principal_paid || 0),
     interestRateMonthly: Number(loan.interest_rate_monthly || 1.25),
+    interest: Number(loan.monthly_interest || 0),
     interestPaid: Number(loan.interest_paid || 0),
     from: loan.disbursed_at,
     renewalOrReturnDate: loan.renewal_or_return_date || "",
@@ -388,6 +389,7 @@ function liveLoanToLocal(loan) {
     status: loan.status,
     isInterestFree: Boolean(loan.is_interest_free),
     purpose: loan.purpose || "",
+    notes: loan.notes || "",
   };
 }
 
