@@ -281,6 +281,24 @@ button:focus-visible {
   font-weight: 900;
 }
 
+.avatar.avatar-photo {
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.avatar.avatar-md {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.avatar.avatar-md.avatar-photo {
+  border-radius: 50%;
+}
+
 .user-chip strong,
 .user-chip span {
   display: block;
@@ -372,6 +390,31 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.dash-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dash-avatar.dash-avatar-photo {
+  object-fit: cover;
+}
+
+.dash-avatar-cam {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1;
 }
 
 /* ── Category tiles ───────────────────────────── */
@@ -1746,4 +1789,52 @@ th {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+/* Profile photo signup picker */
+.avatar-picker-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.avatar-pick-label {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px dashed var(--blue);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--blue-soft);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.avatar-pick-label:hover {
+  border-color: var(--orange);
+}
+
+.avatar-pick-placeholder {
+  font-size: 22px;
+  text-align: center;
+  color: var(--blue);
+  line-height: 1.3;
+}
+
+.avatar-pick-placeholder small {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Change photo link in members list */
+.change-photo-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--blue);
+  cursor: pointer;
+  font-weight: 600;
 }

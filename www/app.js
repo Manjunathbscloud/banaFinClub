@@ -355,6 +355,7 @@ function liveProfileToMember(profile) {
     role: profile.role,
     status: profile.status,
     authUserId: profile.auth_user_id,
+    avatarUrl: profile.avatar_url || "",
   };
 }
 
@@ -867,7 +868,7 @@ function render() {
       <header class="topbar">
         <div class="topbar-inner">
           <div class="user-chip">
-            <div class="avatar">${initials(user.name)}</div>
+            ${memberAvatarHtml(user)}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
               <span>${escapeHtml(roleLabel(user.role))}</span>
@@ -906,6 +907,59 @@ function initials(name) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function memberAvatarHtml(member, size = "") {
+  const cls = `avatar${size ? " avatar-" + size : ""}`;
+  if (member?.avatarUrl) {
+    return `<img src="${escapeHtml(member.avatarUrl)}" class="${cls} avatar-photo" alt="${escapeHtml(member?.name || "")}" />`;
+  }
+  return `<div class="${cls}">${initials(member?.name || "?")}</div>`;
+}
+
+async function compressImage(file, maxDim = 400, quality = 0.85) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(resolve, "image/jpeg", quality);
+    };
+    img.src = url;
+  });
+}
+
+async function uploadAvatarPhoto(file, profileId) {
+  const blob = await compressImage(file, 400, 0.85);
+  const path = `${profileId}.jpg`;
+  const { error } = await supabaseClient.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from("avatars").getPublicUrl(path);
+  const url = data.publicUrl;
+  await liveQuery(supabaseClient.from("profiles").update({ avatar_url: url }).eq("id", profileId));
+  return url;
+}
+
+async function handleAvatarUpload(file) {
+  if (!liveBackendReady || !currentProfileId()) return;
+  try {
+    showToast("Uploading photo…");
+    const url = await uploadAvatarPhoto(file, currentProfileId());
+    const member = state.members.find(m => m.id === currentProfileId());
+    if (member) member.avatarUrl = url;
+    render();
+    showToast("Profile photo updated!");
+  } catch (e) {
+    showToast("Upload failed: " + (e.message || "try again"));
+  }
 }
 
 function navButton(tab, icon, label) {
@@ -955,6 +1009,12 @@ function loginForm() {
 function signupForm() {
   return `
     <form class="form" data-form="signup">
+      <div class="avatar-picker-wrap">
+        <label class="avatar-pick-label" for="signup-avatar">
+          <span class="avatar-pick-placeholder">📷<br/><small>Add photo<br/>(optional)</small></span>
+        </label>
+        <input type="file" id="signup-avatar" name="avatar" accept="image/*" style="display:none;" />
+      </div>
       <label class="field"><span>${t("name")}</span><input name="name" type="text" required /></label>
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
       <label class="field"><span>Email</span><input name="email" type="email" required /></label>
@@ -1052,7 +1112,12 @@ function renderDashboard() {
         <p>${greeting}</p>
         <h2>${escapeHtml(user.name || "Member")}</h2>
       </div>
-      <div class="dash-avatar">${escapeHtml(initials)}</div>
+      <div class="dash-avatar-wrap">
+        ${user.avatarUrl
+          ? `<img src="${escapeHtml(user.avatarUrl)}" class="dash-avatar dash-avatar-photo" alt="${escapeHtml(user.name)}" />`
+          : `<div class="dash-avatar">${escapeHtml(initials)}</div>`}
+        ${liveBackendReady ? `<label class="dash-avatar-cam" for="home-avatar-input" title="Change photo">📷</label><input type="file" id="home-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />` : ""}
+      </div>
     </section>
 
     <section class="dash-tiles">
@@ -1648,7 +1713,17 @@ function renderMembers() {
       <div class="card-body row-list">
         ${rows.map((member) => `
           <div class="row-item">
-            <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span></div>
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              ${memberAvatarHtml(member, "md")}
+              <div style="min-width:0;">
+                <strong>${escapeHtml(member.name)}</strong>
+                <span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span>
+                ${member.id === currentProfileId() && liveBackendReady ? `
+                  <label class="change-photo-link" for="member-avatar-input">📷 Change photo</label>
+                  <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
+                ` : ""}
+              </div>
+            </div>
             <div class="member-actions">
               ${statusBadge(member.status)}
               ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
@@ -2075,15 +2150,40 @@ document.addEventListener("click", async (event) => {
 
 document.addEventListener("change", (event) => {
   const sel = event.target.closest("[data-action='rule-section-pick']");
-  if (!sel) return;
-  const newField = document.getElementById("rule-new-section-field");
-  const hiddenInput = document.getElementById("rule-section-hidden");
-  if (sel.value === "__new__") {
-    newField.style.display = "";
-    hiddenInput.value = "";
-  } else {
-    newField.style.display = "none";
-    hiddenInput.value = sel.value;
+  if (sel) {
+    const newField = document.getElementById("rule-new-section-field");
+    const hiddenInput = document.getElementById("rule-section-hidden");
+    if (sel.value === "__new__") {
+      newField.style.display = "";
+      hiddenInput.value = "";
+    } else {
+      newField.style.display = "none";
+      hiddenInput.value = sel.value;
+    }
+    return;
+  }
+
+  // Signup form photo preview
+  if (event.target.name === "avatar" && event.target.files?.[0]) {
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const label = document.querySelector(".avatar-pick-label");
+      if (label) {
+        label.style.backgroundImage = `url(${evt.target.result})`;
+        label.style.backgroundSize = "cover";
+        label.style.backgroundPosition = "center";
+        const placeholder = label.querySelector(".avatar-pick-placeholder");
+        if (placeholder) placeholder.style.display = "none";
+      }
+    };
+    reader.readAsDataURL(event.target.files[0]);
+    return;
+  }
+
+  // Home / Members avatar upload
+  const avatarInput = event.target.closest("[data-action='upload-avatar']");
+  if (avatarInput && avatarInput.files?.[0]) {
+    handleAvatarUpload(avatarInput.files[0]);
   }
 });
 
@@ -2252,6 +2352,13 @@ async function signup(data) {
       p_phone: phone,
       p_email: signupEmail,
     }));
+    if (data.avatar instanceof File && data.avatar.size > 0) {
+      const { data: authUser } = await supabaseClient.auth.getUser();
+      if (authUser?.user) {
+        const { data: profile } = await supabaseClient.from("profiles").select("id").eq("auth_user_id", authUser.user.id).single();
+        if (profile?.id) await uploadAvatarPhoto(data.avatar, profile.id).catch(() => {});
+      }
+    }
     await supabaseClient.auth.signOut();
     await loadLiveState();
     showToast(phone === PRESIDENT_PHONE ? "President signup complete. Login now." : "Signup sent to admin for approval.");
