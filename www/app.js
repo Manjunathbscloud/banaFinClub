@@ -1,6 +1,6 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
 const PRESIDENT_PHONE = "9591382942";
-const ASSOCIATION_UPI_ID = "PENDING@upi"; // TODO: replace with actual UPI ID
+const ASSOCIATION_UPI_ID = "mukkaneshwara@ybl";
 const ASSOCIATION_UPI_NAME = "Banakar FinClub";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
@@ -1125,7 +1125,7 @@ function renderDashboard() {
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
           <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
-          ${paymentStatus !== "paid" ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
+          ${paymentStatus !== "paid" && new Date().getDate() <= 5 ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
         </div>
       </div>
     </div>
