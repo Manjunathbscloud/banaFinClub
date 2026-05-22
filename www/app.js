@@ -941,7 +941,7 @@ function renderAuth(mode) {
 function loginForm() {
   return `
     <form class="form" data-form="login">
-      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
+      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required /></label>
       ${passwordField("password", t("password"), liveBackendReady ? "" : "123456")}
       <button class="primary" type="submit">${t("signIn")}</button>
       <button class="text-link" type="button" data-auth-mode="reset">${t("forgotPassword")}?</button>
@@ -955,7 +955,7 @@ function signupForm() {
     <form class="form" data-form="signup">
       <label class="field"><span>${t("name")}</span><input name="name" type="text" required /></label>
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
-      <label class="field"><span>Email</span><input name="email" type="email" required placeholder="your@gmail.com" /></label>
+      <label class="field"><span>Email</span><input name="email" type="email" required /></label>
       ${passwordField("password", t("password"))}
       <button class="primary" type="submit">${t("requestAccess")}</button>
       <p class="hint">Signup requests stay pending until the president approves them.</p>
@@ -966,7 +966,7 @@ function signupForm() {
 function resetForm() {
   return `
     <form class="form" data-form="reset">
-      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required placeholder="9591382942" /></label>
+      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required /></label>
       <button class="primary" type="submit">${t("forgotPassword")}</button>
       <p class="hint">${liveBackendReady ? "A password reset link will be sent to your registered email." : "Demo mode records a reset request for admin follow-up."}</p>
     </form>
