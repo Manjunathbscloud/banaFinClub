@@ -594,11 +594,13 @@ function loanOutstanding(loan) {
 
 function loanMonthlyInterest(loan) {
   if (loan.status === "interest_free" || loan.isInterestFree) return 0;
+  if (Number(loan.interest) > 0) return Number(loan.interest);
   return (loanOutstanding(loan) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
 }
 
 function loanBaseMonthlyInterest(loan) {
   if (loan.status === "interest_free" || loan.isInterestFree) return 0;
+  if (Number(loan.interest) > 0) return Number(loan.interest);
   return (Number(loan.amount || 0) * Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly)) / 100;
 }
 
@@ -615,7 +617,9 @@ function yr6InterestMonths(loan) {
 }
 
 function year6InterestCollected() {
-  return currentLoans().reduce((sum, loan) => sum + yr6InterestMonths(loan) * loanBaseMonthlyInterest(loan), 0);
+  return currentLoans()
+    .filter((l) => l.notes !== "emi_entry")
+    .reduce((sum, loan) => sum + yr6InterestMonths(loan) * loanBaseMonthlyInterest(loan), 0);
 }
 
 function monthDiff(startDate, endDate) {
@@ -703,12 +707,14 @@ function expectedBankBalance() {
   if (nowYM >= 202601) {
     const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
     yr6Deposits += 7 * 2000 * jMonths;
-    const emi = appannaEmiProgress();
-    yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
+    const emiLoan = state.loans.find((l) => l.notes === "emi_entry");
+    if (emiLoan) yr6Deposits += Number(emiLoan.principalPaid || 0);
   }
   const interestCollected = year6InterestCollected();
-  const extraInterest = 8125 + 3046; // Sarpa ₹8,125 + Appanna ₹3,046 (both outside current_loans table)
-  const totalOutstanding = currentLoans().reduce((s, loan) => s + loanOutstanding(loan), 0);
+  const extraInterest = 8125 + 3046; // Sarpa ₹8,125 + Appanna ₹3,046 pre-year-6 interest
+  const totalOutstanding = currentLoans()
+    .filter((l) => l.notes !== "emi_entry")
+    .reduce((s, loan) => s + loanOutstanding(loan), 0);
   return Math.round(postExitPool + sarpaSettlement + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
 }
 
