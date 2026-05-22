@@ -1633,9 +1633,6 @@ function renderMeetings() {
   const totalDepositMembers = depositMembers().length;
   const collectionPct = totalDepositMembers > 0 ? Math.round((paidThisMonth / totalDepositMembers) * 100) : 0;
 
-  const activeLoans = currentLoans();
-  const totalOutstanding = activeLoans.reduce((s, l) => s + loanOutstanding(l), 0);
-  const extraInterest = 8125 + 3046;
   const totalFund = expectedBankBalance();
 
   return `
@@ -1701,15 +1698,6 @@ function renderMeetings() {
       </div>
     </div>
 
-    <div class="card" style="margin-top:12px;margin-bottom:14px;">
-      <div class="card-header"><div><h3>💳 Loans Overview</h3><p>Active loan book · Year 6</p></div></div>
-      <div class="card-body row-list">
-        <div class="row-item"><div><strong>Active loans</strong><span>Currently outstanding</span></div><strong>${activeLoans.length}</strong></div>
-        <div class="row-item"><div><strong>Total outstanding</strong><span>Principal yet to be repaid</span></div><strong>${money(totalOutstanding)}</strong></div>
-        <div class="row-item"><div><strong>Interest earned (Yr6)</strong><span>From active loans + additional</span></div><strong>${money(yr6Interest + extraInterest)}</strong></div>
-        <div class="row-item"><div><strong>Available for lending</strong><span>Bank balance − ₹5,000 reserve</span></div><strong>${money(availableLoanAmount())}</strong></div>
-      </div>
-    </div>
   `;
 }
 
