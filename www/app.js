@@ -21,7 +21,7 @@ const translations = {
     name: "Full name",
     requestAccess: "Request access",
     forgotPassword: "Forgot password",
-    dashboard: "Dashboard",
+    dashboard: "Home",
     deposits: "Deposits",
     loans: "Loans",
     members: "Members",
@@ -50,7 +50,7 @@ const translations = {
     ownDetailsOnly: "Members see own details and group balance.",
     demoMode: "Demo mode",
     liveMode: "Live mode",
-    meetings: "Meetings",
+    meetings: "Dashboard",
   },
   kn: {
     privateClub: "ಖಾಸಗಿ ಸದಸ್ಯರ ಹಣಕಾಸು ಕ್ಲಬ್",
@@ -64,7 +64,7 @@ const translations = {
     name: "ಪೂರ್ಣ ಹೆಸರು",
     requestAccess: "ಪ್ರವೇಶ ವಿನಂತಿ",
     forgotPassword: "ಪಾಸ್ವರ್ಡ್ ಮರೆತಿರಾ",
-    dashboard: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+    dashboard: "ಹೋಮ್",
     deposits: "ಠೇವಣಿಗಳು",
     loans: "ಸಾಲಗಳು",
     members: "ಸದಸ್ಯರು",
@@ -93,7 +93,7 @@ const translations = {
     ownDetailsOnly: "ಸದಸ್ಯರು ತಮ್ಮ ವಿವರಗಳು ಮತ್ತು ಗುಂಪು ಬ್ಯಾಲೆನ್ಸ್ ಮಾತ್ರ ನೋಡುತ್ತಾರೆ.",
     demoMode: "ಡೆಮೊ ಮೋಡ್",
     liveMode: "ಲೈವ್ ಮೋಡ್",
-    meetings: "ಸಭೆಗಳು",
+    meetings: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
   },
 };
 
@@ -1030,32 +1030,6 @@ function renderDashboard() {
   } else {
     dashboardMetrics.push(metric(t("loanRequestStatus"), statusText(request?.status || "none"), request ? `${money(request.amount)} · ${escapeHtml(request.date || "-")}` : "No loan request"));
   }
-  const logCard = isAdmin() ? `
-      <div class="card">
-        <div class="card-header">
-          <div><h3>${t("recentActivity")}</h3><p>Audit log</p></div>
-        </div>
-        <div class="card-body row-list">
-          ${state.audit.slice(-5).reverse().map((item) => `
-            <div class="row-item"><div><strong>${escapeHtml(item.text)}</strong><span>${escapeHtml(item.date)}</span></div><span class="badge info">Log</span></div>
-          `).join("")}
-        </div>
-      </div>
-  ` : "";
-  const loanRows = memberLoans(user.id)
-    .map((loan) => `<tr><td data-label="Loan">${money(loan.amount)}</td><td data-label="Outstanding">${money(loanOutstanding(loan))}</td><td data-label="Interest/mo">${money(loanMonthlyInterest(loan))}</td><td data-label="Renewal">${escapeHtml(fmtMonthYear(loanRenewalDate(loan)))}</td><td data-label="Status">${statusBadge(loan.status)}</td></tr>`)
-    .join("");
-  const loanCard = `
-      <div class="card">
-        <div class="card-header"><div><h3>Loan taken</h3><p>Your current loan details</p></div></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Loan</th><th>Outstanding</th><th>Interest/mo</th><th>Renewal</th><th>Status</th></tr></thead>
-            <tbody>${loanRows || `<tr><td colspan="5" class="empty">No current loans.</td></tr>`}</tbody>
-          </table>
-        </div>
-      </div>
-  `;
   const initials = (user.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening"; })();
   const paymentStatus = monthlyPayment?.status || "pending";
@@ -1065,11 +1039,11 @@ function renderDashboard() {
     { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
     { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" },
     { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
-    { icon: "📅", title: "MEETINGS", sub: "Meeting records", tab: "meetings" },
+    { icon: "📊", title: "DASHBOARD", sub: "Association analytics", tab: "meetings" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     isAdmin()
       ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : ""), tab: "admin" }
-      : { icon: "📊", title: "MY ACCOUNT", sub: "Deposits & loan status", tab: "members" },
+      : { icon: "👤", title: "MY ACCOUNT", sub: "Deposits & loan status", tab: "members" },
   ];
 
   return `
@@ -1130,15 +1104,64 @@ function renderDashboard() {
       </div>
     </div>
 
-    <section class="two-col" style="margin-top:14px;">
-      ${logCard}
-      ${loanCard}
+    <section style="margin-top:14px;">
       <div class="card">
-        <div class="card-header"><div><h3>${t("groupRules")}</h3><p>Current setup</p></div></div>
-        <div class="card-body row-list">
-          <div class="row-item"><div><strong>${money(state.settings.monthlyDeposit)}</strong><span>Monthly deposit by 15th</span></div><span class="badge good">Active</span></div>
-          <div class="row-item"><div><strong>${state.settings.loanInterestLabel}</strong><span>Loan interest rule</span></div><span class="badge info">1.25%</span></div>
-          <div class="row-item"><div><strong>December concession</strong><span>President ${money(0)}, Vice President ${money(1250)}</span></div><span class="badge warn">Special</span></div>
+        <div class="card-header">
+          <div><h3>🏛️ About Our Association</h3><p>Sri Mukkanneshwara Associate · Est. February 2021</p></div>
+        </div>
+        <div class="card-body">
+          <p class="assoc-intro">A private member finance association by the Banakar family — pooling monthly deposits, earning interest, and providing low-interest loans to build a shared financial future.</p>
+          <div class="row-list" style="margin-top:10px;">
+            <div class="row-item"><div><strong>Founded</strong><span>February 2021</span></div></div>
+            <div class="row-item"><div><strong>Active members</strong><span>7 (after 1 exit in Year 5)</span></div></div>
+            <div class="row-item"><div><strong>Monthly deposit</strong><span>₹2,000 per member · ₹14,000 total</span></div></div>
+            <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year 6 of 10</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="card-header">
+          <div><h3>🗓️ Our Journey</h3><p>Year by year milestones</p></div>
+        </div>
+        <div class="card-body">
+          <div class="journey-list">
+            <div class="journey-item">
+              <div class="journey-dot">1</div>
+              <div class="journey-content">
+                <strong>Year 1 · 2021</strong>
+                <p>Started at ₹1,000/month. First annual meeting at M Thumbaraguddi (native place).</p>
+              </div>
+            </div>
+            <div class="journey-item">
+              <div class="journey-dot">2</div>
+              <div class="journey-content">
+                <strong>Year 2 · 2022</strong>
+                <p>Increased to ₹1,500/month. Annual meeting at Sampige Heritage Resort, Koppal.</p>
+              </div>
+            </div>
+            <div class="journey-item">
+              <div class="journey-dot">3</div>
+              <div class="journey-content">
+                <strong>Year 3 · 2023</strong>
+                <p>Added ₹5,000 yearly renewal fee. Annual meeting at Cotton County Club, Hubballi.</p>
+              </div>
+            </div>
+            <div class="journey-item">
+              <div class="journey-dot">4</div>
+              <div class="journey-content">
+                <strong>Year 4 · 2024</strong>
+                <p>Renewal fee raised to ₹6,000. Annual meeting at Jungle Vibes Resort, Dandeli.</p>
+              </div>
+            </div>
+            <div class="journey-item">
+              <div class="journey-dot journey-dot-active">5</div>
+              <div class="journey-content">
+                <strong>Year 5 · 2025 ✨</strong>
+                <p>Extended to 10 years. New member Appanna joined; Sarpa exited. Per member share ₹1,21,833.57. Annual meeting at Sandur Wonder Valley Resort.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1578,46 +1601,115 @@ function renderMembers() {
 }
 
 function renderMeetings() {
-  const meetings = state.meetings || [];
-  const totalExpenditure = meetings.reduce((sum, m) => sum + (m.expenditure || 0), 0);
+  const now = new Date();
+  const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
+  let yr6Deposits = 0;
+  if (nowYM >= 202511) yr6Deposits += 21000 + 14000;
+  if (nowYM >= 202512) yr6Deposits += 11250;
+  if (nowYM >= 202601) {
+    const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
+    yr6Deposits += 7 * 2000 * jMonths;
+    const emi = appannaEmiProgress();
+    yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
+  }
+  const yr6Interest = year6InterestCollected();
+
+  const baseDeposits = (state.deposits.length ? state.deposits : initialState.deposits).filter(d => d.year <= 2025);
+  const chartData = [
+    ...baseDeposits.map((d, i) => ({ label: `Yr${i + 1}`, deposits: d.principal, interest: d.interest })),
+    { label: "Yr6", deposits: yr6Deposits, interest: yr6Interest, live: true },
+  ];
+  const maxVal = Math.max(...chartData.flatMap(d => [d.deposits, d.interest]), 1);
+
+  function compactMoney(v) {
+    const n = Number(v || 0);
+    if (n >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+    if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+    return `₹${n}`;
+  }
+
+  const thisMonth = currentMonth();
+  const paidThisMonth = state.monthlyPayments.filter(p => p.month === thisMonth && p.status === "paid").length;
+  const totalDepositMembers = depositMembers().length;
+  const collectionPct = totalDepositMembers > 0 ? Math.round((paidThisMonth / totalDepositMembers) * 100) : 0;
+
+  const activeLoans = currentLoans();
+  const totalOutstanding = activeLoans.reduce((s, l) => s + loanOutstanding(l), 0);
+  const extraInterest = 8125 + 3046;
+  const totalFund = expectedBankBalance();
+
   return `
-    <section class="page-title"><p>${t("meetings")}</p><h2>Annual meetings</h2></section>
-    <section class="grid">
-      <div class="card">
-        <div class="card-header"><div><h3>Meeting summary</h3><p>Sri Mukkanneshwara Associate</p></div></div>
-        <div class="card-body row-list">
-          <div class="row-item"><div><strong>Total meetings held</strong></div><strong>${meetings.length}</strong></div>
-          <div class="row-item"><div><strong>Total expenditure</strong><span>Across all meetings</span></div><strong>${money(totalExpenditure)}</strong></div>
-          <div class="row-item"><div><strong>Frequency</strong></div><span>Annual · end of year</span></div>
-          <div class="row-item"><div><strong>Association duration</strong><span>Extended to 10 years at 5th meeting</span></div><span class="badge info">Year 6 of 10</span></div>
+    <section class="page-title"><p>Association Analytics</p><h2>${t("meetings")}</h2></section>
+
+    <div class="analytics-stat-row">
+      <div class="analytics-stat">
+        <span>Total Fund</span>
+        <strong>${compactMoney(totalFund)}</strong>
+        <small>Estimated</small>
+      </div>
+      <div class="analytics-stat">
+        <span>Members</span>
+        <strong>${activeMembers().length}</strong>
+        <small>Active</small>
+      </div>
+      <div class="analytics-stat">
+        <span>Year</span>
+        <strong>6 of 10</strong>
+        <small>Since 2021</small>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <div class="card-header"><div><h3>📈 Deposits vs Interest</h3><p>Collective year-wise data · all members</p></div></div>
+      <div class="card-body">
+        <div class="analytics-chart">
+          ${chartData.map(d => `
+            <div class="analytics-chart-row">
+              <span class="analytics-chart-label">${escapeHtml(d.label)}${d.live ? "*" : ""}</span>
+              <div class="analytics-chart-bars">
+                <div class="analytics-bar-row">
+                  <div class="analytics-bar-track"><div class="analytics-bar-fill dep" style="width:${Math.round(d.deposits / maxVal * 100)}%"></div></div>
+                  <span class="analytics-bar-val">${compactMoney(d.deposits)}</span>
+                </div>
+                <div class="analytics-bar-row">
+                  <div class="analytics-bar-track"><div class="analytics-bar-fill int" style="width:${Math.round(d.interest / maxVal * 100)}%"></div></div>
+                  <span class="analytics-bar-val">${compactMoney(d.interest)}</span>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+        <div class="analytics-legend">
+          <div class="analytics-legend-item"><span class="analytics-legend-dot dep"></span>Deposits</div>
+          <div class="analytics-legend-item"><span class="analytics-legend-dot int"></span>Interest</div>
+          <small style="margin-left:auto;color:var(--muted);">* Live data</small>
         </div>
       </div>
+    </div>
 
-      ${meetings.map((m) => `
-        <details class="card collapsible" ${m.year === 5 ? "open" : ""}>
-          <summary class="card-header">
-            <div>
-              <h3>${escapeHtml(m.label)}</h3>
-              <p>${escapeHtml(m.date)} · ${escapeHtml(m.venue)}</p>
-            </div>
-            <span class="collapse-icon">⌄</span>
-          </summary>
-          <div class="card-body row-list">
-            <div class="row-item"><div><strong>Date</strong></div><span>${escapeHtml(m.date)}</span></div>
-            <div class="row-item"><div><strong>Venue</strong></div><span>${escapeHtml(m.venue)}</span></div>
-            <div class="row-item"><div><strong>Meeting expenditure</strong></div><strong>${money(m.expenditure)}</strong></div>
-            ${m.decisions.length ? `
-              <div style="padding:8px 0 4px;"><strong style="font-size:13px;color:#555;">Key decisions</strong></div>
-              ${m.decisions.map((d) => `
-                <div class="row-item" style="align-items:flex-start;">
-                  <div><span style="line-height:1.5;">· ${escapeHtml(d)}</span></div>
-                </div>
-              `).join("")}
-            ` : ""}
-          </div>
-        </details>
-      `).join("")}
-    </section>
+    <div class="card" style="margin-top:12px;">
+      <div class="card-header"><div><h3>📅 This Month's Collection</h3><p>${now.toLocaleString("en-IN", { month: "long", year: "numeric" })}</p></div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+          <strong style="font-size:26px;color:var(--ink);">${paidThisMonth}</strong>
+          <span style="color:var(--muted);font-size:14px;">of ${totalDepositMembers} members paid</span>
+        </div>
+        <div style="height:10px;background:#e8edf4;border-radius:5px;overflow:hidden;">
+          <div style="height:100%;width:${collectionPct}%;background:#16a34a;border-radius:5px;transition:width 0.4s;"></div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:6px;">${collectionPct}% collected · Target ${money(totalDepositMembers * 2000)}/month</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;margin-bottom:14px;">
+      <div class="card-header"><div><h3>💳 Loans Overview</h3><p>Active loan book · Year 6</p></div></div>
+      <div class="card-body row-list">
+        <div class="row-item"><div><strong>Active loans</strong><span>Currently outstanding</span></div><strong>${activeLoans.length}</strong></div>
+        <div class="row-item"><div><strong>Total outstanding</strong><span>Principal yet to be repaid</span></div><strong>${money(totalOutstanding)}</strong></div>
+        <div class="row-item"><div><strong>Interest earned (Yr6)</strong><span>From active loans + additional</span></div><strong>${money(yr6Interest + extraInterest)}</strong></div>
+        <div class="row-item"><div><strong>Available for lending</strong><span>Bank balance − ₹5,000 reserve</span></div><strong>${money(availableLoanAmount())}</strong></div>
+      </div>
+    </div>
   `;
 }
 
