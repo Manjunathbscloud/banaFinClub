@@ -706,7 +706,7 @@ function expectedBankBalance() {
     yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
   }
   const interestCollected = year6InterestCollected();
-  const extraInterest = 3046; // Appanna extra interest outside loan table (Sarpa's 8125 already in year6InterestCollected)
+  const extraInterest = 8125 + 3046; // Sarpa ₹8,125 + Appanna ₹3,046 (both outside current_loans table)
   const totalOutstanding = currentLoans().reduce((s, loan) => s + loanOutstanding(loan), 0);
   return Math.round(postExitPool + sarpaSettlement + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
 }
@@ -1347,7 +1347,7 @@ function showDepositYearModal(yearKey) {
       { label: "Monthly Deposits", detail: "December 2025 (5 members ₹2,000 + 6th ₹1,250 + President exempt)", amount: 11250 },
       { label: "Monthly Deposits", detail: `Jan – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()} (₹2,000 × 7 members × ${_jMonths} months)`, amount: _yr6JDeposits },
       { label: "New Member EMI", detail: `Appanna Banakar – ${emi.paid} months × ${money(emi.monthlyEmi)}`, amount: _yr6Emi },
-      { label: "Interest Earned", detail: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()} (from active loans)`, amount: _yr6Interest - 8125 },
+      { label: "Interest Earned", detail: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()} (from active loans)`, amount: _yr6Interest },
       { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)", amount: 8125 + 3046 },
     ];
     bodyHtml = `
