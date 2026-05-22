@@ -1,7 +1,7 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
 const PRESIDENT_PHONE = "9591382942";
 const ASSOCIATION_UPI_ID = "mukkaneshwara@ybl";
-const ASSOCIATION_UPI_NAME = "Banakar FinClub";
+const ASSOCIATION_UPI_NAME = "Sri Mukkaneshwara Associates";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
