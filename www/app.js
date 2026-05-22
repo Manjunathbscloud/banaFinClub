@@ -940,9 +940,9 @@ async function compressImage(file, maxDim = 400, quality = 0.85) {
 async function uploadAvatarPhoto(file, profileId) {
   const blob = await compressImage(file, 400, 0.85);
   const path = `${profileId}.jpg`;
-  const { error } = await supabaseClient.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+  const { error } = await supabaseClient.storage.from("Avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
   if (error) throw error;
-  const { data } = supabaseClient.storage.from("avatars").getPublicUrl(path);
+  const { data } = supabaseClient.storage.from("Avatars").getPublicUrl(path);
   const url = data.publicUrl;
   await liveQuery(supabaseClient.from("profiles").update({ avatar_url: url }).eq("id", profileId));
   return url;

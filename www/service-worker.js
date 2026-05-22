@@ -1,4 +1,4 @@
-const CACHE_NAME = "banakar-finclub-v66";
+const CACHE_NAME = "banakar-finclub-v67";
 const APP_SHELL = [
   "./",
   "./index.html",
