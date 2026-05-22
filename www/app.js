@@ -1887,6 +1887,28 @@ function renderAdmin() {
         </div>
       </details>
 
+      ${new Date().getDate() <= 20 ? `
+      <details class="card collapsible" open>
+        <summary class="card-header"><div><h3>Payment Collection</h3><p>${new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} · Mark members as paid</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body row-list">
+          ${depositMembers().map((member) => {
+            const payment = state.monthlyPayments.find((p) => p.memberId === member.id && p.month === currentMonth());
+            const isPaid = payment?.status === "paid";
+            const due = money(memberMonthlyDue(member));
+            return `
+            <div class="row-item">
+              <div><strong>${escapeHtml(member.name)}</strong><span>${due} due</span></div>
+              <div class="actions">
+                ${isPaid
+                  ? `<span class="badge good">Paid ✓</span>`
+                  : `<button class="primary" data-action="mark-payment-paid" data-member-id="${member.id}" type="button">Mark as Paid</button>`}
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      </details>
+      ` : ""}
+
       <details class="card collapsible">
         <summary class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body row-list">
@@ -2060,6 +2082,7 @@ document.addEventListener("click", async (event) => {
     const now = new Date();
     const note = `Monthly deposit ${now.toLocaleString("en-IN", { month: "short", year: "numeric" })}`;
     const upiUrl = `upi://pay?pa=${encodeURIComponent(ASSOCIATION_UPI_ID)}&pn=${encodeURIComponent(ASSOCIATION_UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+    localStorage.setItem(`payInitiated_${currentMonth()}`, "1");
     window.location.href = upiUrl;
     return;
   }
@@ -2125,6 +2148,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
+    if (action.dataset.action === "mark-payment-paid") await markPaymentPaid(action.dataset.memberId);
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
@@ -2763,6 +2787,54 @@ async function checkIdleExpiry() {
   document.addEventListener(evt, resetIdleTimer, { passive: true })
 );
 // ─────────────────────────────────────────────────────────────────────────────
+
+function showPaymentReturnPopup() {
+  if (document.querySelector(".pay-return-overlay")) return;
+  const overlay = document.createElement("div");
+  overlay.className = "pay-return-overlay";
+  overlay.innerHTML = `
+    <div class="pay-return-popup">
+      <div class="pay-return-icon">✅</div>
+      <h3>Payment Done!</h3>
+      <p>Please share the payment screenshot to admin for approval.</p>
+      <button class="primary pay-return-close-btn">Got it</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".pay-return-close-btn").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && localStorage.getItem(`payInitiated_${currentMonth()}`)) {
+    localStorage.removeItem(`payInitiated_${currentMonth()}`);
+    showPaymentReturnPopup();
+  }
+});
+
+async function markPaymentPaid(memberId) {
+  const member = memberById(memberId);
+  if (!member) return;
+  const month = currentMonth();
+  const amount = memberMonthlyDue(member);
+  if (liveBackendReady) {
+    const { error } = await liveQuery(supabaseClient.from("monthly_payments").upsert({
+      profile_id: memberId,
+      month,
+      expected_amount: amount,
+      paid_amount: amount,
+      status: "paid",
+      source: "manual",
+    }, { onConflict: "profile_id,month" }));
+    if (error) { showToast("Failed to mark as paid."); return; }
+    await loadLiveState();
+  } else {
+    const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
+    if (existing) existing.status = "paid";
+    else state.monthlyPayments.push({ id: uid("p"), memberId, month, amount, status: "paid", source: "manual" });
+  }
+  render();
+  showToast(`${member.name} marked as paid.`);
+}
 
 async function initApp() {
   document.querySelector("#app").innerHTML = `
