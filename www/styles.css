@@ -705,6 +705,25 @@ button:focus-visible {
   margin: 10px 0;
 }
 
+.pay-now-btn {
+  margin-top: 8px;
+  padding: 5px 12px;
+  background: #ffffff;
+  color: #2563eb;
+  border: none;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pay-now-btn:active {
+  opacity: 0.8;
+  transform: scale(0.96);
+}
+
 /* ── page-title (other pages) ────────────────── */
 .page-title {
   margin: 4px 0 12px;

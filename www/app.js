@@ -1,5 +1,7 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
 const PRESIDENT_PHONE = "9591382942";
+const ASSOCIATION_UPI_ID = "PENDING@upi"; // TODO: replace with actual UPI ID
+const ASSOCIATION_UPI_NAME = "Banakar FinClub";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
@@ -1123,6 +1125,7 @@ function renderDashboard() {
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
           <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
+          ${paymentStatus !== "paid" ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
         </div>
       </div>
     </div>
@@ -1804,6 +1807,15 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "close-loan-year") {
     const modal = document.getElementById("loan-year-modal");
     if (modal) { modal.remove(); document.body.style.overflow = ""; }
+    return;
+  }
+
+  if (action.dataset.action === "pay-now") {
+    const amount = action.dataset.amount;
+    const now = new Date();
+    const note = `Monthly deposit ${now.toLocaleString("en-IN", { month: "short", year: "numeric" })}`;
+    const upiUrl = `upi://pay?pa=${encodeURIComponent(ASSOCIATION_UPI_ID)}&pn=${encodeURIComponent(ASSOCIATION_UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+    window.location.href = upiUrl;
     return;
   }
 
