@@ -1174,14 +1174,6 @@ function renderDashboard() {
           ${paymentStatus !== "paid" ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
         </div>
       </div>
-      <div class="dash-pool-row">
-        <span>Total Pool</span>
-        <strong>${money((() => {
-          const loans = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
-          return loans + expectedBankBalance();
-        })())}</strong>
-        <span>Deposits + interest − expenses · all 6 years</span>
-      </div>
     </div>
 
     <section style="margin-top:14px;">

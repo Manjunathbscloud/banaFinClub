@@ -1839,33 +1839,6 @@ th {
   font-weight: 600;
 }
 
-/* Home screen total pool row */
-.dash-pool-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  margin-top: 12px;
-  padding-top: 10px;
-}
-.dash-pool-row span:first-child {
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.dash-pool-row strong {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--blue);
-}
-.dash-pool-row span:last-child {
-  font-size: 10px;
-  color: var(--muted);
-  text-align: right;
-}
-
 /* Fund allocation total pool badge */
 .fund-pool-badge {
   display: flex;
