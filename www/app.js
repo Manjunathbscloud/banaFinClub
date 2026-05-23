@@ -473,7 +473,7 @@ async function loadLiveState() {
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("current_loans").select("*").order("created_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("loan_history").select("*").order("from_date", { ascending: false }).limit(100)),
-    liveQuery(supabaseClient.from("audit_logs").select("id,action,actor_name,created_at,meta").order("created_at", { ascending: false }).limit(20)),
+    liveQuery(supabaseClient.from("audit_logs").select("id,action,created_at,details").order("created_at", { ascending: false }).limit(20)),
     liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
     liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
   ]);
