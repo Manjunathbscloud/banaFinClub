@@ -2834,9 +2834,25 @@ function showPaymentReturnPopup() {
   overlay.className = "pay-return-overlay";
   overlay.innerHTML = `
     <div class="pay-return-popup">
-      <div class="pay-return-icon">✅</div>
-      <h3>Payment Done!</h3>
-      <p>Please share the payment screenshot to admin for approval.</p>
+      <div class="pay-return-header">
+        <div class="pay-return-icon">✅</div>
+        <h3>Payment Done!</h3>
+        <p>Your payment has been initiated successfully.</p>
+      </div>
+      <div class="pay-return-body">
+        <div class="pay-return-step">
+          <span class="pay-return-num">1</span>
+          <span>Take a screenshot of your payment confirmation</span>
+        </div>
+        <div class="pay-return-step">
+          <span class="pay-return-num">2</span>
+          <span>Share it to admin on WhatsApp for approval</span>
+        </div>
+        <div class="pay-return-step">
+          <span class="pay-return-num">3</span>
+          <span>Your status will update to <strong>Paid</strong> once approved</span>
+        </div>
+      </div>
       <button class="primary pay-return-close-btn">Got it</button>
     </div>`;
   document.body.appendChild(overlay);
