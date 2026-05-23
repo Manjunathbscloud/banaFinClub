@@ -1858,12 +1858,10 @@ function renderMeetings() {
       return `
       <div class="card" style="margin-top:12px;">
         <div class="card-header">
-          <div>
-            <h3>💰 Fund Allocation</h3>
-            <p>Total pool <strong style="font-size:16px;color:var(--blue);">${money(totalPool)}</strong> · loans + available</p>
-          </div>
+          <div><h3>💰 Fund Allocation</h3><p>Loans outstanding + available balance</p></div>
         </div>
         <div class="card-body">
+          <div class="fund-pool-badge">Total Pool <span>${money(totalPool)}</span></div>
           <div class="fund-chart">
             ${bars.map(b => `
               <div class="fund-bar-wrap">

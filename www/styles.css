@@ -1839,6 +1839,26 @@ th {
   font-weight: 600;
 }
 
+/* Fund allocation total pool badge */
+.fund-pool-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1e40af, #2563eb);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.fund-pool-badge span {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
 /* Fund allocation vertical bar chart */
 .fund-chart {
   display: flex;
