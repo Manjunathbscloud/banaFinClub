@@ -1154,19 +1154,22 @@ function renderDashboard() {
         </div>
         <span class="badge warn">Active</span>
       </div>
-      <div class="dash-summary-row">
+      <div class="dash-summary-grid">
+        <div class="dash-summary-col">
+          <p>Pool Balance</p>
+          <strong>${money((() => { const loans = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0); return loans + expectedBankBalance(); })())}</strong>
+          <small>Total association pool</small>
+        </div>
         <div class="dash-summary-col">
           <p>Bank Balance</p>
           <strong>${money(expectedBankBalance())}</strong>
           <small>Estimated</small>
         </div>
-        <div class="dash-summary-divider"></div>
         <div class="dash-summary-col">
           <p>Available Loan</p>
           <strong>${money(availableLoanAmount())}</strong>
           <small>For new loans</small>
         </div>
-        <div class="dash-summary-divider"></div>
         <div class="dash-summary-col">
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
