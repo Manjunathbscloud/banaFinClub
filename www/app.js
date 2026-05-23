@@ -1946,7 +1946,7 @@ function renderAdmin() {
         </div>
       </details>
 
-      <details class="card collapsible" open>
+      <details class="card collapsible">
         <summary class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="manual-loan">
