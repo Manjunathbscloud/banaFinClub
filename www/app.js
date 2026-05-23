@@ -877,6 +877,10 @@ function render() {
   }
   resetIdleTimer();
 
+  const openDetails = new Set(
+    [...document.querySelectorAll("details.collapsible[open]")].map((el) => el.querySelector("h3")?.textContent?.trim())
+  );
+
   document.querySelector("#app").innerHTML = `
     <div class="shell">
       <header class="topbar">
@@ -912,6 +916,13 @@ function render() {
       </nav>
     </div>
   `;
+
+  if (openDetails.size > 0) {
+    document.querySelectorAll("details.collapsible").forEach((el) => {
+      const title = el.querySelector("h3")?.textContent?.trim();
+      if (title && openDetails.has(title)) el.open = true;
+    });
+  }
 }
 
 function initials(name) {
@@ -2008,10 +2019,11 @@ function renderAdmin() {
       <details class="card collapsible">
         <summary class="card-header"><div><h3>📜 Rules Management</h3><p>Add, edit or delete association rules</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
+          ${state.rules.length === 0 ? `<div class="empty" style="margin-bottom:16px;">Rules are loading… expand again in a moment or reload.</div>` : ""}
           <form class="form" data-form="add-rule" style="margin-bottom:20px;">
             <label class="field">
               <span>Section</span>
-              <select name="section-pick" data-action="rule-section-pick" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--ink);">
+              <select name="section-pick" data-action="rule-section-pick" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--panel);color:var(--ink);">
                 ${[...new Set(state.rules.map((r) => r.section))].map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
                 <option value="__new__">+ New section…</option>
               </select>
