@@ -1180,8 +1180,10 @@ function renderDashboard() {
         <div class="dash-summary-col">
           <p>Monthly Due</p>
           <strong>${money(monthlyDue)}</strong>
-          <small style="color:${payStatusColor};">${statusText(paymentStatus)}</small>
-          ${paymentStatus !== "paid" ? `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>` : ""}
+          ${paymentStatus === "paid"
+            ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
+            : `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>
+               <small class="awaiting-label">⏳ Awaiting approval</small>`}
         </div>
       </div>
     </div>
@@ -1258,9 +1260,16 @@ function metric(label, value, help) {
   return `<article class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(help)}</small></article>`;
 }
 
-function showRulesModal() {
+async function showRulesModal() {
   const existing = document.getElementById("rules-modal");
   if (existing) existing.remove();
+
+  if (liveBackendReady && state.rules.length === 0) {
+    const rulesData = await liveOptionalList(
+      supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })
+    );
+    state.rules = rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 }));
+  }
 
   const sectionIcons = { "Membership Rules": "👥", "Loan Rules": "💳", "New Member Rules": "🆕", "Administrative Guidelines": "📋", "Exit Rules": "🚪" };
   const grouped = state.rules.reduce((acc, r) => {
@@ -1905,6 +1914,39 @@ function renderAdmin() {
     <section class="page-title"><p>${t("admin")}</p><h2>Operations</h2></section>
     <section class="grid">
       <details class="card collapsible" open>
+        <summary class="card-header"><div><h3>Payment Collection</h3><p>${new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} · Mark members as paid</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table class="payment-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Amount Due</th>
+                <th>Status</th>
+                <th>Action</th>
+                <th>Next Payment</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${depositMembers().map((member) => {
+                const payment = state.monthlyPayments.find((p) => p.memberId === member.id && p.month === currentMonth());
+                const isPaid = payment?.status === "paid";
+                const due = money(memberMonthlyDue(member));
+                const nextMonthName = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleString("en-IN", { month: "long" });
+                return `
+                <tr>
+                  <td><strong>${escapeHtml(member.name)}</strong></td>
+                  <td>${due}</td>
+                  <td>${isPaid ? `<span class="badge good">✓ Paid</span>` : `<span class="badge pending">Pending</span>`}</td>
+                  <td>${isPaid ? `—` : `<button class="primary small" data-action="mark-payment-paid" data-member-id="${member.id}" type="button">Mark Paid</button>`}</td>
+                  <td class="next-pay-date">${isPaid ? `1–5 ${nextMonthName}` : `—`}</td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="card collapsible" open>
         <summary class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="manual-loan">
@@ -1933,28 +1975,6 @@ function renderAdmin() {
           `).join("") || `<div class="empty">No signup requests.</div>`}
         </div>
       </details>
-
-      ${new Date().getDate() <= 20 ? `
-      <details class="card collapsible" open>
-        <summary class="card-header"><div><h3>Payment Collection</h3><p>${new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} · Mark members as paid</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="card-body row-list">
-          ${depositMembers().map((member) => {
-            const payment = state.monthlyPayments.find((p) => p.memberId === member.id && p.month === currentMonth());
-            const isPaid = payment?.status === "paid";
-            const due = money(memberMonthlyDue(member));
-            return `
-            <div class="row-item">
-              <div><strong>${escapeHtml(member.name)}</strong><span>${due} due</span></div>
-              <div class="actions">
-                ${isPaid
-                  ? `<span class="badge good">Paid ✓</span>`
-                  : `<button class="primary" data-action="mark-payment-paid" data-member-id="${member.id}" type="button">Mark as Paid</button>`}
-              </div>
-            </div>`;
-          }).join("")}
-        </div>
-      </details>
-      ` : ""}
 
       <details class="card collapsible">
         <summary class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div><span class="collapse-icon">⌄</span></summary>
