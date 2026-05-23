@@ -465,17 +465,14 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData] = await Promise.all([
+  // Phase 1 — critical data needed for home screen render
+  const [settingsRows, profiles, payments, loanRequests, loans, notifications] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
-    liveQuery(supabaseClient.from("profiles").select("*").order("created_at", { ascending: true })),
-    liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
-    liveQuery(supabaseClient.from("monthly_payments").select("*").order("created_at", { ascending: false })),
+    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("monthly_payments").select("*").gte("month", "2025-11").order("created_at", { ascending: false })),
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("current_loans").select("*").order("created_at", { ascending: false })),
-    liveOptionalList(supabaseClient.from("loan_history").select("*").order("from_date", { ascending: false })),
-    liveQuery(supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20)),
     liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
-    liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -502,24 +499,34 @@ async function loadLiveState() {
     signupRequests: profiles
       .filter((profile) => profile.status === "pending" && profile.auth_user_id)
       .map((profile) => ({ id: profile.id, name: profile.full_name, phone: profile.phone, date: String(profile.created_at || "").slice(0, 10) })),
-    deposits: deposits.map((item) => ({
-      id: item.id,
-      year: item.year,
-      label: item.label,
-      principal: Number(item.principal || 0),
-      interest: Number(item.interest || 0),
-      expenditure: Number(item.expenditure || 0),
-      balance: Number(item.balance || 0),
-    })),
+    deposits: initialState.deposits,
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
-    loanHistory: loanHistory.map(liveLoanHistoryToLocal),
+    loanHistory: [],
     notifications: notifications.map(liveNotificationToLocal),
     statementRows: [],
-    rules: rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 })),
-    audit: audit.reverse().map(liveAuditToLocal),
+    rules: initialState.rules,
+    audit: [],
   };
+
+  // Phase 2 — non-critical data loaded after render (deposits, history, rules, audit)
+  Promise.all([
+    liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
+    liveOptionalList(supabaseClient.from("loan_history").select("*").order("from_date", { ascending: false }).limit(100)),
+    liveQuery(supabaseClient.from("audit_logs").select("id,action,actor_name,created_at,meta").order("created_at", { ascending: false }).limit(20)),
+    liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
+  ]).then(([deposits, loanHistory, audit, rulesData]) => {
+    state.deposits = deposits.map((item) => ({
+      id: item.id, year: item.year, label: item.label,
+      principal: Number(item.principal || 0), interest: Number(item.interest || 0),
+      expenditure: Number(item.expenditure || 0), balance: Number(item.balance || 0),
+    }));
+    state.loanHistory = loanHistory.map(liveLoanHistoryToLocal);
+    state.audit = audit.reverse().map(liveAuditToLocal);
+    state.rules = rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 }));
+    if (["deposits", "admin"].includes(state.activeTab)) render();
+  });
 }
 
 function money(value) {
