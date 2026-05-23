@@ -698,7 +698,6 @@ function bankBalance() {
 
 function expectedBankBalance() {
   const sarpaShare = 121833;
-  const sarpaSettlement = 25166;
   const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
   const postExitPool = pool5y - sarpaShare;
   const now = new Date();
@@ -717,7 +716,7 @@ function expectedBankBalance() {
   const totalOutstanding = currentLoans()
     .filter((l) => l.notes !== "emi_entry")
     .reduce((s, loan) => s + loanOutstanding(loan), 0);
-  return Math.round(postExitPool + sarpaSettlement + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
+  return Math.round(postExitPool + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
 }
 
 function availableLoanAmount() {
