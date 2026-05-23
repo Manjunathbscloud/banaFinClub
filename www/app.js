@@ -1840,6 +1840,43 @@ function renderMeetings() {
       </div>
     </div>
 
+    ${(() => {
+      const loanGroups = {};
+      currentLoans()
+        .filter(l => l.notes !== "emi_entry")
+        .forEach(loan => {
+          const name = (loan.memberName || "Unknown").split(" ")[0];
+          loanGroups[name] = (loanGroups[name] || 0) + loanOutstanding(loan);
+        });
+      const availBal = expectedBankBalance();
+      const totalPool = Object.values(loanGroups).reduce((s, v) => s + v, 0) + availBal;
+      const bars = [
+        ...Object.entries(loanGroups).map(([name, amt]) => ({ label: name, amount: amt, type: "loan" })),
+        { label: "Available", amount: availBal, type: "avail" },
+      ];
+      const maxAmt = Math.max(...bars.map(b => b.amount), 1);
+      return `
+      <div class="card" style="margin-top:12px;">
+        <div class="card-header">
+          <div><h3>💰 Fund Allocation</h3><p>Total pool ${money(totalPool)} · loans + available balance</p></div>
+        </div>
+        <div class="card-body">
+          <div class="fund-chart">
+            ${bars.map(b => `
+              <div class="fund-bar-wrap">
+                <span class="fund-bar-val">${compactMoney(b.amount)}</span>
+                <div class="fund-bar ${b.type}" style="height:${Math.max(4, Math.round(b.amount / maxAmt * 140))}px"></div>
+                <span class="fund-bar-label">${escapeHtml(b.label)}</span>
+              </div>`).join("")}
+          </div>
+          <div class="analytics-legend" style="margin-top:28px;">
+            <div class="analytics-legend-item"><span class="analytics-legend-dot" style="background:#f59e0b;"></span>Loan outstanding</div>
+            <div class="analytics-legend-item"><span class="analytics-legend-dot" style="background:#16a34a;"></span>Available</div>
+          </div>
+        </div>
+      </div>`;
+    })()}
+
   `;
 }
 
