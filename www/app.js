@@ -223,6 +223,7 @@ const initialState = {
     { id: "p4", memberId: "m4", month: "2026-05", amount: 2000, status: "paid", source: "manual" },
   ],
   loans: [],
+  extensionRequests: [],
   loanRequests: [
     { id: "q1", memberId: "m7", amount: 25000, reason: "Medical support", status: "pending", date: "2026-05-14" },
   ],
@@ -435,6 +436,17 @@ function liveNotificationToLocal(n) {
   };
 }
 
+function liveExtensionToLocal(e) {
+  return {
+    id: e.id,
+    loanId: e.loan_id,
+    profileId: e.profile_id,
+    status: e.status,
+    requestedAt: e.requested_at,
+    decidedAt: e.decided_at || null,
+  };
+}
+
 function liveAuditToLocal(log) {
   return {
     id: log.id,
@@ -465,7 +477,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -476,6 +488,7 @@ async function loadLiveState() {
     liveQuery(supabaseClient.from("audit_logs").select("id,action,created_at,details").order("created_at", { ascending: false }).limit(20)),
     liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
     liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
+    liveOptionalList(supabaseClient.from("loan_extension_requests").select("*").order("requested_at", { ascending: false })),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -510,6 +523,7 @@ async function loadLiveState() {
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
+    extensionRequests: extensionRequests.map(liveExtensionToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
     notifications: notifications.map(liveNotificationToLocal),
     statementRows: [],
@@ -658,6 +672,16 @@ function loanBelongsToMember(loan, member) {
 
 function isCurrentLoan(loan) {
   return loan.status === "active" && loanOutstanding(loan) > 0;
+}
+
+function isLoanDueThisMonth(loan) {
+  const renewal = loanRenewalDate(loan);
+  return Boolean(renewal && renewal.slice(0, 7) === currentMonth());
+}
+
+function loanExtensionStatus(loanId) {
+  const ext = (state.extensionRequests || []).find((e) => e.loanId === loanId);
+  return ext ? { status: ext.status, id: ext.id } : null;
 }
 
 function currentLoans() {
@@ -1337,6 +1361,18 @@ function showLoansModal() {
     const outstanding = loanOutstanding(loan);
     const monthlyInt = loanBaseMonthlyInterest(loan);
     const statusColor = isActive ? "#16a34a" : "#6b7280";
+    const dueThisMonth = isActive && isLoanDueThisMonth(loan);
+    const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
+    let extHtml = "";
+    if (dueThisMonth) {
+      if (!extInfo || extInfo.status === "rejected") {
+        extHtml = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="margin-top:10px;width:100%;">🔄 Request Extension (+1 year)</button>`;
+      } else if (extInfo.status === "pending") {
+        extHtml = `<div style="margin-top:10px;text-align:center;font-size:13px;color:#b45309;">⏳ Extension requested · Awaiting admin approval</div>`;
+      } else if (extInfo.status === "approved") {
+        extHtml = `<div style="margin-top:10px;text-align:center;font-size:13px;color:#16a34a;">✓ Extension approved</div>`;
+      }
+    }
     return `
       <div class="rules-section-block" style="border-left:3px solid ${statusColor};">
         <h4 style="margin-bottom:12px;">💳 ${isActive ? "Active Loan" : "Cleared Loan"}</h4>
@@ -1351,6 +1387,7 @@ function showLoansModal() {
         <div style="margin-top:12px;">
           <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
         </div>
+        ${extHtml}
       </div>`;
   }).join("");
 
@@ -1707,20 +1744,33 @@ function showLoanYearModal(yearKey) {
   if (yearKey === "l2026") {
     title = "Sixth Year (2025-26) · Current";
     const loans = currentLoanBookRows();
+    const user = currentUser();
     const tableRows = loans.map(loan => {
-      const actions = isAdmin()
-        ? `${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Clear</button> ` : ""}<button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Del</button>`
-        : "-";
+      const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
+      const myLoan = loanBelongsToMember(loan, user);
+      const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
+      let extCell = "-";
+      if (isAdmin()) {
+        extCell = `${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Clear</button> ` : ""}<button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Del</button>`;
+      } else if (dueThisMonth && myLoan) {
+        if (!extInfo || extInfo.status === "rejected") {
+          extCell = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Extend</button>`;
+        } else if (extInfo.status === "pending") {
+          extCell = `<span style="font-size:11px;color:#b45309;">⏳ Awaiting</span>`;
+        } else if (extInfo.status === "approved") {
+          extCell = `<span style="font-size:11px;color:#16a34a;">✓ Extended</span>`;
+        }
+      }
       return `<tr>
         <td data-label="Member"><strong>${escapeHtml(loanMemberName(loan))}</strong><br><small style="color:#9ca3af;">${fmtMonthYear(loan.from)}</small></td>
         <td data-label="Amount">${money(loan.amount)}</td>
         <td data-label="Interest/mo">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td>
         <td data-label="Renewal">${fmtMonthYear(loanRenewalDate(loan))}</td>
         <td data-label="Status">${statusBadge(loan.status)}</td>
-        ${isAdmin() ? `<td data-label="Action">${actions}</td>` : ""}
+        <td data-label="Action">${extCell}</td>
       </tr>`;
     }).join("") || `<tr><td colspan="6" class="empty">No loans entered yet.</td></tr>`;
-    const thead = `<thead><tr><th>Member</th><th>Amount</th><th>Interest/mo</th><th>Renewal</th><th>Status</th>${isAdmin() ? "<th>Action</th>" : ""}</tr></thead>`;
+    const thead = `<thead><tr><th>Member</th><th>Amount</th><th>Interest/mo</th><th>Renewal</th><th>Status</th><th>Action</th></tr></thead>`;
     bodyHtml = `<div class="table-wrap" style="overflow-x:auto;"><table style="min-width:0;width:100%;">${thead}<tbody>${tableRows}</tbody></table></div>`;
   } else {
     const data = HISTORICAL[yearKey];
@@ -2030,6 +2080,33 @@ function renderAdmin() {
       </details>
 
       <details class="card collapsible">
+        <summary class="card-header"><div><h3>Loan Extension Requests</h3><p>Approve or reject member extension requests</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body row-list">
+          ${(() => {
+            const pending = (state.extensionRequests || []).filter((e) => e.status === "pending");
+            if (!pending.length) return `<div class="empty">No pending extension requests.</div>`;
+            return pending.map((ext) => {
+              const loan = state.loans.find((l) => l.id === ext.loanId);
+              const memberName = loan ? loanMemberName(loan) : memberById(ext.profileId)?.name || "-";
+              const amount = loan ? money(loan.amount) : "-";
+              const renewal = loan ? loanRenewalDate(loan) : "-";
+              return `
+                <div class="row-item">
+                  <div>
+                    <strong>${escapeHtml(memberName)} · ${amount}</strong>
+                    <span>Renewal: ${escapeHtml(renewal)} · Requested extension +1 year</span>
+                  </div>
+                  <div class="actions">
+                    <button class="primary" data-action="approve-extension" data-id="${ext.id}" data-loan-id="${ext.loanId}" data-profile-id="${ext.profileId}" type="button">${t("approve")}</button>
+                    <button class="danger" data-action="reject-extension" data-id="${ext.id}" data-profile-id="${ext.profileId}" type="button">${t("reject")}</button>
+                  </div>
+                </div>`;
+            }).join("");
+          })()}
+        </div>
+      </details>
+
+      <details class="card collapsible">
         <summary class="card-header"><div><h3>${t("statementImport")}</h3><p>CSV upload parser for ICICI statement sample</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="statement-text">
@@ -2258,6 +2335,9 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
+    if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
+    if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId, action.dataset.profileId);
+    if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
 
     if (action.dataset.action === "save-rule") {
       const id = action.dataset.id;
@@ -2797,6 +2877,101 @@ async function rejectLoan(id) {
   request.status = "rejected";
   state.audit.push({ id: uid("a"), date: today(), text: `Rejected loan request for ${memberById(request.memberId)?.name}.` });
   saveState();
+  render();
+}
+
+async function notifyAllActiveMembers(type, title, body, relatedId = null) {
+  if (!liveBackendReady) return;
+  const active = state.members.filter((m) => m.status === "active");
+  const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
+  await liveQuery(supabaseClient.from("notifications").insert(rows));
+}
+
+async function notifyMember(profileId, type, title, body, relatedId = null) {
+  if (!liveBackendReady || !profileId) return;
+  await liveQuery(supabaseClient.from("notifications").insert({ profile_id: profileId, type, title, body, related_id: relatedId }));
+}
+
+async function requestExtension(loanId) {
+  const loan = state.loans.find((l) => l.id === loanId);
+  if (!loan) { showToast("Loan not found."); return; }
+  if (!liveBackendReady) { showToast("Live backend required for extension requests."); return; }
+
+  const existing = (state.extensionRequests || []).find((e) => e.loanId === loanId && e.status === "pending");
+  if (existing) { showToast("Extension already requested."); return; }
+
+  await liveQuery(supabaseClient.from("loan_extension_requests").insert({
+    loan_id: loanId,
+    profile_id: currentProfileId(),
+    status: "pending",
+  }));
+
+  const memberName = loanMemberName(loan);
+  await notifyAllActiveMembers(
+    "loan_extension_requested",
+    "Loan extension requested",
+    `${memberName} has requested a 1-year extension for their loan of ${money(loan.amount)} (renewal: ${loanRenewalDate(loan) || "-"}).`,
+    loanId
+  );
+
+  await addLiveAudit(`${memberName} requested loan extension for ${money(loan.amount)}.`, "loan_extension_requested");
+  await loadLiveState();
+  showToast("Extension request submitted. All members notified.");
+  render();
+}
+
+async function approveExtension(id, loanId, profileId) {
+  const loan = state.loans.find((l) => l.id === loanId);
+  if (!loan || !liveBackendReady) { showToast("Cannot approve extension."); return; }
+
+  const newRenewal = new Date(loanRenewalDate(loan) || today());
+  newRenewal.setFullYear(newRenewal.getFullYear() + 1);
+  const newRenewalStr = newRenewal.toISOString().slice(0, 10);
+
+  await liveQuery(supabaseClient.from("loan_extension_requests").update({
+    status: "approved",
+    decided_at: new Date().toISOString(),
+    decided_by: currentProfileId(),
+  }).eq("id", id));
+
+  await liveQuery(supabaseClient.from("current_loans").update({
+    renewal_or_return_date: newRenewalStr,
+  }).eq("id", loanId));
+
+  const memberName = loanMemberName(loan);
+  await notifyAllActiveMembers(
+    "loan_extension_approved",
+    "Loan extension approved",
+    `${memberName}'s loan of ${money(loan.amount)} has been extended. New renewal date: ${newRenewalStr}.`,
+    loanId
+  );
+
+  await addLiveAudit(`Approved loan extension for ${memberName}. New renewal: ${newRenewalStr}.`, "loan_extension_approved");
+  await loadLiveState();
+  showToast("Extension approved. New renewal date set to " + newRenewalStr + ".");
+  render();
+}
+
+async function rejectExtension(id, profileId) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+
+  await liveQuery(supabaseClient.from("loan_extension_requests").update({
+    status: "rejected",
+    decided_at: new Date().toISOString(),
+    decided_by: currentProfileId(),
+  }).eq("id", id));
+
+  await notifyMember(
+    profileId,
+    "loan_extension_rejected",
+    "Loan extension request rejected",
+    "Your loan extension request has been rejected by the admin. Please contact the president for details.",
+    id
+  );
+
+  await addLiveAudit(`Rejected loan extension request ${id}.`, "loan_extension_rejected");
+  await loadLiveState();
+  showToast("Extension request rejected.");
   render();
 }
 
