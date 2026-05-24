@@ -2988,4 +2988,60 @@ async function initApp() {
   render();
 }
 
-initApp();
+function initPullToRefresh() {
+  const THRESHOLD = 72;
+  let startY = 0;
+  let pulling = false;
+  let refreshing = false;
+
+  function indicator() {
+    let el = document.getElementById("ptr-bar");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "ptr-bar";
+      el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--panel,#fff);box-shadow:0 1px 4px rgba(0,0,0,.08);transition:height .15s;";
+      el.innerHTML = '<div id="ptr-spinner" style="width:22px;height:22px;border:2.5px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;"></div>';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  document.addEventListener("touchstart", (e) => {
+    if (refreshing) return;
+    if ((document.documentElement.scrollTop || document.body.scrollTop) === 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!pulling || refreshing) return;
+    const dist = e.touches[0].clientY - startY;
+    if (dist > 8) {
+      indicator().style.height = Math.min(dist * 0.55, 56) + "px";
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchend", async (e) => {
+    if (!pulling) return;
+    pulling = false;
+    const dist = e.changedTouches[0].clientY - startY;
+    const bar = indicator();
+    if (dist >= THRESHOLD && liveBackendReady && !refreshing) {
+      refreshing = true;
+      bar.style.height = "52px";
+      const spinner = document.getElementById("ptr-spinner");
+      if (spinner) spinner.style.animation = "spin 0.7s linear infinite";
+      try {
+        await loadLiveState();
+        render();
+      } catch (_) {
+        showToast("Refresh failed. Check connection.");
+      }
+      refreshing = false;
+    }
+    bar.style.height = "0";
+  });
+}
+
+initApp().then(() => initPullToRefresh());
