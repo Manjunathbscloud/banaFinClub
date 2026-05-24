@@ -516,6 +516,10 @@ async function loadLiveState() {
     rules: rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 })),
     audit: audit.reverse().map(liveAuditToLocal),
   };
+
+  // Persist available loan amount so SQL cron notifications can read it
+  const available = Math.max(0, expectedBankBalance() - Number(state.settings.minimumReserve || 5000));
+  supabaseClient.from("settings").upsert({ id: "available_loan_balance", value: { amount: available } }).then(() => {});
 }
 
 function money(value) {
