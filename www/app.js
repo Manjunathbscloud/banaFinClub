@@ -2510,7 +2510,7 @@ async function resetPassword(data) {
     const email = (data.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) throw new Error("Enter a valid email address.");
     await liveQuery(supabaseClient.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + window.location.pathname,
+      redirectTo: "https://manjunathbscloud.github.io/banaFinClub/",
     }));
     showToast("Password reset email sent. Check your inbox.");
     renderAuth("login");
