@@ -1,6 +1,5 @@
 -- Run this in Supabase SQL Editor.
--- Sends loan renewal reminders to members on the 3rd of every month
--- for loans due for renewal in that month.
+-- Sends loan renewal reminders to members on the 1st of every month at 9 AM IST.
 
 -- 1. Enable pg_cron extension (safe to run if already enabled)
 create extension if not exists pg_cron;
@@ -29,7 +28,6 @@ begin
     where status = 'active'
       and date_trunc('month', renewal_or_return_date::date) = date_trunc('month', current_date)
   loop
-    -- Try profile_id on the loan first, fall back to phone lookup
     profile_id := loan_rec.profile_id;
 
     if profile_id is null then
@@ -68,12 +66,14 @@ end;
 $$;
 
 
--- 3. Schedule: runs at 9 AM on the 3rd of every month
+-- 3. Reschedule: 1st of every month at 9 AM IST (3:30 AM UTC)
 --    To view scheduled jobs: select * from cron.job;
 --    To remove: select cron.unschedule('loan-renewal-reminder');
 
+select cron.unschedule('loan-renewal-reminder');
+
 select cron.schedule(
   'loan-renewal-reminder',
-  '0 9 3 * *',
+  '30 3 1 * *',
   'select public.notify_members_loan_renewal_due();'
 );
