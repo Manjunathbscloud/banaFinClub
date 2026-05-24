@@ -517,6 +517,10 @@ async function loadLiveState() {
     audit: audit.reverse().map(liveAuditToLocal),
   };
 
+  // Clear payInitiated flag if this user's current month payment is already paid
+  const myPayment = state.monthlyPayments.find((p) => p.memberId === state.currentUserId && p.month === currentMonth());
+  if (myPayment?.status === "paid") localStorage.removeItem(`payInitiated_${currentMonth()}`);
+
   // Persist available loan amount so SQL cron notifications can read it
   const available = Math.max(0, expectedBankBalance() - Number(state.settings.minimumReserve || 5000));
   supabaseClient.from("settings").upsert({ id: "available_loan_balance", value: { amount: available } }).then(() => {});
@@ -1117,6 +1121,7 @@ function renderDashboard() {
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening"; })();
   const paymentStatus = monthlyPayment?.status || "pending";
   const payStatusColor = paymentStatus === "paid" ? "#16a34a" : "#b45309";
+  const payInitiated = localStorage.getItem(`payInitiated_${currentMonth()}`) === "1";
 
   const tiles = [
     { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
@@ -1191,8 +1196,9 @@ function renderDashboard() {
           <strong>${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
             ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
-            : `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>
-               <small class="awaiting-label">⏳ Awaiting approval</small>`}
+            : payInitiated
+              ? `<small class="awaiting-label">⏳ Awaiting approval</small>`
+              : `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>`}
         </div>
       </div>
     </div>
