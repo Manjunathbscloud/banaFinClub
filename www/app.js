@@ -1047,9 +1047,9 @@ function signupForm() {
 function resetForm() {
   return `
     <form class="form" data-form="reset">
-      <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required /></label>
+      <label class="field"><span>Email</span><input name="email" type="email" inputmode="email" autocomplete="email" required /></label>
       <button class="primary" type="submit">${t("forgotPassword")}</button>
-      <p class="hint">${liveBackendReady ? "A password reset link will be sent to your registered email." : "Demo mode records a reset request for admin follow-up."}</p>
+      <p class="hint">${liveBackendReady ? "Enter the email you signed up with. A password reset link will be sent to it." : "Demo mode records a reset request for admin follow-up."}</p>
     </form>
   `;
 }
@@ -2507,8 +2507,8 @@ async function signup(data) {
 
 async function resetPassword(data) {
   if (liveBackendReady) {
-    const phone = requireValidPhone(data.phone);
-    const email = await resolveAuthEmail(phone);
+    const email = (data.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) throw new Error("Enter a valid email address.");
     await liveQuery(supabaseClient.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin + window.location.pathname,
     }));
@@ -2517,7 +2517,7 @@ async function resetPassword(data) {
     return;
   }
 
-  state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.phone}.` });
+  state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.email || "unknown"}.` });
   saveState();
   showToast("Reset request recorded. Backend OTP will be connected later.");
 }
@@ -2966,6 +2966,9 @@ async function initApp() {
       supabaseClient.auth.onAuthStateChange((event) => {
         if (event === "PASSWORD_RECOVERY") renderSetNewPassword();
       });
+      // Also check immediately in case the event already fired before listener registered
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) renderSetNewPassword();
       return;
     }
     try {
