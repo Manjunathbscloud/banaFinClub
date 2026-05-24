@@ -2388,9 +2388,9 @@ async function login(data) {
         await loadLiveState();
         const claimedMember = currentUser();
         if (claimedMember) {
-          state.activeTab = "dashboard";
           await addLiveAudit(`${claimedMember.name} logged in.`, "login");
           await loadLiveState();
+          state.activeTab = "dashboard";
           render();
           return;
         }
@@ -2426,9 +2426,9 @@ async function login(data) {
       render();
       return;
     }
-    state.activeTab = "dashboard";
     await addLiveAudit(`${member.name} logged in.`, "login");
     await loadLiveState();
+    state.activeTab = "dashboard";
     render();
     return;
   }
