@@ -605,11 +605,11 @@ function loanBaseMonthlyInterest(loan) {
 function yr6InterestMonths(loan) {
   if (!loan.from) return 0;
   const loanDate = new Date(loan.from);
-  // Interest starts from the 1st of the month AFTER the loan was taken
   const interestStart = new Date(loanDate.getFullYear(), loanDate.getMonth() + 1, 1);
   const yr6StartDate = new Date("2025-11-01");
   const effectiveStart = interestStart > yr6StartDate ? interestStart : yr6StartDate;
-  const now = new Date();
+  // Cap at May 2026 — June+ interest comes from actual monthly_payments records
+  const now = new Date(Math.min(new Date().getTime(), new Date(2026, 4, 31).getTime()));
   if (now < effectiveStart) return 0;
   return Math.max(0, (now.getFullYear() - effectiveStart.getFullYear()) * 12 + (now.getMonth() - effectiveStart.getMonth()) + 1);
 }
@@ -696,23 +696,28 @@ function expectedBankBalance() {
   const sarpaShare = 121833;
   const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
   const postExitPool = pool5y - sarpaShare;
-  const now = new Date();
-  const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
-  let yr6Deposits = 0;
-  if (nowYM >= 202511) yr6Deposits += 21000 + 14000; // Nov renewal + Nov deposits
-  if (nowYM >= 202512) yr6Deposits += 11250;          // Dec deposits
-  if (nowYM >= 202601) {
-    const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
-    yr6Deposits += 7 * 2000 * jMonths;
-    const emiLoan = state.loans.find((l) => l.notes === "emi_entry");
-    if (emiLoan) yr6Deposits += Number(emiLoan.principalPaid || 0);
-  }
-  const interestCollected = year6InterestCollected();
-  const extraInterest = 8125 + 3046; // Sarpa ₹8,125 + Appanna ₹3,046 pre-year-6 interest
+
+  // Fixed historical deposits Nov 2025 – May 2026 (verified correct)
+  const historicalDeposits = (21000 + 14000) + 11250 + (7 * 2000 * 5);
+
+  // Appanna EMI principal paid (tracked via principal_paid on emi_entry loan)
+  const emiLoan = state.loans.find((l) => l.notes === "emi_entry");
+  const appannaEmiPaid = emiLoan ? Number(emiLoan.principalPaid || 0) : 0;
+
+  // Pre-June 2026 interest (expected, capped at May 2026 inside yr6InterestMonths)
+  const preJuneInterest = year6InterestCollected();
+  const extraInterest = 8125 + 3046;
+
+  // Actual payments from June 2026 onwards — admin-confirmed via payment collection
+  const actualJunePlus = state.monthlyPayments
+    .filter((p) => p.status === "paid" && p.month >= "2026-06")
+    .reduce((sum, p) => sum + Number(p.paidAmount || p.amount || 0), 0);
+
   const totalOutstanding = currentLoans()
     .filter((l) => l.notes !== "emi_entry")
     .reduce((s, loan) => s + loanOutstanding(loan), 0);
-  return Math.round(postExitPool + yr6Deposits + interestCollected + extraInterest - totalOutstanding);
+
+  return Math.round(postExitPool + historicalDeposits + appannaEmiPaid + preJuneInterest + extraInterest + actualJunePlus - totalOutstanding);
 }
 
 function availableLoanAmount() {
@@ -2696,23 +2701,30 @@ async function revokeMemberAccess(id) {
 async function approveLoan(id) {
   const request = state.loanRequests.find((item) => item.id === id);
   if (!request) return;
+  const member = memberById(request.memberId);
+  const renewalDate = new Date();
+  renewalDate.setFullYear(renewalDate.getFullYear() + 1);
+  const renewalDateStr = renewalDate.toISOString().slice(0, 10);
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").update({
       status: "approved",
       decided_at: new Date().toISOString(),
       decided_by: currentProfileId(),
     }).eq("id", id));
-    await liveQuery(supabaseClient.from("loans").insert({
+    await liveQuery(supabaseClient.from("current_loans").insert({
       profile_id: request.memberId,
-      request_id: request.id,
+      member_name: member?.name || "",
+      member_phone: member?.phone || "",
       principal: request.amount,
       principal_paid: 0,
       interest_rate_monthly: state.settings.loanInterestRateMonthly,
+      monthly_interest: 0,
       status: "active",
       purpose: request.reason,
       disbursed_at: today(),
+      renewal_or_return_date: renewalDateStr,
     }));
-    await addLiveAudit(`Approved loan ${money(request.amount)} for ${memberById(request.memberId)?.name}.`, "loan_approved");
+    await addLiveAudit(`Approved loan ${money(request.amount)} for ${member?.name}.`, "loan_approved");
     await loadLiveState();
     showToast("Loan approved.");
     render();
@@ -2720,8 +2732,8 @@ async function approveLoan(id) {
   }
 
   request.status = "approved";
-  state.loans.push({ id: uid("l"), memberId: request.memberId, amount: request.amount, principalPaid: 0, from: today(), status: "active", purpose: request.reason });
-  state.audit.push({ id: uid("a"), date: today(), text: `Approved loan ${money(request.amount)} for ${memberById(request.memberId)?.name}.` });
+  state.loans.push({ id: uid("l"), memberId: request.memberId, memberName: member?.name || "", amount: request.amount, principalPaid: 0, from: today(), renewalOrReturnDate: renewalDateStr, status: "active", purpose: request.reason });
+  state.audit.push({ id: uid("a"), date: today(), text: `Approved loan ${money(request.amount)} for ${member?.name}.` });
   saveState();
   showToast("Loan approved.");
   render();
