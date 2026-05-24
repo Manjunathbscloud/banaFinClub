@@ -60,6 +60,7 @@ serve(async (req) => {
       from: `Banakar FinClub <${GMAIL_USER}>`,
       to: profile.email,
       subject: record.title,
+      content: "auto",
       html,
     });
 
