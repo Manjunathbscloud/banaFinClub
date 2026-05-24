@@ -45,7 +45,10 @@ $$;
 
 
 -- Schedule: 6th of every month at 9 AM IST (3:30 AM UTC)
-select cron.unschedule('missed-deposit-reminder');
+do $$ begin
+  perform cron.unschedule('missed-deposit-reminder');
+exception when others then null;
+end $$;
 
 select cron.schedule(
   'missed-deposit-reminder',

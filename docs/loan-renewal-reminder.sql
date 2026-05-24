@@ -70,7 +70,10 @@ $$;
 --    To view scheduled jobs: select * from cron.job;
 --    To remove: select cron.unschedule('loan-renewal-reminder');
 
-select cron.unschedule('loan-renewal-reminder');
+do $$ begin
+  perform cron.unschedule('loan-renewal-reminder');
+exception when others then null;
+end $$;
 
 select cron.schedule(
   'loan-renewal-reminder',

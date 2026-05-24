@@ -53,7 +53,10 @@ $$;
 
 
 -- Schedule 1: 5th of every month at 5 PM IST (11:30 AM UTC)
-select cron.unschedule('pool-balance-5th');
+do $$ begin
+  perform cron.unschedule('pool-balance-5th');
+exception when others then null;
+end $$;
 
 select cron.schedule(
   'pool-balance-5th',
@@ -63,7 +66,10 @@ select cron.schedule(
 
 
 -- Schedule 2: 6th of every month at 9 AM IST (3:30 AM UTC)
-select cron.unschedule('pool-balance-6th');
+do $$ begin
+  perform cron.unschedule('pool-balance-6th');
+exception when others then null;
+end $$;
 
 select cron.schedule(
   'pool-balance-6th',
