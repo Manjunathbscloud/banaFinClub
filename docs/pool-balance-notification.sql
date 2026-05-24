@@ -22,6 +22,11 @@ begin
   from public.settings
   where id = 'available_loan_balance';
 
+  if available_balance is null or available_balance = 0 then
+    raise notice 'available_loan_balance not set yet — open the app to sync it';
+    return;
+  end if;
+
   balance_msg := 'Available balance for loans this month: ₹' || to_char(round(available_balance), 'FM99,99,99,999') || '.';
 
   for member_rec in
