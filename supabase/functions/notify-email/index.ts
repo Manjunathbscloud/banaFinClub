@@ -28,16 +28,21 @@ serve(async (req) => {
       return new Response("no email for recipient", { status: 200 });
     }
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
-        <h2 style="color:#1a1a1a;margin-bottom:8px;">Banakar FinClub</h2>
-        <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px;" />
-        <h3 style="color:#333;">${record.title}</h3>
-        <p style="color:#555;line-height:1.6;">${record.body}</p>
-        <hr style="border:none;border-top:1px solid #eee;margin-top:24px;" />
-        <p style="color:#999;font-size:12px;">Banakar FinClub · Private member finance club</p>
-      </div>
-    `;
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;">
+  <div style="font-family:sans-serif;max-width:480px;margin:32px auto;padding:24px;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+    <h2 style="color:#1a1a1a;margin:0 0 4px 0;">Banakar FinClub</h2>
+    <p style="color:#9ca3af;font-size:13px;margin:0 0 20px 0;">Private member finance club</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:20px;" />
+    <h3 style="color:#1d4ed8;margin:0 0 10px 0;">${record.title}</h3>
+    <p style="color:#374151;line-height:1.7;margin:0 0 20px 0;">${record.body}</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:16px;" />
+    <p style="color:#9ca3af;font-size:12px;margin:0;">This is an automated notification from Banakar FinClub.</p>
+  </div>
+</body>
+</html>`;
 
     const client = new SMTPClient({
       connection: {
