@@ -1047,9 +1047,9 @@ function signupForm() {
 function resetForm() {
   return `
     <form class="form" data-form="reset">
-      <label class="field"><span>Email</span><input name="email" type="email" inputmode="email" autocomplete="email" required /></label>
+      <label class="field"><span>Phone or Email</span><input name="phone_or_email" type="text" inputmode="text" autocomplete="email" placeholder="10-digit phone or email" required /></label>
       <button class="primary" type="submit">${t("forgotPassword")}</button>
-      <p class="hint">${liveBackendReady ? "Enter the email you signed up with. A password reset link will be sent to it." : "Demo mode records a reset request for admin follow-up."}</p>
+      <p class="hint">${liveBackendReady ? "A password reset link will be sent to your registered email." : "Demo mode records a reset request for admin follow-up."}</p>
     </form>
   `;
 }
@@ -2507,8 +2507,15 @@ async function signup(data) {
 
 async function resetPassword(data) {
   if (liveBackendReady) {
-    const email = (data.email || "").trim().toLowerCase();
-    if (!email || !email.includes("@")) throw new Error("Enter a valid email address.");
+    const input = (data.phone_or_email || "").trim();
+    if (!input) throw new Error("Enter your phone number or email.");
+    let email;
+    if (input.includes("@")) {
+      email = input.toLowerCase();
+    } else {
+      const phone = requireValidPhone(input);
+      email = await resolveAuthEmail(phone);
+    }
     await liveQuery(supabaseClient.auth.resetPasswordForEmail(email, {
       redirectTo: "https://manjunathbscloud.github.io/banaFinClub/",
     }));
@@ -2517,7 +2524,7 @@ async function resetPassword(data) {
     return;
   }
 
-  state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.email || "unknown"}.` });
+  state.audit.push({ id: uid("a"), date: today(), text: `Password reset requested for ${data.phone_or_email || "unknown"}.` });
   saveState();
   showToast("Reset request recorded. Backend OTP will be connected later.");
 }
