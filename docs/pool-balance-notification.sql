@@ -31,9 +31,7 @@ begin
 
   available_balance := total_deposits - total_outstanding;
 
-  balance_msg := 'Pool balance: ₹' || to_char(total_deposits, 'FM99,99,99,999') ||
-                 ' | Loans outstanding: ₹' || to_char(total_outstanding, 'FM99,99,99,999') ||
-                 ' | Available for loans: ₹' || to_char(available_balance, 'FM99,99,99,999') || '.';
+  balance_msg := 'Available balance for loans this month: ₹' || to_char(available_balance, 'FM99,99,99,999') || '.';
 
   for member_rec in
     select id
