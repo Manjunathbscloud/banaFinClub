@@ -1514,7 +1514,16 @@ function showDepositYearModal(yearKey) {
   let title = "", bodyHtml = "";
 
   if (yearKey === "d2026") {
-    const _yr6Interest = Math.round(year6InterestCollected());
+    const _yr6InterestPreJune = Math.round(year6InterestCollected()); // capped at May 2026
+    const _yr6InterestJunePlus = Math.round(state.monthlyPayments
+      .filter((p) => p.status === "paid" && p.month >= "2026-06")
+      .reduce((sum, p) => {
+        const mem = memberById(p.memberId);
+        if (!mem) return sum;
+        const deposit = expectedMonthlyDeposit(mem, p.month);
+        return sum + Math.max(0, Number(p.paidAmount || p.amount || 0) - deposit);
+      }, 0));
+    const _yr6Interest = _yr6InterestPreJune + _yr6InterestJunePlus;
     const _yr6JDeposits = 7 * 2000 * _jMonths;
     const _yr6Emi = Math.round(emi.paid * emi.monthlyEmi);
     const _yr6Total = 21000 + 14000 + 11250 + _yr6JDeposits + _yr6Emi + _yr6Interest + 8125 + 3046;
