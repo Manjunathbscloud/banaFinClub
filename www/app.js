@@ -229,6 +229,7 @@ const initialState = {
   ],
   loanHistory: [],
   notifications: [],
+  messages: [],
   statementRows: [],
   rules: [],
   meetings: [
@@ -436,6 +437,15 @@ function liveNotificationToLocal(n) {
   };
 }
 
+function liveMessageToLocal(m) {
+  return {
+    id: m.id,
+    profileId: m.profile_id,
+    body: m.body,
+    createdAt: m.created_at,
+  };
+}
+
 function liveExtensionToLocal(e) {
   return {
     id: e.id,
@@ -477,7 +487,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -489,6 +499,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)),
     liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
     liveOptionalList(supabaseClient.from("loan_extension_requests").select("*").order("requested_at", { ascending: false })),
+    liveOptionalList(supabaseClient.from("messages").select("*").order("created_at", { ascending: true }).limit(200)),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -524,6 +535,7 @@ async function loadLiveState() {
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
     extensionRequests: extensionRequests.map(liveExtensionToLocal),
+    messages: messages.map(liveMessageToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
     notifications: notifications.map(liveNotificationToLocal),
     statementRows: [],
@@ -534,6 +546,9 @@ async function loadLiveState() {
   // Clear payInitiated flag if this user's current month payment is already paid
   const myPayment = state.monthlyPayments.find((p) => p.memberId === state.currentUserId && p.month === currentMonth());
   if (myPayment?.status === "paid") localStorage.removeItem(`payInitiated_${currentMonth()}`);
+
+  // Start realtime chat subscription once logged in
+  initRealtimeChat();
 
   // Persist available loan amount so SQL cron notifications can read it
   const available = Math.max(0, expectedBankBalance() - Number(state.settings.minimumReserve || 5000));
@@ -949,6 +964,8 @@ function render() {
       if (title && openDetails.has(title)) el.open = true;
     });
   }
+
+  renderChatFab();
 }
 
 function initials(name) {
@@ -1144,7 +1161,6 @@ function renderDashboard() {
   const initials = (user.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening"; })();
   const paymentStatus = monthlyPayment?.status || "pending";
-  const payStatusColor = paymentStatus === "paid" ? "#16a34a" : "#b45309";
   const payInitiated = localStorage.getItem(`payInitiated_${currentMonth()}`) === "1";
 
   const tiles = [
@@ -2216,6 +2232,21 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "open-chat") {
+    openChatPanel();
+    return;
+  }
+
+  if (action.dataset.action === "close-chat") {
+    closeChatPanel();
+    return;
+  }
+
+  if (action.dataset.action === "send-chat") {
+    await sendChatMessage();
+    return;
+  }
+
   if (action.dataset.action === "show-deposit-year") {
     showDepositYearModal(action.dataset.year);
     return;
@@ -2336,7 +2367,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
-    if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId, action.dataset.profileId);
+    if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
 
     if (action.dataset.action === "save-rule") {
@@ -2920,7 +2951,7 @@ async function requestExtension(loanId) {
   render();
 }
 
-async function approveExtension(id, loanId, profileId) {
+async function approveExtension(id, loanId) {
   const loan = state.loans.find((l) => l.id === loanId);
   if (!loan || !liveBackendReady) { showToast("Cannot approve extension."); return; }
 
@@ -3229,4 +3260,184 @@ function initPullToRefresh() {
   });
 }
 
-initApp().then(() => initPullToRefresh());
+// ── Chat ──────────────────────────────────────────────────────────────────
+
+let chatOpen = false;
+let chatChannel = null;
+
+function chatUnreadCount() {
+  if (!currentProfileId()) return 0;
+  const lastRead = localStorage.getItem("chatLastRead") || "1970-01-01T00:00:00Z";
+  return (state.messages || []).filter(
+    (m) => m.profileId !== currentProfileId() && m.createdAt > lastRead
+  ).length;
+}
+
+function renderChatFab() {
+  const existing = document.getElementById("chat-fab");
+  if (existing) existing.remove();
+  if (!currentUser() || !liveBackendReady) return;
+
+  const unread = chatUnreadCount();
+  const fab = document.createElement("button");
+  fab.id = "chat-fab";
+  fab.setAttribute("data-action", "open-chat");
+  fab.setAttribute("aria-label", "Open group chat");
+  fab.innerHTML = `💬${unread > 0 ? `<span id="chat-fab-badge">${unread > 99 ? "99+" : unread}</span>` : ""}`;
+  document.body.appendChild(fab);
+}
+
+function updateChatBadge() {
+  const fab = document.getElementById("chat-fab");
+  if (!fab) return;
+  const unread = chatUnreadCount();
+  let badge = document.getElementById("chat-fab-badge");
+  if (unread > 0) {
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "chat-fab-badge";
+      fab.appendChild(badge);
+    }
+    badge.textContent = unread > 99 ? "99+" : String(unread);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+function fmtChatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtChatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return "Today";
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function buildChatMessagesHtml(msgs) {
+  if (!msgs.length) return `<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:14px;">No messages yet. Say hello! 👋</div>`;
+  let html = "";
+  let lastDate = "";
+  for (const msg of msgs) {
+    const msgDate = fmtChatDate(msg.createdAt);
+    if (msgDate !== lastDate) {
+      html += `<div class="chat-date-divider">${escapeHtml(msgDate)}</div>`;
+      lastDate = msgDate;
+    }
+    const mine = msg.profileId === currentProfileId();
+    const sender = state.members.find((m) => m.id === msg.profileId);
+    const name = sender?.name || "Member";
+    html += `
+      <div class="chat-msg ${mine ? "mine" : "theirs"}">
+        ${!mine ? `<span class="chat-msg-name">${escapeHtml(name)}</span>` : ""}
+        <div class="chat-bubble">${escapeHtml(msg.body)}</div>
+        <span class="chat-msg-time">${fmtChatTime(msg.createdAt)}</span>
+      </div>`;
+  }
+  return html;
+}
+
+function openChatPanel() {
+  const existing = document.getElementById("chat-panel");
+  if (existing) { existing.remove(); chatOpen = false; return; }
+
+  chatOpen = true;
+  localStorage.setItem("chatLastRead", new Date().toISOString());
+  updateChatBadge();
+
+  const html = `
+    <div id="chat-panel" class="chat-panel-overlay">
+      <div class="chat-panel-sheet" id="chat-panel-sheet">
+        <div class="chat-panel-header">
+          <div><h3>💬 Member Chat</h3><p>All members · ${state.members.filter(m => m.status === "active").length} active</p></div>
+          <button class="rules-modal-close" data-action="close-chat">✕</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          ${buildChatMessagesHtml(state.messages || [])}
+        </div>
+        <div class="chat-input-wrap">
+          <input id="chat-input" class="chat-input" placeholder="Type a message…" maxlength="1000" autocomplete="off" />
+          <button id="chat-send-btn" class="chat-send-btn" data-action="send-chat">Send</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+
+  const messagesEl = document.getElementById("chat-messages");
+  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  const input = document.getElementById("chat-input");
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+    });
+    setTimeout(() => input.focus(), 100);
+  }
+}
+
+function closeChatPanel() {
+  const panel = document.getElementById("chat-panel");
+  if (panel) { panel.remove(); document.body.style.overflow = ""; }
+  chatOpen = false;
+}
+
+function refreshChatMessages() {
+  const messagesEl = document.getElementById("chat-messages");
+  if (!messagesEl) return;
+  const atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+  messagesEl.innerHTML = buildChatMessagesHtml(state.messages || []);
+  if (atBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById("chat-input");
+  const body = (input?.value || "").trim();
+  if (!body || !liveBackendReady || !currentProfileId()) return;
+
+  const btn = document.getElementById("chat-send-btn");
+  if (btn) btn.disabled = true;
+  input.value = "";
+
+  try {
+    await liveQuery(supabaseClient.from("messages").insert({
+      profile_id: currentProfileId(),
+      body,
+    }));
+  } catch (err) {
+    showToast("Failed to send message.");
+    input.value = body;
+  } finally {
+    if (btn) btn.disabled = false;
+    input?.focus();
+  }
+}
+
+function initRealtimeChat() {
+  if (!liveBackendReady || !currentProfileId() || chatChannel) return;
+  chatChannel = supabaseClient
+    .channel("group-chat")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+      const msg = liveMessageToLocal(payload.new);
+      state.messages = [...(state.messages || []), msg];
+      if (chatOpen) {
+        localStorage.setItem("chatLastRead", new Date().toISOString());
+        refreshChatMessages();
+      } else {
+        updateChatBadge();
+      }
+    })
+    .subscribe();
+}
+
+initApp().then(() => { initPullToRefresh(); initRealtimeChat(); });
