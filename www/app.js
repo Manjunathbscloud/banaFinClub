@@ -3281,10 +3281,99 @@ function renderChatFab() {
   const unread = chatUnreadCount();
   const fab = document.createElement("button");
   fab.id = "chat-fab";
-  fab.setAttribute("data-action", "open-chat");
   fab.setAttribute("aria-label", "Open group chat");
   fab.innerHTML = `💬${unread > 0 ? `<span id="chat-fab-badge">${unread > 99 ? "99+" : unread}</span>` : ""}`;
   document.body.appendChild(fab);
+  makeChatFabDraggable(fab);
+}
+
+function makeChatFabDraggable(fab) {
+  const DRAG_THRESHOLD = 8;
+  let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+  let dragging = false, moved = false;
+
+  function clamp(top, left) {
+    const maxTop = window.innerHeight - fab.offsetHeight - 8;
+    const maxLeft = window.innerWidth - fab.offsetWidth - 8;
+    return { top: Math.max(8, Math.min(top, maxTop)), left: Math.max(8, Math.min(left, maxLeft)) };
+  }
+
+  function applyPos(top, left) {
+    const pos = clamp(top, left);
+    fab.style.top = pos.top + "px";
+    fab.style.left = pos.left + "px";
+    fab.style.bottom = "auto";
+    fab.style.right = "auto";
+  }
+
+  // Restore saved position
+  try {
+    const saved = JSON.parse(localStorage.getItem("chatFabPos") || "null");
+    if (saved) applyPos(saved.top, saved.left);
+  } catch (_) {}
+
+  fab.addEventListener("touchstart", (e) => {
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    const r = fab.getBoundingClientRect();
+    startLeft = r.left; startTop = r.top;
+    dragging = true; moved = false;
+  }, { passive: true });
+
+  fab.addEventListener("touchmove", (e) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX, dy = t.clientY - startY;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      moved = true;
+      e.preventDefault();
+      applyPos(startTop + dy, startLeft + dx);
+    }
+  }, { passive: false });
+
+  fab.addEventListener("touchend", () => {
+    if (!dragging) return;
+    dragging = false;
+    if (moved) {
+      const r = fab.getBoundingClientRect();
+      localStorage.setItem("chatFabPos", JSON.stringify({ top: r.top, left: r.left }));
+    } else {
+      openChatPanel();
+    }
+  });
+
+  // Mouse drag (desktop/dev)
+  fab.addEventListener("mousedown", (e) => {
+    startX = e.clientX; startY = e.clientY;
+    const r = fab.getBoundingClientRect();
+    startLeft = r.left; startTop = r.top;
+    dragging = true; moved = false;
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      moved = true;
+      applyPos(startTop + dy, startLeft + dx);
+    }
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    if (moved) {
+      const r = fab.getBoundingClientRect();
+      localStorage.setItem("chatFabPos", JSON.stringify({ top: r.top, left: r.left }));
+    } else {
+      openChatPanel();
+    }
+  });
+
+  // Click fallback for non-drag taps (when no touchend fires as a click)
+  fab.addEventListener("click", () => {
+    if (!moved) openChatPanel();
+    moved = false;
+  });
 }
 
 function updateChatBadge() {
