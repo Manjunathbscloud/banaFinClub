@@ -28,12 +28,18 @@ begin
     where status = 'active'
       and date_trunc('month', renewal_or_return_date::date) = date_trunc('month', current_date)
   loop
-    profile_id := loan_rec.profile_id;
+    -- current_loans has no profile_id column — look up by phone
+    select id into profile_id
+    from public.profiles
+    where regexp_replace(phone, '\D', '', 'g') = regexp_replace(coalesce(loan_rec.member_phone, ''), '\D', '', 'g')
+      and status = 'active'
+    limit 1;
 
+    -- Fallback: match by first name
     if profile_id is null then
       select id into profile_id
       from public.profiles
-      where phone = regexp_replace(coalesce(loan_rec.member_phone, ''), '\D', '', 'g')
+      where full_name ilike '%' || split_part(loan_rec.member_name, ' ', 1) || '%'
         and status = 'active'
       limit 1;
     end if;
@@ -50,8 +56,8 @@ begin
       );
     end if;
 
-    -- Notify the admin with full details
-    if admin_id is not null then
+    -- Notify the admin with full details (skip if admin is the borrower)
+    if admin_id is not null and admin_id != profile_id then
       insert into public.notifications (profile_id, type, title, body, related_id)
       values (
         admin_id,
