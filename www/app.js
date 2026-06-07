@@ -2062,8 +2062,13 @@ function renderAdmin() {
         <summary class="card-header"><div><h3>Add current loan</h3><p>Admin entry saved to current loan book</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="manual-loan">
-            <label class="field"><span>Member name</span><input name="memberName" required placeholder="Example: Pratap Banakar" /></label>
-            <label class="field"><span>Phone number</span><input name="memberPhone" inputmode="numeric" required placeholder="10 digit mobile number" /></label>
+            <label class="field"><span>Member name</span>
+              <select name="memberName" required data-loan-member-select>
+                <option value="">— Select member —</option>
+                ${state.members.filter((m) => m.status === "active").map((m) => `<option value="${escapeHtml(m.name)}" data-phone="${escapeHtml(m.phone || "")}">${escapeHtml(m.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field"><span>Phone number</span><input name="memberPhone" inputmode="numeric" required placeholder="Auto-filled on member select" readonly data-loan-member-phone /></label>
             <label class="field"><span>Loan amount</span><input name="amount" inputmode="numeric" pattern="[0-9,]*" required data-loan-amount /></label>
             <label class="field"><span>Interest to be paid / month</span><input value="${money(monthlyInterestPreview)}" readonly data-loan-interest-preview /></label>
             <label class="field"><span>Loan taken date</span><input name="from" type="date" value="${today()}" required /></label>
@@ -2458,6 +2463,16 @@ document.addEventListener("input", (event) => {
   if (!preview) return;
   const amount = parseRupeeAmount(amountInput.value);
   preview.value = Number.isFinite(amount) ? money((amount * state.settings.loanInterestRateMonthly) / 100) : money(0);
+});
+
+document.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-loan-member-select]");
+  if (!select) return;
+  const form = select.closest("form");
+  const phoneInput = form?.querySelector("[data-loan-member-phone]");
+  if (!phoneInput) return;
+  const selected = select.options[select.selectedIndex];
+  phoneInput.value = selected?.dataset.phone || "";
 });
 
 document.addEventListener("submit", async (event) => {
