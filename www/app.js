@@ -2871,19 +2871,37 @@ async function approveLoan(id) {
       decided_by: currentProfileId(),
     }).eq("id", id));
     await liveQuery(supabaseClient.from("current_loans").insert({
-      profile_id: request.memberId,
       member_name: member?.name || "",
       member_phone: member?.phone || "",
       principal: request.amount,
       principal_paid: 0,
+      interest_paid: 0,
       interest_rate_monthly: state.settings.loanInterestRateMonthly,
       monthly_interest: 0,
       status: "active",
       purpose: request.reason,
       disbursed_at: today(),
       renewal_or_return_date: renewalDateStr,
+      created_by: currentProfileId(),
     }));
     await addLiveAudit(`Approved loan ${money(request.amount)} for ${member?.name}.`, "loan_approved");
+    // Notify the borrower their loan was approved
+    if (request.memberId) {
+      await notifyMember(
+        request.memberId,
+        "loan_approved",
+        "Loan approved",
+        `Your loan request of ${money(request.amount)} has been approved. Due for renewal on ${renewalDateStr}.`,
+        id
+      );
+    }
+    // Notify all other members so their available balance stays current
+    await notifyAllActiveMembers(
+      "loan_disbursed",
+      "Loan disbursed",
+      `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`,
+      id
+    );
     await loadLiveState();
     showToast("Loan approved.");
     render();
