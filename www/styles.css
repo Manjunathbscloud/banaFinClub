@@ -2203,3 +2203,23 @@ th {
   margin: 4px 0;
   flex-shrink: 0;
 }
+
+/* ── Statement / Passbook ── */
+.stmt-legend { display:flex; flex-wrap:wrap; gap:10px 18px; font-size:12px; color:var(--muted); padding:10px 16px 4px; align-items:center; }
+.stmt-legend-bal { margin-left:auto; font-style:italic; }
+.stmt-list { display:flex; flex-direction:column; gap:0; padding-bottom:80px; }
+.stmt-empty { text-align:center; padding:48px 20px; color:var(--muted); font-size:14px; line-height:1.6; }
+.stmt-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border); background:#fff; }
+.stmt-row:first-child { border-top:1px solid var(--border); }
+.stmt-left { display:flex; align-items:center; gap:10px; min-width:0; }
+.stmt-type-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.stmt-type-dot.credit { background:#22c55e; }
+.stmt-type-dot.debit  { background:#ef4444; }
+.stmt-info { min-width:0; }
+.stmt-info strong { display:block; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+.stmt-info span { font-size:11px; color:var(--muted); }
+.stmt-right { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; gap:2px; }
+.stmt-amount { font-size:14px; font-weight:700; }
+.stmt-amount.credit { color:#16a34a; }
+.stmt-amount.debit  { color:#dc2626; }
+.stmt-balance { font-size:11px; color:var(--muted); }

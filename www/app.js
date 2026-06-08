@@ -457,6 +457,19 @@ function liveExtensionToLocal(e) {
   };
 }
 
+function liveStatementToLocal(s) {
+  return {
+    id: s.id,
+    date: s.date,
+    type: s.type,
+    amount: Number(s.amount),
+    description: s.description,
+    balance: Number(s.balance),
+    relatedId: s.related_id,
+    createdAt: s.created_at,
+  };
+}
+
 function liveAuditToLocal(log) {
   return {
     id: log.id,
@@ -478,6 +491,13 @@ async function addLiveAudit(message, action = "activity") {
   }));
 }
 
+async function insertStatement(type, amount, description, balance, relatedId = null) {
+  if (!liveBackendReady) return;
+  const row = { date: today(), type, amount, description, balance, related_id: relatedId };
+  await liveQuery(supabaseClient.from("statements").insert(row));
+  state.statementRows.unshift(liveStatementToLocal({ ...row, id: "pending", created_at: new Date().toISOString(), related_id: relatedId }));
+}
+
 async function loadLiveState() {
   if (!liveBackendReady) return;
   const prefs = loadPrefs();
@@ -487,7 +507,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -500,6 +520,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("rules").select("*").order("section", { ascending: true }).order("sort_order", { ascending: true })),
     liveOptionalList(supabaseClient.from("loan_extension_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("messages").select("*").order("created_at", { ascending: true }).limit(200)),
+    liveOptionalList(supabaseClient.from("statements").select("*").order("created_at", { ascending: false }).limit(200)),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -538,7 +559,7 @@ async function loadLiveState() {
     messages: messages.map(liveMessageToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
     notifications: notifications.map(liveNotificationToLocal),
-    statementRows: [],
+    statementRows: statementsData.map(liveStatementToLocal),
     rules: rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 })),
     audit: audit.reverse().map(liveAuditToLocal),
   };
@@ -1135,6 +1156,7 @@ function renderTab() {
     members: renderMembers,
     meetings: renderMeetings,
     admin: renderAdmin,
+    statement: renderStatement,
   };
   return (tabs[state.activeTab] || renderDashboard)();
 }
@@ -1168,6 +1190,7 @@ function renderDashboard() {
     { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" },
     { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
     { icon: "📊", title: "DASHBOARD", sub: "Association analytics", tab: "meetings" },
+    { icon: "📒", title: "STATEMENT", sub: "Transaction history & balances", tab: "statement" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     isAdmin()
       ? { icon: "⚙️", title: "ADMIN", sub: "Settings & approvals" + (approvalCount > 0 ? ` · ${approvalCount} pending` : ""), tab: "admin" }
@@ -1530,6 +1553,38 @@ function depositYearCard(d) {
       </div>
     </div>
   </details>`;
+}
+
+function renderStatement() {
+  const rows = state.statementRows;
+  const rowsHtml = rows.length === 0
+    ? `<div class="stmt-empty">No transactions recorded yet. Transactions will appear here as loans are disbursed, payments are collected, and loans are recovered.</div>`
+    : rows.map((s) => {
+        const isCredit = s.type === "credit";
+        return `
+          <div class="stmt-row">
+            <div class="stmt-left">
+              <span class="stmt-type-dot ${isCredit ? "credit" : "debit"}"></span>
+              <div class="stmt-info">
+                <strong>${escapeHtml(s.description)}</strong>
+                <span>${s.date}</span>
+              </div>
+            </div>
+            <div class="stmt-right">
+              <span class="stmt-amount ${isCredit ? "credit" : "debit"}">${isCredit ? "+" : "−"}${money(s.amount)}</span>
+              <span class="stmt-balance">${money(s.balance)}</span>
+            </div>
+          </div>`;
+      }).join("");
+
+  return `
+    <div class="page-header"><h2>Statement</h2><p>All club transactions</p></div>
+    <div class="stmt-legend">
+      <span><span class="stmt-type-dot credit"></span> Credit (money in)</span>
+      <span><span class="stmt-type-dot debit"></span> Debit (money out)</span>
+      <span class="stmt-legend-bal">Balance shown is post-transaction</span>
+    </div>
+    <div class="stmt-list">${rowsHtml}</div>`;
 }
 
 function renderDeposits() {
@@ -2729,6 +2784,7 @@ async function addManualLoan(data) {
     }));
     await addLiveAudit(`Added current loan ${money(amount)} for ${memberName}.`, "current_loan_added");
     await loadLiveState();
+    await insertStatement("debit", amount, `Loan disbursed to ${memberName}`, expectedBankBalance());
     showToast("Current loan added.");
     render();
     return;
@@ -2768,6 +2824,8 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
+    const recovered = loan.amount + interestPaid;
+    await insertStatement("credit", recovered, `Loan recovered from ${loanMemberName(loan)} (principal + interest)`, expectedBankBalance(), id);
     showToast("Loan marked clear.");
     render();
     return;
@@ -2918,6 +2976,7 @@ async function approveLoan(id) {
       id
     );
     await loadLiveState();
+    await insertStatement("debit", request.amount, `Loan disbursed to ${member?.name || "member"}`, expectedBankBalance(), id);
     showToast("Loan approved.");
     render();
     return;
@@ -3210,6 +3269,7 @@ async function markPaymentPaid(memberId) {
     }, { onConflict: "profile_id,month" }));
     if (error) { showToast("Failed to mark as paid."); return; }
     await loadLiveState();
+    await insertStatement("credit", amount, `Monthly payment received from ${member.name} (${month})`, expectedBankBalance());
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
     if (existing) existing.status = "paid";
