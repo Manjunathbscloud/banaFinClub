@@ -304,6 +304,47 @@ button:focus-visible {
 
 .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0; }
 
+.biometric-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0;
+}
+.biometric-divider::before,
+.biometric-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.biometric-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 16px;
+  background: transparent;
+  border: 2px solid var(--saffron);
+  color: var(--saffron);
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.1s ease;
+  position: relative;
+  overflow: hidden;
+}
+.biometric-btn:hover {
+  background: color-mix(in srgb, var(--saffron) 12%, transparent);
+}
+.biometric-btn:active { transform: scale(0.98); }
+.biometric-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.biometric-btn svg { flex-shrink: 0; }
+
 /* ── Shell & Topbar ─────────────────────────── */
 .shell {
   min-height: 100vh;
