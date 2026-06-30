@@ -2630,7 +2630,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "logout") {
-    if (liveBackendReady) await supabaseClient.auth.signOut();
+    if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
     state.currentUserId = null;
     saveState();
     render();
