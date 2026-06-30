@@ -109,6 +109,12 @@ const initialState = {
     bankBalance: 231770,
     minimumReserve: 5000,
     bankBalanceUpdatedAt: "2026-05-14",
+    activeYearNumber: 6,
+    activeYearStart: "2026-07",
+    activeYearLabel: "Sixth Year",
+    activeYearRenewalFee: 0,
+    activeYearExits: [],
+    yearClosed: false,
   },
   members: [
     { id: "m1", name: "Manjunath Banakar", phone: "9591382942", role: "president", status: "active", password: "123456" },
@@ -764,8 +770,7 @@ function closedYearsBasePool() {
 }
 
 function activeYearCutoffMonth() {
-  const maxYear = state.deposits.length ? Math.max(...state.deposits.map((d) => d.year)) : 2025;
-  return `${maxYear + 1}-01`;
+  return state.settings.activeYearStart || "2026-07";
 }
 
 function expectedBankBalance() {
@@ -1594,15 +1599,43 @@ function renderStatement() {
 
 function renderDeposits() {
   const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const _now = new Date();
+
+  const activeYearNum = state.settings.activeYearNumber || 6;
+  const activeYearStart = activeYearCutoffMonth();
+  const activeYearLabel = state.settings.activeYearLabel || `${ORDINALS[(activeYearNum || 1) - 1] || "Current"} Year`;
+  const activeYearRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
+  const activeYearExits = state.settings.activeYearExits || [];
+  const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
+  const activeYearDbYear = 2020 + activeYearNum;
+  const activeHistBase = Number(state.deposits.find(d => d.year === activeYearDbYear)?.balance || 0);
+  const livePayments = state.monthlyPayments
+    .filter((p) => p.status === "paid" && p.month >= activeYearStart)
+    .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+  const activeBalance = activeHistBase + activeYearRenewalFee - exitPayouts + livePayments;
+
+  const closedRows = state.deposits
+    .filter(d => d.year < activeYearDbYear)
+    .sort((a, b) => a.year - b.year);
+
   const years = [
-    { key: "d2021", label: "First Year",  sub: "2021 – 2022", balance: initialState.deposits.find(d => d.id === "d2021")?.balance },
-    { key: "d2022", label: "Second Year", sub: "2022 – 2023", balance: initialState.deposits.find(d => d.id === "d2022")?.balance },
-    { key: "d2023", label: "Third Year",  sub: "2023 – 2024", balance: initialState.deposits.find(d => d.id === "d2023")?.balance },
-    { key: "d2024", label: "Fourth Year", sub: "2024 – 2025", balance: initialState.deposits.find(d => d.id === "d2024")?.balance },
-    { key: "d2025", label: "Fifth Year",  sub: "2025",        balance: initialState.deposits.find(d => d.id === "d2025")?.balance },
-    { key: "d2026", label: "Sixth Year",  sub: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`, balance: Number(state.deposits.find(d => d.year === 2026)?.balance || 0) + state.monthlyPayments.filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth()).reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0), active: true },
+    ...closedRows.map((d, i) => ({
+      key: `d${d.year}`,
+      label: ORDINALS[i] ? `${ORDINALS[i]} Year` : `Year ${i + 1}`,
+      sub: d.label,
+      balance: d.balance,
+      active: false,
+    })),
+    {
+      key: "active",
+      label: activeYearLabel,
+      sub: `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()} – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`,
+      balance: activeBalance,
+      active: true,
+    },
   ];
+
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
     <section class="grid">
@@ -1628,80 +1661,150 @@ function showDepositYearModal(yearKey) {
   const existing = document.getElementById("deposit-year-modal");
   if (existing) existing.remove();
 
-  const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const _now = new Date();
-  const _nowYM = _now.getFullYear() * 100 + (_now.getMonth() + 1);
-  const _jMonths = _nowYM >= 202601 ? (_now.getFullYear() - 2026) * 12 + _now.getMonth() + 1 : 0;
   const emi = appannaEmiProgress();
 
   let title = "", bodyHtml = "";
 
-  if (yearKey === "d2026") {
-    // Dynamic July+ rows — group by month, split deposit vs interest
-    const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const julyPlusPayments = state.monthlyPayments
-      .filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth())
-      .sort((a, b) => a.month.localeCompare(b.month));
-    const julyByMonth = {};
-    julyPlusPayments.forEach((p) => {
-      const mem = memberById(p.memberId);
-      if (!mem) return;
-      const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
-      const paid = Number(p.paidAmount || p.amount || 0);
-      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
-      const interest = hasEmi ? 0 : Math.max(0, paid - dep);
-      if (!julyByMonth[p.month]) julyByMonth[p.month] = { deposit: 0, interest: 0 };
-      julyByMonth[p.month].deposit += dep;
-      julyByMonth[p.month].interest += interest;
-    });
-    const julyRows = Object.entries(julyByMonth).flatMap(([month, data]) => {
-      const [yr, mo] = month.split("-");
-      const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
-      return [
-        { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
-        ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
+  if (yearKey === "active") {
+    const activeYearNum = state.settings.activeYearNumber || 6;
+    const activeYearStart = activeYearCutoffMonth();
+    const activeYearLabel = state.settings.activeYearLabel || `${ORDINALS[(activeYearNum || 1) - 1] || "Current"} Year`;
+    const activeYearRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
+    const activeYearExits = state.settings.activeYearExits || [];
+    const activeYearDbYear = 2020 + activeYearNum;
+    const activeHistBase = Number(state.deposits.find(d => d.year === activeYearDbYear)?.balance || 0);
+
+    if (activeYearNum === 6 && activeHistBase > 0) {
+      // Year 6 with existing historical base — show the rich Year 6 hardcoded breakdown + live rows
+      const livePayments = state.monthlyPayments
+        .filter((p) => p.status === "paid" && p.month >= activeYearStart)
+        .sort((a, b) => a.month.localeCompare(b.month));
+      const liveByMonth = {};
+      livePayments.forEach((p) => {
+        const mem = memberById(p.memberId);
+        if (!mem) return;
+        const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+        const paid = Number(p.paidAmount || p.amount || 0);
+        const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+        const interest = hasEmi ? 0 : Math.max(0, paid - dep);
+        if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
+        liveByMonth[p.month].deposit += dep;
+        liveByMonth[p.month].interest += interest;
+      });
+      const liveRows = Object.entries(liveByMonth).flatMap(([month, data]) => {
+        const [yr, mo] = month.split("-");
+        const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
+        return [
+          { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
+          ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
+        ];
+      });
+      const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+      const yr6RunningTotal = activeHistBase + liveTotal;
+      const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
+      const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
+      const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
+      title = `Sixth Year (Nov 2025 – ${endLabel})`;
+      const points = [
+        { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
+        { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
+        { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000 },
+        { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250 },
+        { label: "Monthly Deposits",    detail: "January – June 2026 (₹2,000 × 7 members × 6 months)",                       amount:  84000 },
+        { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months",                                 amount:  44672 },
+        { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546 },
+        { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
+        { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
+        ...liveRows,
       ];
-    });
-    const julyPlusTotal = julyPlusPayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-    const yr6RunningTotal = Number(state.deposits.find(d => d.year === 2026)?.balance || 0) + julyPlusTotal;
-    const latestPaidMonth = julyPlusPayments.map((p) => p.month).sort().pop();
-    const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
-    const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
-    title = `Sixth Year (Nov 2025 – ${endLabel})`;
-    const points = [
-      { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
-      { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
-      { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000 },
-      { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250 },
-      { label: "Monthly Deposits",    detail: "January – June 2026 (₹2,000 × 7 members × 6 months)",                       amount:  84000 },
-      { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months",                                 amount:  44672 },
-      { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546 },
-      { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
-      { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
-      ...julyRows,
-    ];
-    bodyHtml = `
-      <ul class="year-modal-list">
-        ${points.map(p => p.meta
-          ? `<li class="year-modal-meta">${p.text}</li>`
-          : `<li class="year-modal-item"><div><span class="year-modal-label">${escapeHtml(p.label)}</span><span class="year-modal-detail">${escapeHtml(p.detail)}</span></div><strong class="year-modal-amount" style="color:${p.amount < 0 ? "#dc2626" : "#16a34a"};">${p.amount < 0 ? "−" + money(Math.abs(p.amount)) : money(p.amount)}</strong></li>`
-        ).join("")}
-      </ul>
-      <div class="year-modal-total"><span>Running Balance (${endLabel})</span><strong style="color:#2563eb;">${money(yr6RunningTotal)}</strong></div>`;
+      bodyHtml = `
+        <ul class="year-modal-list">
+          ${points.map(p => p.meta
+            ? `<li class="year-modal-meta">${p.text}</li>`
+            : `<li class="year-modal-item"><div><span class="year-modal-label">${escapeHtml(p.label)}</span><span class="year-modal-detail">${escapeHtml(p.detail)}</span></div><strong class="year-modal-amount" style="color:${p.amount < 0 ? "#dc2626" : "#16a34a"};">${p.amount < 0 ? "−" + money(Math.abs(p.amount)) : money(p.amount)}</strong></li>`
+          ).join("")}
+        </ul>
+        <div class="year-modal-total"><span>Running Balance (${endLabel})</span><strong style="color:#2563eb;">${money(yr6RunningTotal)}</strong></div>`;
+    } else {
+      // Year 7+ active: show renewal fee, exits, and live payment rows
+      const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
+      const livePayments = state.monthlyPayments
+        .filter((p) => p.status === "paid" && p.month >= activeYearStart)
+        .sort((a, b) => a.month.localeCompare(b.month));
+      const liveByMonth = {};
+      livePayments.forEach((p) => {
+        const mem = memberById(p.memberId);
+        if (!mem) return;
+        const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+        const paid = Number(p.paidAmount || p.amount || 0);
+        const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+        const interest = hasEmi ? 0 : Math.max(0, paid - dep);
+        if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
+        liveByMonth[p.month].deposit += dep;
+        liveByMonth[p.month].interest += interest;
+      });
+      const liveRows = Object.entries(liveByMonth).flatMap(([month, data]) => {
+        const [yr, mo] = month.split("-");
+        const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
+        return [
+          { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
+          ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
+        ];
+      });
+      const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+      const runningTotal = activeYearRenewalFee - exitPayouts + liveTotal;
+      const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
+      const startMo = new Date(activeYearStart + "-01");
+      const startLabel = `${MNAMES[startMo.getMonth()]} ${startMo.getFullYear()}`;
+      const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : _now;
+      const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
+      title = `${activeYearLabel} (${startLabel} – ${endLabel})`;
+      const points = [
+        ...(activeYearRenewalFee > 0 ? [{ label: "Yearly Renewal Fee", detail: `Collected at year start`, amount: activeYearRenewalFee }] : []),
+        ...activeYearExits.map(e => ({ label: "Member Exited", detail: `${e.name} – amount paid out`, amount: -Number(e.payout || 0) })),
+        ...liveRows,
+      ];
+      bodyHtml = `
+        <ul class="year-modal-list">
+          ${points.length === 0 ? `<li class="year-modal-meta">No transactions recorded yet.</li>` : points.map(p => p.meta
+            ? `<li class="year-modal-meta">${p.text}</li>`
+            : `<li class="year-modal-item"><div><span class="year-modal-label">${escapeHtml(p.label)}</span><span class="year-modal-detail">${escapeHtml(p.detail)}</span></div><strong class="year-modal-amount" style="color:${p.amount < 0 ? "#dc2626" : "#16a34a"};">${p.amount < 0 ? "−" + money(Math.abs(p.amount)) : money(p.amount)}</strong></li>`
+          ).join("")}
+        </ul>
+        <div class="year-modal-total"><span>Running Balance (${endLabel})</span><strong style="color:#2563eb;">${money(runningTotal)}</strong></div>`;
+    }
   } else {
-    const d = initialState.deposits.find(dep => dep.id === yearKey);
-    if (!d) return;
-    title = d.label;
-    bodyHtml = `
-      ${d.intro ? `<p class="year-modal-intro">${escapeHtml(d.intro)}</p>` : ""}
-      <ul class="year-modal-list">
-        ${(d.breakdown || []).map(row => `
-          <li class="year-modal-item">
-            <div><span class="year-modal-label">${escapeHtml(row.description)}</span><span class="year-modal-detail">${escapeHtml(row.details)}</span></div>
-            <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
-          </li>`).join("")}
-      </ul>
-      <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(d.balance)}</strong></div>`;
+    // Closed historical year — check initialState first (Years 1-5 with rich breakdown)
+    const yearNum = parseInt(yearKey.replace("d", ""), 10);
+    const initDep = initialState.deposits.find(dep => dep.id === yearKey);
+    if (initDep) {
+      title = initDep.label;
+      bodyHtml = `
+        ${initDep.intro ? `<p class="year-modal-intro">${escapeHtml(initDep.intro)}</p>` : ""}
+        <ul class="year-modal-list">
+          ${(initDep.breakdown || []).map(row => `
+            <li class="year-modal-item">
+              <div><span class="year-modal-label">${escapeHtml(row.description)}</span><span class="year-modal-detail">${escapeHtml(row.details)}</span></div>
+              <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
+            </li>`).join("")}
+        </ul>
+        <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(initDep.balance)}</strong></div>`;
+    } else {
+      // Year 6+ closed — use deposit_summaries DB row
+      const dbRow = state.deposits.find(d => d.year === yearNum);
+      if (!dbRow) return;
+      title = dbRow.label || `Year ${yearNum}`;
+      bodyHtml = `
+        <ul class="year-modal-list">
+          <li class="year-modal-item"><div><span class="year-modal-label">Total Deposits Collected</span><span class="year-modal-detail">Principal collected</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.principal)}</strong></li>
+          <li class="year-modal-item"><div><span class="year-modal-label">Interest Earned</span><span class="year-modal-detail">From loan interest</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.interest)}</strong></li>
+          ${Number(dbRow.expenditure) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Member Exits / Expenses</span><span class="year-modal-detail">Paid out</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.expenditure)}</strong></li>` : ""}
+        </ul>
+        <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+    }
   }
 
   const html = `
@@ -1932,7 +2035,6 @@ function renderMembers() {
 
 function renderMeetings() {
   const now = new Date();
-  const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
   // Year 6 chart: read historical from deposit_summaries (DB) + actual active-year paid data
   const yr6DbRow = state.deposits.find((d) => d.year === 2026);
   const yr6HistoricalDeposits = Number(yr6DbRow?.principal || 0);
@@ -2250,6 +2352,70 @@ function renderAdmin() {
           })()}
         </div>
       </details>
+
+      ${(() => {
+        const yearClosed = state.settings.yearClosed === true;
+        const activeYearNum = state.settings.activeYearNumber || 6;
+        const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+        const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
+        const newYearNum = activeYearNum + 1;
+        const newYearLabel = ORDINALS[newYearNum - 1] ? `${ORDINALS[newYearNum - 1]} Year` : `Year ${newYearNum}`;
+
+        const openBody = `
+          <div style="margin-bottom:12px;">
+            <p style="color:var(--muted);font-size:13px;margin-bottom:8px;">Run this after the annual meeting to finalize Year ${activeYearNum} and start Year ${newYearNum}.</p>
+            <div style="background:var(--panel-alt,#f8fafc);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Pool base (Year 1–${activeYearNum})</span><strong>${money(closedYearsBasePool())}</strong></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Active loans to carry forward</span><strong>${activeLoans.length}</strong></div>
+              <div style="display:flex;justify-content:space-between;"><span>Active members</span><strong>${activeMembers().length}</strong></div>
+            </div>
+          </div>
+          <button class="danger" data-action="close-current-year" type="button" style="width:100%;">
+            Close Year ${activeYearNum} &amp; Finalize Records
+          </button>`;
+
+        const closedBody = `
+          <div class="alert" style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#15803d;">
+            ✓ Year ${activeYearNum} has been closed. Fill in the details below to start Year ${newYearNum}.
+          </div>
+          <form class="form" data-form="start-new-year">
+            <label class="field">
+              <span>Renewal Fee (total collected from all members)</span>
+              <input type="number" name="renewalFee" placeholder="e.g. 21000" min="0" required />
+            </label>
+            <label class="field">
+              <span>Monthly Deposit Amount (₹ per member)</span>
+              <input type="number" name="monthlyDeposit" value="${state.settings.monthlyDeposit}" min="0" required />
+            </label>
+            <div style="margin-bottom:12px;">
+              <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Member Exits (if any)</p>
+              <div id="exit-member-list">
+                ${activeMembers().map(m => `
+                  <div class="row-item" style="flex-wrap:wrap;gap:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:160px;">
+                      <input type="checkbox" class="exit-member-check" data-member-id="${m.id}" data-member-name="${escapeHtml(m.name)}" />
+                      <span>${escapeHtml(m.name)}</span>
+                    </label>
+                    <input type="number" id="exit-payout-${m.id}" placeholder="Payout ₹" min="0"
+                      style="width:130px;display:none;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" />
+                  </div>`).join("")}
+              </div>
+            </div>
+            <button class="primary" type="submit" style="width:100%;">Start ${newYearLabel}</button>
+          </form>`;
+
+        return `
+          <details class="card collapsible">
+            <summary class="card-header">
+              <div><h3>Year Management</h3><p>${yearClosed ? `Year ${activeYearNum} closed · Start Year ${newYearNum}` : `Year ${activeYearNum} active · Close after meeting`}</p></div>
+              ${yearClosed ? `<span class="badge good" style="margin-left:auto;margin-right:8px;">Closed</span>` : ""}
+              <span class="collapse-icon">⌄</span>
+            </summary>
+            <div class="card-body">
+              ${yearClosed ? closedBody : openBody}
+            </div>
+          </details>`;
+      })()}
     </section>
   `;
 }
@@ -2444,6 +2610,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
+    if (action.dataset.action === "close-current-year") await closeCurrentYear();
 
     if (action.dataset.action === "save-rule") {
       const id = action.dataset.id;
@@ -2508,6 +2675,14 @@ document.addEventListener("change", (event) => {
   const avatarInput = event.target.closest("[data-action='upload-avatar']");
   if (avatarInput && avatarInput.files?.[0]) {
     handleAvatarUpload(avatarInput.files[0]);
+    return;
+  }
+
+  // Exit member checkbox — toggle payout field visibility
+  const exitCheck = event.target.closest(".exit-member-check");
+  if (exitCheck) {
+    const payoutField = document.getElementById(`exit-payout-${exitCheck.dataset.memberId}`);
+    if (payoutField) payoutField.style.display = exitCheck.checked ? "block" : "none";
   }
 });
 
@@ -2551,6 +2726,7 @@ document.addEventListener("submit", async (event) => {
     if (type === "set-new-password") await setNewPassword(data);
     if (type === "loan-request") await requestLoan(data);
     if (type === "manual-loan") await addManualLoan(data);
+    if (type === "start-new-year") await startNewYear(data);
     if (type === "add-rule") {
       const section = (data.section || "").trim();
       const item = (data.item || "").trim();
@@ -3108,6 +3284,151 @@ async function rejectExtension(id, profileId) {
   await addLiveAudit(`Rejected loan extension request ${id}.`, "loan_extension_rejected");
   await loadLiveState();
   showToast("Extension request rejected.");
+  render();
+}
+
+// ── Year Close / New Year Start ───────────────────────────────────────────────
+
+async function closeCurrentYear() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const activeYearNum = state.settings.activeYearNumber || 6;
+  const activeYearStart = activeYearCutoffMonth();
+  const activeYearDbYear = 2020 + activeYearNum;
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+
+  const histRow = state.deposits.find(d => d.year === activeYearDbYear);
+  const histPrincipal = Number(histRow?.principal || 0);
+  const histInterest = Number(histRow?.interest || 0);
+  const histExpenditure = Number(histRow?.expenditure || 0);
+
+  let liveDeposits = 0, liveInterest = 0;
+  state.monthlyPayments
+    .filter(p => p.status === "paid" && p.month >= activeYearStart)
+    .forEach(p => {
+      const mem = memberById(p.memberId);
+      if (!mem) return;
+      const hasEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+      const paid = Number(p.paidAmount || p.amount || 0);
+      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+      liveDeposits += dep;
+      liveInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+    });
+
+  const renewalFee = Number(state.settings.activeYearRenewalFee || 0);
+  const activeYearExits = state.settings.activeYearExits || [];
+  const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
+
+  const finalPrincipal = histPrincipal + renewalFee + liveDeposits;
+  const finalInterest = histInterest + liveInterest;
+  const finalExpenditure = histExpenditure + exitPayouts;
+  const finalBalance = finalPrincipal + finalInterest - finalExpenditure;
+
+  const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
+  const loanSummary = activeLoans.length
+    ? activeLoans.map(l => `${loanMemberName(l)} (${money(loanOutstanding(l))})`).join(", ")
+    : "None";
+
+  const confirmed = confirm(
+    `Close Year ${activeYearNum}?\n\n` +
+    `Final Balance: ${money(Math.round(finalBalance))}\n` +
+    `Loans carried forward: ${activeLoans.length ? loanSummary : "None"}\n\n` +
+    `This will finalize Year ${activeYearNum} records and cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  const yearLabel = `${ORDINALS[activeYearNum - 1] || "Year " + activeYearNum} Year (${activeYearDbYear})`;
+  await liveQuery(supabaseClient.from("deposit_summaries").upsert({
+    year: activeYearDbYear,
+    label: yearLabel,
+    principal: Math.round(finalPrincipal),
+    interest: Math.round(finalInterest),
+    expenditure: Math.round(finalExpenditure),
+    balance: Math.round(finalBalance),
+  }, { onConflict: "year" }));
+
+  const closingDate = today();
+  for (const loan of activeLoans) {
+    const interestPaid = Math.round(calculatedInterestPaid(loan, closingDate));
+    await liveQuery(supabaseClient.from("loan_history").insert({
+      year: `Year ${activeYearNum}`,
+      member_name: loanMemberName(loan),
+      from_date: loan.disbursedAt || loan.from || null,
+      principal: loan.amount,
+      monthly_interest: loanBaseMonthlyInterest(loan),
+      renewal_or_return: loanRenewalDate(loan) || null,
+      status: "Carried Forward",
+      total_paid: interestPaid,
+      notes: `Carried forward to Year ${activeYearNum + 1}`,
+    }));
+  }
+
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: activeYearNum,
+      activeYearStart: activeYearStart,
+      activeYearLabel: state.settings.activeYearLabel || `${ORDINALS[activeYearNum - 1]} Year`,
+      activeYearRenewalFee: renewalFee,
+      activeYearExits: activeYearExits,
+      yearClosed: true,
+    },
+    updated_at: new Date().toISOString(),
+  }));
+
+  await addLiveAudit(`Year ${activeYearNum} closed. Final balance: ${money(Math.round(finalBalance))}. ${activeLoans.length} loans carried forward.`, "year_closed");
+  await loadLiveState();
+  showToast(`Year ${activeYearNum} closed successfully.`);
+  render();
+}
+
+async function startNewYear(data) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const currentYearNum = state.settings.activeYearNumber || 6;
+  const newYearNum = currentYearNum + 1;
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const newYearLabel = `${ORDINALS[newYearNum - 1] || "Year " + newYearNum} Year`;
+  const renewalFee = Number(data.renewalFee || 0);
+  const newMonthlyDeposit = Number(data.monthlyDeposit || state.settings.monthlyDeposit);
+  const startMonth = currentMonth();
+
+  // Collect exits from DOM (checkboxes)
+  const exitChecks = document.querySelectorAll(".exit-member-check:checked");
+  const exits = Array.from(exitChecks).map(cb => ({
+    memberId: cb.dataset.memberId,
+    name: cb.dataset.memberName,
+    payout: Number(document.getElementById(`exit-payout-${cb.dataset.memberId}`)?.value || 0),
+  })).filter(e => e.payout > 0 || e.memberId);
+
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: newYearNum,
+      activeYearStart: startMonth,
+      activeYearLabel: newYearLabel,
+      activeYearRenewalFee: renewalFee,
+      activeYearExits: exits,
+      yearClosed: false,
+    },
+    updated_at: new Date().toISOString(),
+  }));
+
+  if (newMonthlyDeposit !== state.settings.monthlyDeposit) {
+    await liveQuery(supabaseClient.from("settings").upsert({
+      id: "rules",
+      value: { monthlyDeposit: newMonthlyDeposit },
+      updated_at: new Date().toISOString(),
+    }));
+  }
+
+  for (const exit of exits) {
+    if (exit.memberId) {
+      await liveQuery(supabaseClient.from("profiles").update({ status: "exited" }).eq("id", exit.memberId));
+    }
+  }
+
+  await addLiveAudit(`Year ${newYearNum} started. Renewal fee: ${money(renewalFee)}. Monthly deposit: ${money(newMonthlyDeposit)}. Exits: ${exits.length}.`, "year_started");
+  await loadLiveState();
+  showToast(`Year ${newYearNum} started successfully.`);
   render();
 }
 
