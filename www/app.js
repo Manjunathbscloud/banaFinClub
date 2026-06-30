@@ -3324,6 +3324,7 @@ async function closeCurrentYear() {
   const finalBalance = finalPrincipal + finalInterest - finalExpenditure;
 
   const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
+  const emiLoans = currentLoans().filter(l => l.notes === "emi_entry");
   const loanSummary = activeLoans.length
     ? activeLoans.map(l => `${loanMemberName(l)} (${money(loanOutstanding(l))})`).join(", ")
     : "None";
@@ -3331,7 +3332,8 @@ async function closeCurrentYear() {
   const confirmed = confirm(
     `Close Year ${activeYearNum}?\n\n` +
     `Final Balance: ${money(Math.round(finalBalance))}\n` +
-    `Loans carried forward: ${activeLoans.length ? loanSummary : "None"}\n\n` +
+    `Loans carried forward: ${activeLoans.length ? loanSummary : "None"}\n` +
+    `EMI in progress: ${emiLoans.length ? emiLoans.map(l => loanMemberName(l)).join(", ") : "None"}\n\n` +
     `This will finalize Year ${activeYearNum} records and cannot be undone.`
   );
   if (!confirmed) return;
@@ -3359,6 +3361,23 @@ async function closeCurrentYear() {
       status: "Carried Forward",
       total_paid: interestPaid,
       notes: `Carried forward to Year ${activeYearNum + 1}`,
+    }));
+  }
+
+  for (const loan of emiLoans) {
+    const prog = appannaEmiProgress();
+    const paidAmount = Math.round(prog.paid * prog.monthlyEmi);
+    const remainingMonths = prog.remaining;
+    await liveQuery(supabaseClient.from("loan_history").insert({
+      year: `Year ${activeYearNum}`,
+      member_name: loanMemberName(loan),
+      from_date: loan.disbursedAt || loan.from || null,
+      principal: loan.amount,
+      monthly_interest: 0,
+      renewal_or_return: null,
+      status: "EMI – In Progress",
+      total_paid: paidAmount,
+      notes: `EMI: ${prog.paid} of ${prog.totalMonths} months paid. ${remainingMonths} months remaining into Year ${activeYearNum + 1}.`,
     }));
   }
 
