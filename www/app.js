@@ -759,13 +759,23 @@ function bankBalance() {
   return Number(state.settings.bankBalance ?? latestHistoricalBalance());
 }
 
-function expectedBankBalance() {
-  // Base pool = sum of all 6 year closing balances (up to Jun 2026)
-  const basePool = 114100 + 169600 + 187450 + 149915 + 231770 + 129805;
+function closedYearsBasePool() {
+  return state.deposits.reduce((sum, d) => sum + Number(d.balance || 0), 0);
+}
 
-  // Add all July 2026+ payments marked as paid (deposit + interest together)
-  const julyPlusCollected = state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= "2026-07")
+function activeYearCutoffMonth() {
+  const maxYear = state.deposits.length ? Math.max(...state.deposits.map((d) => d.year)) : 2025;
+  return `${maxYear + 1}-01`;
+}
+
+function expectedBankBalance() {
+  // Base pool = sum of all closed year closing balances (live from deposit_summaries)
+  const basePool = closedYearsBasePool();
+
+  // Add all payments from the active year that are marked paid
+  const cutoff = activeYearCutoffMonth();
+  const activeYearCollected = state.monthlyPayments
+    .filter((p) => p.status === "paid" && p.month >= cutoff)
     .reduce((sum, p) => sum + Number(p.paidAmount || p.amount || 0), 0);
 
   // Subtract currently outstanding loan principals
@@ -773,7 +783,7 @@ function expectedBankBalance() {
     .filter((l) => l.notes !== "emi_entry")
     .reduce((s, loan) => s + loanOutstanding(loan), 0);
 
-  return Math.round(basePool + julyPlusCollected - totalOutstanding);
+  return Math.round(basePool + activeYearCollected - totalOutstanding);
 }
 
 function availableLoanAmount() {
@@ -1591,7 +1601,7 @@ function renderDeposits() {
     { key: "d2023", label: "Third Year",  sub: "2023 – 2024", balance: initialState.deposits.find(d => d.id === "d2023")?.balance },
     { key: "d2024", label: "Fourth Year", sub: "2024 – 2025", balance: initialState.deposits.find(d => d.id === "d2024")?.balance },
     { key: "d2025", label: "Fifth Year",  sub: "2025",        balance: initialState.deposits.find(d => d.id === "d2025")?.balance },
-    { key: "d2026", label: "Sixth Year",  sub: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`, balance: 129805 + state.monthlyPayments.filter((p) => p.status === "paid" && p.month >= "2026-07").reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0), active: true },
+    { key: "d2026", label: "Sixth Year",  sub: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`, balance: Number(state.deposits.find(d => d.year === 2026)?.balance || 0) + state.monthlyPayments.filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth()).reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0), active: true },
   ];
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
@@ -1630,7 +1640,7 @@ function showDepositYearModal(yearKey) {
     // Dynamic July+ rows — group by month, split deposit vs interest
     const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const julyPlusPayments = state.monthlyPayments
-      .filter((p) => p.status === "paid" && p.month >= "2026-07")
+      .filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth())
       .sort((a, b) => a.month.localeCompare(b.month));
     const julyByMonth = {};
     julyPlusPayments.forEach((p) => {
@@ -1653,7 +1663,7 @@ function showDepositYearModal(yearKey) {
       ];
     });
     const julyPlusTotal = julyPlusPayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-    const yr6RunningTotal = 129805 + julyPlusTotal;
+    const yr6RunningTotal = Number(state.deposits.find(d => d.year === 2026)?.balance || 0) + julyPlusTotal;
     const latestPaidMonth = julyPlusPayments.map((p) => p.month).sort().pop();
     const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
     const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
@@ -1923,13 +1933,14 @@ function renderMembers() {
 function renderMeetings() {
   const now = new Date();
   const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
-  // Year 6 chart: historical fixed (Nov 2025–Jun 2026) + actual July+ paid data
-  const yr6HistoricalDeposits = 21000 + 14000 + 11250 + 84000 + 44672;
-  const yr6HistoricalInterest = 65546 + 11171;
+  // Year 6 chart: read historical from deposit_summaries (DB) + actual active-year paid data
+  const yr6DbRow = state.deposits.find((d) => d.year === 2026);
+  const yr6HistoricalDeposits = Number(yr6DbRow?.principal || 0);
+  const yr6HistoricalInterest = Number(yr6DbRow?.interest || 0);
   let yr6JulyDeposits = 0;
   let yr6JulyInterest = 0;
   state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= "2026-07")
+    .filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth())
     .forEach((p) => {
       const mem = memberById(p.memberId);
       if (!mem) return;
