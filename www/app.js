@@ -2787,9 +2787,8 @@ function biometricRegistered() {
 }
 
 function saveBiometricSession(session) {
-  if (!session) return;
+  if (!session?.refresh_token) return;
   localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({
-    access_token: session.access_token,
     refresh_token: session.refresh_token,
   }));
 }
@@ -2857,26 +2856,18 @@ async function loginWithBiometric() {
     },
   });
   const stored = loadBiometricSession();
-  if (!stored) {
+  if (!stored?.refresh_token) {
     clearBiometricData();
     throw new Error("Session data missing. Please log in with password to re-enable fingerprint.");
   }
-  const { error } = await supabaseClient.auth.setSession({
-    access_token: stored.access_token,
+  const { data: refreshed, error } = await supabaseClient.auth.refreshSession({
     refresh_token: stored.refresh_token,
   });
-  if (error) {
+  if (error || !refreshed?.session) {
     clearBiometricData();
     throw new Error("Session expired. Log in with password to re-enable fingerprint.");
   }
-  await loadLiveState();
-  const member = currentUser();
-  if (!member || member.status !== "active") {
-    await supabaseClient.auth.signOut();
-    throw new Error("Account not active. Contact admin.");
-  }
-  const { data: freshSession } = await supabaseClient.auth.getSession();
-  saveBiometricSession(freshSession.session);
+  saveBiometricSession(refreshed.session);
   await addLiveAudit(`${member.name} logged in via fingerprint.`, "login");
   await loadLiveState();
   state.activeTab = "dashboard";
