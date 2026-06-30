@@ -1596,7 +1596,7 @@ function renderDeposits() {
     { key: "d2023", label: "Third Year",  sub: "2023 – 2024", balance: initialState.deposits.find(d => d.id === "d2023")?.balance },
     { key: "d2024", label: "Fourth Year", sub: "2024 – 2025", balance: initialState.deposits.find(d => d.id === "d2024")?.balance },
     { key: "d2025", label: "Fifth Year",  sub: "2025",        balance: initialState.deposits.find(d => d.id === "d2025")?.balance },
-    { key: "d2026", label: "Sixth Year",  sub: "Nov 2025 – Jun 2026", balance: 129805.71 },
+    { key: "d2026", label: "Sixth Year",  sub: "Nov 2025 – Jun 2026", balance: 129805 },
   ];
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
@@ -1635,16 +1635,16 @@ function showDepositYearModal(yearKey) {
     title = "Sixth Year (Nov 2025 – Jun 2026)";
     const points = [
       { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
-      { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000.00 },
-      { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000.00 },
-      { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250.00 },
-      { label: "Monthly Deposits",    detail: "January – June 2026 (₹2,000 × 7 members × 6 months)",                       amount:  84000.00 },
-      { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445.38/month × 6 months",                              amount:  44672.28 },
-      { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546.00 },
-      { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171.00 },
-      { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121833.57 },
+      { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
+      { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000 },
+      { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250 },
+      { label: "Monthly Deposits",    detail: "January – June 2026 (₹2,000 × 7 members × 6 months)",                       amount:  84000 },
+      { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months",                                 amount:  44672 },
+      { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546 },
+      { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
+      { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
     ];
-    const yr6NetTotal = 129805.71;
+    const yr6NetTotal = 129805;
     bodyHtml = `
       <ul class="year-modal-list">
         ${points.map(p => p.meta
