@@ -44,7 +44,7 @@
 
 /* ── Keyframes ──────────────────────────────── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: 0; transform: translateY(32px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -53,8 +53,13 @@
   to   { opacity: 1; }
 }
 
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.88); }
   to   { opacity: 1; transform: scale(1); }
 }
 
@@ -76,6 +81,21 @@
   0%   { transform: scale(0.4); opacity: 0; }
   70%  { transform: scale(1.18); }
   100% { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes rippleAnim {
+  0%   { transform: scale(0); opacity: 0.45; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+/* ── Ripple ──────────────────────────────────── */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.32);
+  animation: rippleAnim 0.55s ease-out forwards;
+  pointer-events: none;
+  z-index: 9;
 }
 
 /* ── Base ───────────────────────────────────── */
@@ -386,7 +406,7 @@ button:focus-visible {
   width: min(1120px, 100%);
   margin: 0 auto;
   padding: 14px 12px 92px;
-  animation: fadeIn 0.22s ease both;
+  animation: pageSlideIn 0.38s cubic-bezier(0.34, 1, 0.64, 1) both;
 }
 
 /* ── Dashboard hero ─────────────────────────── */
@@ -457,15 +477,15 @@ button:focus-visible {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  animation: fadeInUp 0.35s ease both;
+  animation: fadeInUp 0.5s cubic-bezier(0.34, 1.1, 0.64, 1) both;
 }
 
-.dash-tile:nth-child(1) { animation-delay: 0ms; }
-.dash-tile:nth-child(2) { animation-delay: 55ms; }
-.dash-tile:nth-child(3) { animation-delay: 110ms; }
-.dash-tile:nth-child(4) { animation-delay: 165ms; }
-.dash-tile:nth-child(5) { animation-delay: 220ms; }
-.dash-tile:nth-child(6) { animation-delay: 275ms; }
+.dash-tile:nth-child(1) { animation-delay: 60ms; }
+.dash-tile:nth-child(2) { animation-delay: 130ms; }
+.dash-tile:nth-child(3) { animation-delay: 200ms; }
+.dash-tile:nth-child(4) { animation-delay: 270ms; }
+.dash-tile:nth-child(5) { animation-delay: 340ms; }
+.dash-tile:nth-child(6) { animation-delay: 410ms; }
 
 .dash-tile:hover {
   transform: translateY(-3px);
@@ -628,7 +648,8 @@ button:focus-visible {
   box-shadow: 0 12px 36px rgba(28,28,46,0.28);
   position: relative;
   overflow: hidden;
-  animation: scaleIn 0.38s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+  animation: scaleIn 0.5s cubic-bezier(0.34, 1.15, 0.64, 1) both;
+  animation-delay: 30ms;
 }
 
 .dash-summary-card::before {
@@ -827,13 +848,13 @@ button:focus-visible {
   min-height: 96px;
   padding: 16px;
   transition: transform 0.2s, box-shadow 0.2s;
-  animation: fadeInUp 0.32s ease both;
+  animation: fadeInUp 0.48s cubic-bezier(0.34, 1.1, 0.64, 1) both;
 }
 
-.metric:nth-child(1) { animation-delay: 0ms; }
-.metric:nth-child(2) { animation-delay: 50ms; }
-.metric:nth-child(3) { animation-delay: 100ms; }
-.metric:nth-child(4) { animation-delay: 150ms; }
+.metric:nth-child(1) { animation-delay: 80ms; }
+.metric:nth-child(2) { animation-delay: 150ms; }
+.metric:nth-child(3) { animation-delay: 220ms; }
+.metric:nth-child(4) { animation-delay: 290ms; }
 
 .metric:hover {
   transform: translateY(-2px);
@@ -851,7 +872,7 @@ button:focus-visible {
 .metric strong { display: block; margin-top: 10px; font-size: 22px; line-height: 1.1; }
 .metric small  { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.35; }
 
-.card { overflow: hidden; animation: fadeInUp 0.32s ease both; }
+.card { overflow: hidden; animation: fadeInUp 0.45s cubic-bezier(0.34, 1.05, 0.64, 1) both; }
 
 .card-header {
   display: flex;

@@ -997,6 +997,28 @@ function render() {
   }
 
   renderChatFab();
+
+  requestAnimationFrame(() => {
+    const c = document.querySelector(".content");
+    if (c) { c.style.animation = "none"; c.getBoundingClientRect(); c.style.animation = ""; }
+    runPageAnimations();
+  });
+}
+
+function runPageAnimations() {
+  document.querySelectorAll("[data-count-up]").forEach((el) => {
+    const target = parseFloat(el.dataset.countUp);
+    if (isNaN(target) || target <= 0) return;
+    const duration = 900;
+    const t0 = performance.now();
+    const tick = (now) => {
+      const p = Math.min((now - t0) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = money(Math.round(target * ease));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 function initials(name) {
@@ -1194,6 +1216,9 @@ function renderDashboard() {
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening"; })();
   const paymentStatus = monthlyPayment?.status || "pending";
   const payInitiated = localStorage.getItem(`payInitiated_${currentMonth()}`) === "1";
+  const bankBal = expectedBankBalance();
+  const availLoan = availableLoanAmount();
+  const poolBal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0) + bankBal;
 
   const tiles = [
     { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
@@ -1251,22 +1276,22 @@ function renderDashboard() {
       <div class="dash-summary-grid">
         <div class="dash-summary-col">
           <p>Pool Balance</p>
-          <strong>${money((() => { const loans = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0); return loans + expectedBankBalance(); })())}</strong>
+          <strong data-count-up="${poolBal}">${money(poolBal)}</strong>
           <small>Total association pool</small>
         </div>
         <div class="dash-summary-col">
           <p>Bank Balance</p>
-          <strong>${money(expectedBankBalance())}</strong>
+          <strong data-count-up="${bankBal}">${money(bankBal)}</strong>
           <small>Estimated</small>
         </div>
         <div class="dash-summary-col">
           <p>Available Loan</p>
-          <strong>${money(availableLoanAmount())}</strong>
+          <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col">
           <p>Monthly Due</p>
-          <strong>${money(monthlyDue)}</strong>
+          <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
             ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
             : payInitiated
@@ -2432,6 +2457,20 @@ function statusText(status) {
   const value = String(status || "none");
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
+
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".primary, .danger, .secondary, .dash-tile, .nav button, .icon-button");
+  if (!el) return;
+  const ripple = document.createElement("span");
+  ripple.className = "ripple";
+  const rect = el.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 2.2;
+  ripple.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px;`;
+  if (getComputedStyle(el).position === "static") el.style.position = "relative";
+  el.style.overflow = "hidden";
+  el.appendChild(ripple);
+  ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
+});
 
 document.addEventListener("click", async (event) => {
   const tabButton = event.target.closest("[data-tab]");
