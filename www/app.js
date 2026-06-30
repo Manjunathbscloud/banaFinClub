@@ -748,14 +748,15 @@ function latestHistoricalBalance() {
 }
 
 function groupStats() {
-  const baseBalance = Number(state.settings.bankBalance ?? latestHistoricalBalance());
-  const monthlyCredits = state.monthlyPayments
-    .filter((payment) => payment.status === "paid")
-    .reduce((sum, payment) => sum + payment.amount, 0);
-  const loanPrincipalOutstanding = currentLoans().reduce((sum, loan) => sum + loanOutstanding(loan), 0);
-  const currentInterestDue = currentLoans().reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
-  const availableBalance = baseBalance + monthlyCredits - loanPrincipalOutstanding;
-  return { baseBalance, monthlyCredits, loanPrincipalOutstanding, currentInterestDue, availableBalance };
+  const baseBalance = expectedBankBalance();
+  const loanPrincipalOutstanding = currentLoans()
+    .filter((l) => l.notes !== "emi_entry")
+    .reduce((sum, loan) => sum + loanOutstanding(loan), 0);
+  const currentInterestDue = currentLoans()
+    .filter((l) => l.notes !== "emi_entry")
+    .reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
+  const availableBalance = baseBalance - loanPrincipalOutstanding;
+  return { baseBalance, loanPrincipalOutstanding, currentInterestDue, availableBalance };
 }
 
 function bankBalance() {
@@ -1926,16 +1927,24 @@ function renderMembers() {
 function renderMeetings() {
   const now = new Date();
   const nowYM = now.getFullYear() * 100 + (now.getMonth() + 1);
-  let yr6Deposits = 0;
-  if (nowYM >= 202511) yr6Deposits += 21000 + 14000;
-  if (nowYM >= 202512) yr6Deposits += 11250;
-  if (nowYM >= 202601) {
-    const jMonths = (now.getFullYear() - 2026) * 12 + now.getMonth() + 1;
-    yr6Deposits += 7 * 2000 * jMonths;
-    const emi = appannaEmiProgress();
-    yr6Deposits += Math.round(emi.paid * emi.monthlyEmi);
-  }
-  const yr6Interest = year6InterestCollected();
+  // Year 6 chart: historical fixed (Nov 2025–Jun 2026) + actual July+ paid data
+  const yr6HistoricalDeposits = 21000 + 14000 + 11250 + 84000 + 44672;
+  const yr6HistoricalInterest = 65546 + 11171;
+  let yr6JulyDeposits = 0;
+  let yr6JulyInterest = 0;
+  state.monthlyPayments
+    .filter((p) => p.status === "paid" && p.month >= "2026-07")
+    .forEach((p) => {
+      const mem = memberById(p.memberId);
+      if (!mem) return;
+      const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+      const paid = Number(p.paidAmount || p.amount || 0);
+      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+      yr6JulyDeposits += dep;
+      yr6JulyInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+    });
+  const yr6Deposits = yr6HistoricalDeposits + yr6JulyDeposits;
+  const yr6Interest = yr6HistoricalInterest + yr6JulyInterest;
 
   const baseDeposits = (state.deposits.length ? state.deposits : initialState.deposits).filter(d => d.year <= 2025);
   const chartData = [
