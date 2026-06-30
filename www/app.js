@@ -997,12 +997,7 @@ function render() {
   }
 
   renderChatFab();
-
-  requestAnimationFrame(() => {
-    const c = document.querySelector(".content");
-    if (c) { c.style.animation = "none"; c.getBoundingClientRect(); c.style.animation = ""; }
-    runPageAnimations();
-  });
+  requestAnimationFrame(runPageAnimations);
 }
 
 function runPageAnimations() {
