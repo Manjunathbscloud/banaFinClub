@@ -738,7 +738,9 @@ function memberOutstanding(memberId) {
 }
 
 function memberMonthlyInterest(memberId) {
-  return memberLoans(memberId).reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
+  return memberLoans(memberId)
+    .filter((l) => l.notes !== "emi_entry")
+    .reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
 }
 
 function latestHistoricalBalance() {
