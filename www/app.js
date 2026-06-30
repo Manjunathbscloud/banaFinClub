@@ -785,8 +785,15 @@ function currentMonthPayment(memberId) {
   return state.monthlyPayments.find((payment) => payment.memberId === memberId && payment.month === currentMonth());
 }
 
+function memberEmiMonthly(member) {
+  const emiLoan = state.loans.find((l) => l.notes === "emi_entry" && loanBelongsToMember(l, member));
+  if (!emiLoan || emiLoan.status !== "active") return 0;
+  const prog = appannaEmiProgress();
+  return prog.remaining > 0 ? Math.round(prog.monthlyEmi) : 0;
+}
+
 function memberMonthlyDue(member) {
-  return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id);
+  return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id) + memberEmiMonthly(member);
 }
 
 function groupMonthlyDepositDue() {
@@ -1630,9 +1637,10 @@ function showDepositYearModal(yearKey) {
     julyPlusPayments.forEach((p) => {
       const mem = memberById(p.memberId);
       if (!mem) return;
-      const dep = expectedMonthlyDeposit(mem, p.month);
+      const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
       const paid = Number(p.paidAmount || p.amount || 0);
-      const interest = Math.max(0, paid - dep);
+      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+      const interest = hasEmi ? 0 : Math.max(0, paid - dep);
       if (!julyByMonth[p.month]) julyByMonth[p.month] = { deposit: 0, interest: 0 };
       julyByMonth[p.month].deposit += dep;
       julyByMonth[p.month].interest += interest;
