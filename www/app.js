@@ -2145,43 +2145,44 @@ function renderAdmin() {
         </div>
       </details>
 
+      ${(() => {
+        const pendingExtensions = (state.extensionRequests || []).filter((e) => e.status === "pending");
+        const pendingCount = state.signupRequests.length + pendingLoanRequests.length + pendingExtensions.length;
+        return `
       <details class="card collapsible">
-        <summary class="card-header"><div><h3>Signup approvals</h3><p>Member signup requests</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="card-body row-list">
-          ${state.signupRequests.map((request) => `
-            <div class="row-item">
-              <div><strong>${escapeHtml(request.name)}</strong><span>${escapeHtml(request.phone)}</span></div>
-              <div class="actions">
-                <button class="primary" data-action="approve-signup" data-id="${request.id}" type="button">${t("approve")}</button>
-                <button class="danger" data-action="reject-signup" data-id="${request.id}" type="button">${t("reject")}</button>
+        <summary class="card-header">
+          <div><h3>Pending Approvals</h3><p>Signups · Loans · Extensions</p></div>
+          ${pendingCount > 0 ? `<span class="badge bad" style="margin-left:auto;margin-right:8px;">${pendingCount}</span>` : ""}
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Member Signups</p>
+          <div class="row-list" style="margin-bottom:16px;">
+            ${state.signupRequests.map((request) => `
+              <div class="row-item">
+                <div><strong>${escapeHtml(request.name)}</strong><span>${escapeHtml(request.phone)}</span></div>
+                <div class="actions">
+                  <button class="primary" data-action="approve-signup" data-id="${request.id}" type="button">${t("approve")}</button>
+                  <button class="danger" data-action="reject-signup" data-id="${request.id}" type="button">${t("reject")}</button>
+                </div>
               </div>
-            </div>
-          `).join("") || `<div class="empty">No signup requests.</div>`}
-        </div>
-      </details>
-
-      <details class="card collapsible">
-        <summary class="card-header"><div><h3>Loan approvals</h3><p>Approve and disburse manually from ICICI</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="card-body row-list">
-          ${pendingLoanRequests.map((request) => `
-            <div class="row-item">
-              <div><strong>${escapeHtml(memberById(request.memberId)?.name || "-")} · ${money(request.amount)}</strong><span>${escapeHtml(request.reason)} · ${escapeHtml(request.date)}</span></div>
-              <div class="actions">
-                <button class="primary" data-action="approve-loan" data-id="${request.id}" type="button">${t("approve")}</button>
-                <button class="danger" data-action="reject-loan" data-id="${request.id}" type="button">${t("reject")}</button>
+            `).join("") || `<div class="empty">No signup requests.</div>`}
+          </div>
+          <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Loan Requests</p>
+          <div class="row-list" style="margin-bottom:16px;">
+            ${pendingLoanRequests.map((request) => `
+              <div class="row-item">
+                <div><strong>${escapeHtml(memberById(request.memberId)?.name || "-")} · ${money(request.amount)}</strong><span>${escapeHtml(request.reason)} · ${escapeHtml(request.date)}</span></div>
+                <div class="actions">
+                  <button class="primary" data-action="approve-loan" data-id="${request.id}" type="button">${t("approve")}</button>
+                  <button class="danger" data-action="reject-loan" data-id="${request.id}" type="button">${t("reject")}</button>
+                </div>
               </div>
-            </div>
-          `).join("") || `<div class="empty">No loan requests.</div>`}
-        </div>
-      </details>
-
-      <details class="card collapsible">
-        <summary class="card-header"><div><h3>Loan Extension Requests</h3><p>Approve or reject member extension requests</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="card-body row-list">
-          ${(() => {
-            const pending = (state.extensionRequests || []).filter((e) => e.status === "pending");
-            if (!pending.length) return `<div class="empty">No pending extension requests.</div>`;
-            return pending.map((ext) => {
+            `).join("") || `<div class="empty">No loan requests.</div>`}
+          </div>
+          <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Loan Extensions</p>
+          <div class="row-list">
+            ${pendingExtensions.length === 0 ? `<div class="empty">No pending extension requests.</div>` : pendingExtensions.map((ext) => {
               const loan = state.loans.find((l) => l.id === ext.loanId);
               const memberName = loan ? loanMemberName(loan) : memberById(ext.profileId)?.name || "-";
               const amount = loan ? money(loan.amount) : "-";
@@ -2197,10 +2198,11 @@ function renderAdmin() {
                     <button class="danger" data-action="reject-extension" data-id="${ext.id}" data-profile-id="${ext.profileId}" type="button">${t("reject")}</button>
                   </div>
                 </div>`;
-            }).join("");
-          })()}
+            }).join("")}
+          </div>
         </div>
-      </details>
+      </details>`;
+      })()}
 
       <details class="card collapsible">
         <summary class="card-header"><div><h3>${t("statementImport")}</h3><p>CSV upload parser for ICICI statement sample</p></div><span class="collapse-icon">⌄</span></summary>
