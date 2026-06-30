@@ -761,15 +761,20 @@ function bankBalance() {
 }
 
 function expectedBankBalance() {
-  // Total pool = sum of all 6 year closing balances
-  const totalPool = 114100 + 169600 + 187450 + 149915 + 231770 + 129805; // = 982640
+  // Base pool = sum of all 6 year closing balances (up to Jun 2026)
+  const basePool = 114100 + 169600 + 187450 + 149915 + 231770 + 129805;
+
+  // Add all July 2026+ payments marked as paid (deposit + interest together)
+  const julyPlusCollected = state.monthlyPayments
+    .filter((p) => p.status === "paid" && p.month >= "2026-07")
+    .reduce((sum, p) => sum + Number(p.paidAmount || p.amount || 0), 0);
 
   // Subtract currently outstanding loan principals
   const totalOutstanding = currentLoans()
     .filter((l) => l.notes !== "emi_entry")
     .reduce((s, loan) => s + loanOutstanding(loan), 0);
 
-  return Math.round(totalPool - totalOutstanding);
+  return Math.round(basePool + julyPlusCollected - totalOutstanding);
 }
 
 function availableLoanAmount() {
@@ -1580,7 +1585,7 @@ function renderDeposits() {
     { key: "d2023", label: "Third Year",  sub: "2023 – 2024", balance: initialState.deposits.find(d => d.id === "d2023")?.balance },
     { key: "d2024", label: "Fourth Year", sub: "2024 – 2025", balance: initialState.deposits.find(d => d.id === "d2024")?.balance },
     { key: "d2025", label: "Fifth Year",  sub: "2025",        balance: initialState.deposits.find(d => d.id === "d2025")?.balance },
-    { key: "d2026", label: "Sixth Year",  sub: "Nov 2025 – Jun 2026", balance: 129805 },
+    { key: "d2026", label: "Sixth Year",  sub: `Nov 2025 – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`, balance: 129805 + state.monthlyPayments.filter((p) => p.status === "paid" && p.month >= "2026-07").reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0), active: true },
   ];
   return `
     <section class="page-title"><p>${t("deposits")}</p><h2>Deposits & collections</h2></section>
@@ -1616,7 +1621,36 @@ function showDepositYearModal(yearKey) {
   let title = "", bodyHtml = "";
 
   if (yearKey === "d2026") {
-    title = "Sixth Year (Nov 2025 – Jun 2026)";
+    // Dynamic July+ rows — group by month, split deposit vs interest
+    const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const julyPlusPayments = state.monthlyPayments
+      .filter((p) => p.status === "paid" && p.month >= "2026-07")
+      .sort((a, b) => a.month.localeCompare(b.month));
+    const julyByMonth = {};
+    julyPlusPayments.forEach((p) => {
+      const mem = memberById(p.memberId);
+      if (!mem) return;
+      const dep = expectedMonthlyDeposit(mem, p.month);
+      const paid = Number(p.paidAmount || p.amount || 0);
+      const interest = Math.max(0, paid - dep);
+      if (!julyByMonth[p.month]) julyByMonth[p.month] = { deposit: 0, interest: 0 };
+      julyByMonth[p.month].deposit += dep;
+      julyByMonth[p.month].interest += interest;
+    });
+    const julyRows = Object.entries(julyByMonth).flatMap(([month, data]) => {
+      const [yr, mo] = month.split("-");
+      const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
+      return [
+        { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
+        ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
+      ];
+    });
+    const julyPlusTotal = julyPlusPayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+    const yr6RunningTotal = 129805 + julyPlusTotal;
+    const latestPaidMonth = julyPlusPayments.map((p) => p.month).sort().pop();
+    const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
+    const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
+    title = `Sixth Year (Nov 2025 – ${endLabel})`;
     const points = [
       { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
       { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
@@ -1627,8 +1661,8 @@ function showDepositYearModal(yearKey) {
       { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546 },
       { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
       { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
+      ...julyRows,
     ];
-    const yr6NetTotal = 129805;
     bodyHtml = `
       <ul class="year-modal-list">
         ${points.map(p => p.meta
@@ -1636,7 +1670,7 @@ function showDepositYearModal(yearKey) {
           : `<li class="year-modal-item"><div><span class="year-modal-label">${escapeHtml(p.label)}</span><span class="year-modal-detail">${escapeHtml(p.detail)}</span></div><strong class="year-modal-amount" style="color:${p.amount < 0 ? "#dc2626" : "#16a34a"};">${p.amount < 0 ? "−" + money(Math.abs(p.amount)) : money(p.amount)}</strong></li>`
         ).join("")}
       </ul>
-      <div class="year-modal-total"><span>Closing Balance (Jun 2026)</span><strong style="color:#2563eb;">${money(yr6NetTotal)}</strong></div>`;
+      <div class="year-modal-total"><span>Running Balance (${endLabel})</span><strong style="color:#2563eb;">${money(yr6RunningTotal)}</strong></div>`;
   } else {
     const d = initialState.deposits.find(dep => dep.id === yearKey);
     if (!d) return;
@@ -2783,8 +2817,7 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
-    const recovered = loan.amount + interestPaid;
-    await insertStatement("credit", recovered, `Loan recovered from ${loanMemberName(loan)} (principal + interest)`, expectedBankBalance(), id);
+    await insertStatement("credit", loan.amount, `Loan recovered from ${loanMemberName(loan)} (principal returned)`, expectedBankBalance(), id);
     showToast("Loan marked clear.");
     render();
     return;
