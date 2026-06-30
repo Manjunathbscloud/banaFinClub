@@ -12,7 +12,7 @@ const translations = {
   en: {
     privateClub: "Private member finance club",
     loginTitle: "Family fund, deposits, loans, and reports in one private app.",
-    loginCopy: "Built for Banakar FinClub members with admin approval, monthly deposits, loan tracking, and ICICI statement import readiness.",
+    loginCopy: "Built for Banakar FinClub members with admin approval, monthly deposits, and loan tracking.",
     signIn: "Login",
     signUp: "Signup",
     reset: "Reset",
@@ -36,8 +36,6 @@ const translations = {
     dueBy: "Due by 15th",
     groupRules: "Group rules",
     recentActivity: "Recent activity",
-    statementImport: "Statement import",
-    reviewAndPost: "Review and post",
     loanRequest: "Loan request",
     amount: "Amount",
     reason: "Reason",
@@ -79,8 +77,6 @@ const translations = {
     dueBy: "15ರೊಳಗೆ ಪಾವತಿ",
     groupRules: "ಗುಂಪಿನ ನಿಯಮಗಳು",
     recentActivity: "ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆ",
-    statementImport: "ಸ್ಟೇಟ್ಮೆಂಟ್ ಆಮದು",
-    reviewAndPost: "ಪರಿಶೀಲಿಸಿ ಪೋಸ್ಟ್ ಮಾಡಿ",
     loanRequest: "ಸಾಲ ವಿನಂತಿ",
     amount: "ಮೊತ್ತ",
     reason: "ಕಾರಣ",
@@ -2075,7 +2071,7 @@ function renderAdmin() {
   if (!isAdmin()) {
     return `
       <section class="page-title"><p>${t("admin")}</p><h2>${t("adminOnly")}</h2></section>
-      <div class="alert">Only the president/admin can approve members, import statements, and post transactions.</div>
+      <div class="alert">Only the president/admin can approve members and manage transactions.</div>
     `;
   }
 
@@ -2203,20 +2199,6 @@ function renderAdmin() {
         </div>
       </details>`;
       })()}
-
-      <details class="card collapsible">
-        <summary class="card-header"><div><h3>${t("statementImport")}</h3><p>CSV upload parser for ICICI statement sample</p></div><span class="collapse-icon">⌄</span></summary>
-        <div class="card-body">
-          <form class="form" data-form="statement-text">
-            <label class="field">
-              <span>Paste CSV rows</span>
-              <textarea name="statement" placeholder="date,narration,debit,credit,balance&#10;2026-05-15,UPI/PRATAP,0,2000,233770"></textarea>
-            </label>
-            <button class="primary" type="submit">${t("reviewAndPost")}</button>
-            <p class="hint">When you provide a real ICICI sample, I will add exact file upload and matching rules.</p>
-          </form>
-        </div>
-      </details>
 
       <details class="card collapsible">
         <summary class="card-header"><div><h3>📜 Rules Management</h3><p>Add, edit or delete association rules</p></div><span class="collapse-icon">⌄</span></summary>
@@ -2558,7 +2540,6 @@ document.addEventListener("submit", async (event) => {
     if (type === "set-new-password") await setNewPassword(data);
     if (type === "loan-request") await requestLoan(data);
     if (type === "manual-loan") await addManualLoan(data);
-    if (type === "statement-text") await importStatement(data);
     if (type === "add-rule") {
       const section = (data.section || "").trim();
       const item = (data.item || "").trim();
@@ -3116,78 +3097,6 @@ async function rejectExtension(id, profileId) {
   await addLiveAudit(`Rejected loan extension request ${id}.`, "loan_extension_rejected");
   await loadLiveState();
   showToast("Extension request rejected.");
-  render();
-}
-
-async function importStatement(data) {
-  const rows = data.statement
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(1)
-    .map((line) => {
-      const [date, narration, debit, credit, balance] = line.split(",");
-      return { id: uid("b"), date, narration, debit: Number(debit || 0), credit: Number(credit || 0), balance: Number(balance || 0) };
-    });
-
-  const matchedPayments = rows.filter((row) => row.credit > 0).map((row) => {
-    const narration = String(row.narration || "").toLowerCase();
-    const member = activeMembers().find((item) => narration.includes(item.name.split(" ")[0].toLowerCase()));
-    return member ? { row, member } : null;
-  }).filter(Boolean);
-
-  matchedPayments.forEach(({ row, member }) => {
-    state.monthlyPayments.push({ id: uid("p"), memberId: member.id, month: row.date.slice(0, 7), amount: row.credit, status: "paid", source: "statement" });
-  });
-
-  if (liveBackendReady) {
-    const latestBalanceRow = [...rows].reverse().find((row) => Number.isFinite(row.balance));
-    for (const row of rows) {
-      const match = matchedPayments.find((item) => item.row.id === row.id);
-      const transaction = await liveQuery(supabaseClient.from("bank_transactions").insert({
-        transaction_date: row.date,
-        narration: row.narration,
-        debit: row.debit,
-        credit: row.credit,
-        balance: row.balance,
-        matched_profile_id: match?.member.id || null,
-        match_type: match ? "monthly_deposit" : null,
-        review_status: match ? "posted" : "unreviewed",
-      }).select("id").single());
-      if (match) {
-        await liveQuery(supabaseClient.from("monthly_payments").upsert({
-          profile_id: match.member.id,
-          month: row.date.slice(0, 7),
-          expected_amount: expectedMonthlyDeposit(match.member, row.date.slice(0, 7)),
-          paid_amount: row.credit,
-          status: "paid",
-          source: "statement",
-          bank_transaction_id: transaction.id,
-        }, { onConflict: "profile_id,month" }));
-      }
-    }
-    if (latestBalanceRow) {
-      await liveQuery(supabaseClient.from("settings").upsert({
-        id: "bank_balance",
-        value: {
-          amount: latestBalanceRow.balance,
-          updatedAt: latestBalanceRow.date || today(),
-          source: "statement",
-        },
-        updated_at: new Date().toISOString(),
-      }));
-    }
-    await addLiveAudit(`Imported ${rows.length} statement rows; matched ${matchedPayments.length} deposits.`, "statement_imported");
-    await loadLiveState();
-    showToast(`Imported ${rows.length} rows, matched ${matchedPayments.length}.`);
-    render();
-    return;
-  }
-
-  state.statementRows.push(...rows);
-  state.audit.push({ id: uid("a"), date: today(), text: `Imported ${rows.length} statement rows; matched ${matchedPayments.length} deposits.` });
-  saveState();
-  showToast(`Imported ${rows.length} rows, matched ${matchedPayments.length}.`);
   render();
 }
 
