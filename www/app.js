@@ -761,31 +761,15 @@ function bankBalance() {
 }
 
 function expectedBankBalance() {
-  const sarpaShare = 121833;
-  const pool5y = initialState.deposits.reduce((s, d) => s + d.balance, 0);
-  const postExitPool = pool5y - sarpaShare;
+  // Total pool = sum of all 6 year closing balances
+  const totalPool = 114100 + 169600 + 187450 + 149915 + 231770 + 129805; // = 982640
 
-  // Fixed historical deposits Nov 2025 – May 2026 (verified correct)
-  const historicalDeposits = (21000 + 14000) + 11250 + (7 * 2000 * 5);
-
-  // Appanna EMI principal paid (tracked via principal_paid on emi_entry loan)
-  const emiLoan = state.loans.find((l) => l.notes === "emi_entry");
-  const appannaEmiPaid = emiLoan ? Number(emiLoan.principalPaid || 0) : 0;
-
-  // Pre-June 2026 interest (expected, capped at May 2026 inside yr6InterestMonths)
-  const preJuneInterest = year6InterestCollected();
-  const extraInterest = 8125 + 3046;
-
-  // Actual payments from June 2026 onwards — admin-confirmed via payment collection
-  const actualJunePlus = state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= "2026-06")
-    .reduce((sum, p) => sum + Number(p.paidAmount || p.amount || 0), 0);
-
+  // Subtract currently outstanding loan principals
   const totalOutstanding = currentLoans()
     .filter((l) => l.notes !== "emi_entry")
     .reduce((s, loan) => s + loanOutstanding(loan), 0);
 
-  return Math.round(postExitPool + historicalDeposits + appannaEmiPaid + preJuneInterest + extraInterest + actualJunePlus - totalOutstanding);
+  return Math.round(totalPool - totalOutstanding);
 }
 
 function availableLoanAmount() {
