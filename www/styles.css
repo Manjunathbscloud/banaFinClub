@@ -1,17 +1,17 @@
 /* ═══════════════════════════════════════════════
    Banakar FinClub — Design System v2
-   Saffron + Charcoal Premium Theme
+   Blue + Cream Premium Theme
    ═══════════════════════════════════════════════ */
 
 :root {
   color-scheme: light;
 
-  --saffron:       #F97316;
-  --saffron-dark:  #C2410C;
-  --saffron-deep:  #EA580C;
-  --saffron-mid:   #FB923C;
-  --saffron-soft:  #FFF7ED;
-  --saffron-pale:  #FFEDD5;
+  --saffron:       #2563EB;
+  --saffron-dark:  #1D4ED8;
+  --saffron-deep:  #1E40AF;
+  --saffron-mid:   #60A5FA;
+  --saffron-soft:  #EFF6FF;
+  --saffron-pale:  #DBEAFE;
 
   --charcoal:      #1C1C2E;
   --charcoal-mid:  #2D2D3F;
@@ -23,13 +23,13 @@
   --ink:   #1C1C2E;
   --muted: #6B7280;
   --line:  #E5E7EB;
-  --page:  #FFFBF7;
+  --page:  #F8F9FF;
   --panel: #FFFFFF;
   --good:  #059669;
   --warn:  #D97706;
   --bad:   #DC2626;
 
-  --shadow:    0 2px 8px rgba(249,115,22,0.07), 0 4px 16px rgba(28,28,46,0.08);
+  --shadow:    0 2px 8px rgba(37,99,235,0.08), 0 4px 16px rgba(28,28,46,0.08);
   --shadow-md: 0 6px 24px rgba(28,28,46,0.12);
   --shadow-lg: 0 12px 40px rgba(28,28,46,0.18);
 
