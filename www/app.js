@@ -3215,6 +3215,7 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
+    await insertStatement("credit", loan.amount, `Loan closed – ${loanMemberName(loan)} (principal returned)`, expectedBankBalance(), id);
     showToast("Loan marked clear.");
     render();
     return;
@@ -3365,6 +3366,7 @@ async function approveLoan(id) {
       id
     );
     await loadLiveState();
+    await insertStatement("debit", request.amount, `Loan disbursed – ${member?.name || "member"}`, expectedBankBalance(), id);
     showToast("Loan approved.");
     render();
     return;
