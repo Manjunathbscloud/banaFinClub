@@ -1597,10 +1597,70 @@ function depositYearCard(d) {
   </details>`;
 }
 
+function buildStatementRows() {
+  const events = [];
+  const cutoff = activeYearCutoffMonth();
+
+  // Monthly payments – credits
+  for (const p of state.monthlyPayments) {
+    if (p.status !== "paid") continue;
+    if (p.month < cutoff) continue;
+    const member = memberById(p.memberId);
+    const amount = Number(p.paidAmount || p.amount || 0);
+    if (!amount) continue;
+    events.push({
+      date: p.month + "-15",
+      sortKey: p.month + "-15",
+      type: "credit",
+      amount,
+      description: `Monthly deposit – ${member?.name || "Member"} (${p.month})`,
+      tag: "deposit",
+    });
+  }
+
+  // Current loans – disbursals (debits) and recoveries (credits)
+  for (const loan of state.loans) {
+    if (loan.notes === "emi_entry") continue;
+    const amount = Number(loan.amount || 0);
+    if (!amount) continue;
+    const disbDate = loan.from || loan.createdAt?.slice(0, 10) || cutoff;
+    events.push({
+      date: disbDate,
+      sortKey: disbDate,
+      type: "debit",
+      amount,
+      description: `Loan disbursed – ${loanMemberName(loan)}`,
+      tag: "loan",
+    });
+    if (loan.status === "clear" && loan.closedAt) {
+      events.push({
+        date: loan.closedAt,
+        sortKey: loan.closedAt + "z",
+        type: "credit",
+        amount,
+        description: `Loan recovered – ${loanMemberName(loan)}`,
+        tag: "loan",
+      });
+    }
+  }
+
+  // Sort chronologically, compute running balance
+  events.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  let running = closedYearsBasePool();
+  for (const ev of events) {
+    running += ev.type === "credit" ? ev.amount : -ev.amount;
+    ev.balance = running;
+  }
+
+  return events.reverse();
+}
+
 function renderStatement() {
-  const rows = state.statementRows;
+  const rows = buildStatementRows();
+  const tagIcon = { deposit: "💰", loan: "📋" };
+
   const rowsHtml = rows.length === 0
-    ? `<div class="stmt-empty">No transactions recorded yet. Transactions will appear here as loans are disbursed, payments are collected, and loans are recovered.</div>`
+    ? `<div class="stmt-empty">No transactions for the current year yet. Monthly payments and loans will appear here automatically.</div>`
     : rows.map((s) => {
         const isCredit = s.type === "credit";
         return `
@@ -1619,12 +1679,13 @@ function renderStatement() {
           </div>`;
       }).join("");
 
+  const currentBal = expectedBankBalance();
   return `
-    <div class="page-header"><h2>Statement</h2><p>All club transactions</p></div>
+    <div class="page-header"><h2>Statement</h2><p>Active year transactions · Balance: ${money(currentBal)}</p></div>
     <div class="stmt-legend">
       <span><span class="stmt-type-dot credit"></span> Credit (money in)</span>
       <span><span class="stmt-type-dot debit"></span> Debit (money out)</span>
-      <span class="stmt-legend-bal">Balance shown is post-transaction</span>
+      <span class="stmt-legend-bal">Balance after each transaction</span>
     </div>
     <div class="stmt-list">${rowsHtml}</div>`;
 }
