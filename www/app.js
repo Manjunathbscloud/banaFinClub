@@ -3515,8 +3515,12 @@ async function approveLoan(id) {
       );
     }
     await notifyAllActiveMembers(
-      "loan_disbursed", "Loan disbursed",
-      `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`, id
+      "loan_disbursed",
+      loanType === "emi" ? "EMI Loan disbursed" : "Loan disbursed",
+      loanType === "emi"
+        ? `An EMI loan of ${money(request.amount)} (${tenure} months · ${money(emiCalc?.emiAmount)}/mo) has been disbursed to ${member?.name || "a member"}.`
+        : `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`,
+      id
     );
     await loadLiveState();
     await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, id);
