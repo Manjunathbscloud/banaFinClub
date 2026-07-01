@@ -1616,6 +1616,7 @@ function renderStatement() {
             </div>
             <div class="stmt-right">
               <span class="stmt-amount ${isCredit ? "credit" : "debit"}">${isCredit ? "+" : "−"}${money(s.amount)}</span>
+              <span class="stmt-balance">Bal: ${money(s.balance)}</span>
             </div>
           </div>`;
       }).join("");
