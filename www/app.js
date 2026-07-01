@@ -1597,70 +1597,12 @@ function depositYearCard(d) {
   </details>`;
 }
 
-function buildStatementRows() {
-  const events = [];
-  const cutoff = activeYearCutoffMonth();
-
-  // Monthly payments – credits
-  for (const p of state.monthlyPayments) {
-    if (p.status !== "paid") continue;
-    if (p.month < cutoff) continue;
-    const member = memberById(p.memberId);
-    const amount = Number(p.paidAmount || p.amount || 0);
-    if (!amount) continue;
-    events.push({
-      date: p.month + "-15",
-      sortKey: p.month + "-15",
-      type: "credit",
-      amount,
-      description: `Monthly deposit – ${member?.name || "Member"} (${p.month})`,
-      tag: "deposit",
-    });
-  }
-
-  // Current loans – disbursals (debits) and recoveries (credits)
-  for (const loan of state.loans) {
-    if (loan.notes === "emi_entry") continue;
-    const amount = Number(loan.amount || 0);
-    if (!amount) continue;
-    const disbDate = loan.from || loan.createdAt?.slice(0, 10) || cutoff;
-    events.push({
-      date: disbDate,
-      sortKey: disbDate,
-      type: "debit",
-      amount,
-      description: `Loan disbursed – ${loanMemberName(loan)}`,
-      tag: "loan",
-    });
-    if (loan.status === "clear" && loan.closedAt) {
-      events.push({
-        date: loan.closedAt,
-        sortKey: loan.closedAt + "z",
-        type: "credit",
-        amount,
-        description: `Loan recovered – ${loanMemberName(loan)}`,
-        tag: "loan",
-      });
-    }
-  }
-
-  // Sort chronologically, compute running balance
-  events.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  let running = closedYearsBasePool();
-  for (const ev of events) {
-    running += ev.type === "credit" ? ev.amount : -ev.amount;
-    ev.balance = running;
-  }
-
-  return events.reverse();
-}
-
 function renderStatement() {
-  const rows = buildStatementRows();
-  const tagIcon = { deposit: "💰", loan: "📋" };
+  const rows = state.statementRows;
+  const currentBal = expectedBankBalance();
 
   const rowsHtml = rows.length === 0
-    ? `<div class="stmt-empty">No transactions for the current year yet. Monthly payments and loans will appear here automatically.</div>`
+    ? `<div class="stmt-empty">No transactions yet. Each time admin marks a monthly payment as collected, it will appear here with the exact date and running balance.</div>`
     : rows.map((s) => {
         const isCredit = s.type === "credit";
         return `
@@ -1679,13 +1621,12 @@ function renderStatement() {
           </div>`;
       }).join("");
 
-  const currentBal = expectedBankBalance();
   return `
-    <div class="page-header"><h2>Statement</h2><p>Active year transactions · Balance: ${money(currentBal)}</p></div>
+    <div class="page-header"><h2>Statement</h2><p>Current bank balance: <strong>${money(currentBal)}</strong></p></div>
     <div class="stmt-legend">
       <span><span class="stmt-type-dot credit"></span> Credit (money in)</span>
       <span><span class="stmt-type-dot debit"></span> Debit (money out)</span>
-      <span class="stmt-legend-bal">Balance after each transaction</span>
+      <span class="stmt-legend-bal">Balance shown is post-transaction</span>
     </div>
     <div class="stmt-list">${rowsHtml}</div>`;
 }
@@ -3235,7 +3176,6 @@ async function addManualLoan(data) {
     }));
     await addLiveAudit(`Added current loan ${money(amount)} for ${memberName}.`, "current_loan_added");
     await loadLiveState();
-    await insertStatement("debit", amount, `Loan disbursed to ${memberName}`, expectedBankBalance());
     showToast("Current loan added.");
     render();
     return;
@@ -3275,7 +3215,6 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
-    await insertStatement("credit", loan.amount, `Loan recovered from ${loanMemberName(loan)} (principal returned)`, expectedBankBalance(), id);
     showToast("Loan marked clear.");
     render();
     return;
@@ -3426,7 +3365,6 @@ async function approveLoan(id) {
       id
     );
     await loadLiveState();
-    await insertStatement("debit", request.amount, `Loan disbursed to ${member?.name || "member"}`, expectedBankBalance(), id);
     showToast("Loan approved.");
     render();
     return;
