@@ -115,6 +115,8 @@ const initialState = {
     activeYearRenewalFee: 0,
     activeYearExits: [],
     yearClosed: false,
+    emiEnabled: false,
+    emiLoanInterestRateMonthly: 1.5,
   },
   members: [
     { id: "m1", name: "Manjunath Banakar", phone: "9591382942", role: "president", status: "active", password: "123456" },
@@ -225,6 +227,7 @@ const initialState = {
     { id: "p4", memberId: "m4", month: "2026-05", amount: 2000, status: "paid", source: "manual" },
   ],
   loans: [],
+  loanEmis: [],
   extensionRequests: [],
   loanRequests: [
     { id: "q1", memberId: "m7", amount: 25000, reason: "Medical support", status: "pending", date: "2026-05-14" },
@@ -394,6 +397,21 @@ function liveLoanToLocal(loan) {
     isInterestFree: Boolean(loan.is_interest_free),
     purpose: loan.purpose || "",
     notes: loan.notes || "",
+    loanType: loan.loan_type || "full",
+    tenureMonths: loan.tenure_months || null,
+    emiAmount: Number(loan.emi_amount || 0),
+    emisPaid: Number(loan.emis_paid || 0),
+  };
+}
+
+function liveLoanEmiToLocal(e) {
+  return {
+    id: e.id, loanId: e.loan_id,
+    emiNumber: e.emi_number, dueMonth: e.due_month,
+    amount: Number(e.amount),
+    principalPart: Number(e.principal_part),
+    interestPart: Number(e.interest_part),
+    status: e.status, paidAt: e.paid_at,
   };
 }
 
@@ -424,6 +442,8 @@ function liveLoanRequestToLocal(request) {
     reason: request.reason,
     status: request.status,
     date: String(request.requested_at || "").slice(0, 10),
+    loanType: request.loan_type || "full",
+    tenureMonths: request.tenure_months || null,
   };
 }
 
@@ -493,8 +513,10 @@ async function addLiveAudit(message, action = "activity") {
   }));
 }
 
-async function insertStatement(type, amount, description, balance, relatedId = null) {
+async function insertStatement(type, amount, description, relatedId = null) {
   if (!liveBackendReady) return;
+  const lastBalance = state.statementRows[0]?.balance || 0;
+  const balance = type === "credit" ? lastBalance + amount : lastBalance - amount;
   const row = { date: today(), type, amount, description, balance, related_id: relatedId };
   await liveQuery(supabaseClient.from("statements").insert(row));
   state.statementRows.unshift(liveStatementToLocal({ ...row, id: "pending", created_at: new Date().toISOString(), related_id: relatedId }));
@@ -509,7 +531,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -523,6 +545,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("loan_extension_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("messages").select("*").order("created_at", { ascending: true }).limit(200)),
     liveOptionalList(supabaseClient.from("statements").select("*").order("created_at", { ascending: false }).limit(200)),
+    liveOptionalList(supabaseClient.from("loan_emis").select("*").order("loan_id").order("emi_number")),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -542,6 +565,8 @@ async function loadLiveState() {
       bankBalanceUpdatedAt: settingsById.bank_balance?.updatedAt || initialState.settings.bankBalanceUpdatedAt,
       loanInterestLabel: "Rs. 1.25 per Rs. 100 per month",
       bankName: "ICICI Bank",
+      emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
+      emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
     },
     currentUserId: current?.status === "active" ? current.id : null,
     members,
@@ -557,6 +582,7 @@ async function loadLiveState() {
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
+    loanEmis: loanEmisData.map(liveLoanEmiToLocal),
     extensionRequests: extensionRequests.map(liveExtensionToLocal),
     messages: messages.map(liveMessageToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
@@ -647,7 +673,19 @@ function expectedMonthlyDeposit(member, month = currentMonth()) {
 }
 
 function loanOutstanding(loan) {
+  if (loan.loanType === "emi") {
+    const principalPerEmi = loan.amount / (loan.tenureMonths || 1);
+    return Math.max(0, loan.amount - principalPerEmi * loan.emisPaid);
+  }
   return Math.max(0, Number(loan.amount) - Number(loan.principalPaid || 0));
+}
+
+function calcEmi(principal, tenureMonths) {
+  const r = Number(state.settings.emiLoanInterestRateMonthly || 1.5) / 100;
+  const emiAmount = Math.round(principal * (1 + r * tenureMonths) / tenureMonths);
+  const principalPart = Math.round(principal / tenureMonths);
+  const interestPart = emiAmount - principalPart;
+  return { emiAmount, principalPart, interestPart };
 }
 
 function loanMonthlyInterest(loan) {
@@ -774,21 +812,7 @@ function activeYearCutoffMonth() {
 }
 
 function expectedBankBalance() {
-  // Base pool = sum of all closed year closing balances (live from deposit_summaries)
-  const basePool = closedYearsBasePool();
-
-  // Add all payments from the active year that are marked paid
-  const cutoff = activeYearCutoffMonth();
-  const activeYearCollected = state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= cutoff)
-    .reduce((sum, p) => sum + Number(p.paidAmount || p.amount || 0), 0);
-
-  // Subtract currently outstanding loan principals
-  const totalOutstanding = currentLoans()
-    .filter((l) => l.notes !== "emi_entry")
-    .reduce((s, loan) => s + loanOutstanding(loan), 0);
-
-  return Math.round(basePool + activeYearCollected - totalOutstanding);
+  return state.statementRows[0]?.balance || 0;
 }
 
 function availableLoanAmount() {
@@ -800,10 +824,23 @@ function currentMonthPayment(memberId) {
 }
 
 function memberEmiMonthly(member) {
-  const emiLoan = state.loans.find((l) => l.notes === "emi_entry" && loanBelongsToMember(l, member));
-  if (!emiLoan || emiLoan.status !== "active") return 0;
-  const prog = appannaEmiProgress();
-  return prog.remaining > 0 ? Math.round(prog.monthlyEmi) : 0;
+  // New generalised EMI loans (loan_type = 'emi')
+  const emiLoans = state.loans.filter(l =>
+    l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member)
+  );
+  const newEmi = emiLoans.reduce((sum, loan) => {
+    const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
+    return sum + (nextEmi ? nextEmi.amount : 0);
+  }, 0);
+  // Legacy: Appanna's hardcoded EMI (notes === 'emi_entry')
+  if (newEmi === 0) {
+    const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, member));
+    if (legacyLoan && legacyLoan.status === "active") {
+      const prog = appannaEmiProgress();
+      return prog.remaining > 0 ? Math.round(prog.monthlyEmi) : 0;
+    }
+  }
+  return newEmi;
 }
 
 function memberMonthlyDue(member) {
@@ -1883,7 +1920,27 @@ function renderLoans() {
         <summary class="card-header"><div><h3>${t("loanRequest")}</h3><p>Submit request for admin approval</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body">
           <form class="form" data-form="loan-request">
-            <label class="field"><span>${t("amount")}</span><input name="amount" type="number" min="1" required /></label>
+            <label class="field"><span>${t("amount")}</span><input name="amount" type="number" min="1" required id="lr-amount" oninput="updateEmiPreview()" /></label>
+            ${state.settings.emiEnabled ? `
+              <div class="field">
+                <span>Loan Type</span>
+                <div style="display:flex;gap:20px;margin-top:6px;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    <input type="radio" name="loan_type" value="full" checked onchange="document.getElementById('lr-tenure-row').style.display='none';document.getElementById('lr-emi-preview').innerHTML=''" />
+                    Full Repayment <small style="color:var(--muted);">(1.25%/mo)</small>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    <input type="radio" name="loan_type" value="emi" onchange="document.getElementById('lr-tenure-row').style.display='block';updateEmiPreview()" />
+                    EMI <small style="color:var(--muted);">(1.5%/mo)</small>
+                  </label>
+                </div>
+              </div>
+              <div class="field" id="lr-tenure-row" style="display:none;">
+                <span>Tenure (months)</span>
+                <input name="tenure_months" type="number" min="1" max="36" placeholder="e.g. 12" id="lr-tenure" oninput="updateEmiPreview()" />
+              </div>
+              <div id="lr-emi-preview" style="font-size:13px;color:#2563eb;padding:4px 0 0;min-height:20px;"></div>
+            ` : ""}
             <label class="field"><span>${t("reason")}</span><textarea name="reason" required></textarea></label>
             <button class="primary" type="submit">${t("submit")}</button>
           </form>
@@ -2312,15 +2369,17 @@ function renderAdmin() {
           </div>
           <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Loan Requests</p>
           <div class="row-list" style="margin-bottom:16px;">
-            ${pendingLoanRequests.map((request) => `
+            ${pendingLoanRequests.map((request) => {
+              const emiTag = request.loanType === "emi" ? ` · <span class="badge info" style="font-size:10px;">EMI ${request.tenureMonths}mo</span>` : "";
+              return `
               <div class="row-item">
-                <div><strong>${escapeHtml(memberById(request.memberId)?.name || "-")} · ${money(request.amount)}</strong><span>${escapeHtml(request.reason)} · ${escapeHtml(request.date)}</span></div>
+                <div><strong>${escapeHtml(memberById(request.memberId)?.name || "-")} · ${money(request.amount)}${emiTag}</strong><span>${escapeHtml(request.reason)} · ${escapeHtml(request.date)}</span></div>
                 <div class="actions">
                   <button class="primary" data-action="approve-loan" data-id="${request.id}" type="button">${t("approve")}</button>
                   <button class="danger" data-action="reject-loan" data-id="${request.id}" type="button">${t("reject")}</button>
                 </div>
-              </div>
-            `).join("") || `<div class="empty">No loan requests.</div>`}
+              </div>`;
+            }).join("") || `<div class="empty">No loan requests.</div>`}
           </div>
           <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Loan Extensions</p>
           <div class="row-list">
@@ -2438,6 +2497,49 @@ function renderAdmin() {
           </form>`;
 
         return `
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>EMI Loans</h3><p>Enable after members vote to allow EMI-type loans</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0;">
+            <div>
+              <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, members can request loans in EMI format at <strong>1.5%/month</strong> with a custom tenure.</p>
+              <p style="font-size:13px;color:var(--muted);margin:0;">Full-repayment loans remain available at <strong>1.25%/month</strong>.</p>
+            </div>
+            <button class="${state.settings.emiEnabled ? "primary" : "secondary"}" data-action="toggle-emi" type="button" style="min-width:64px;flex-shrink:0;">
+              ${state.settings.emiEnabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          ${state.settings.emiEnabled ? `
+            <div style="margin-top:12px;">
+              ${(() => {
+                const emiActive = state.loans.filter(l => l.loanType === "emi" && l.status === "active");
+                if (emiActive.length === 0) return `<div class="empty">No active EMI loans.</div>`;
+                return emiActive.map(loan => {
+                  const memberName = loanMemberName(loan);
+                  const paid = loan.emisPaid;
+                  const total = loan.tenureMonths;
+                  const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
+                  return `
+                    <div class="row-item" style="flex-direction:column;align-items:flex-start;gap:6px;">
+                      <div style="display:flex;justify-content:space-between;width:100%;">
+                        <div>
+                          <strong>${escapeHtml(memberName)}</strong> · ${money(loan.amount)}
+                          <span class="badge info" style="font-size:10px;margin-left:4px;">EMI ${paid}/${total}</span>
+                        </div>
+                        <span style="font-size:12px;color:var(--muted);">₹${loan.emiAmount}/mo</span>
+                      </div>
+                      <div style="width:100%;height:4px;background:var(--border);border-radius:2px;">
+                        <div style="height:4px;background:var(--primary);border-radius:2px;width:${Math.round(paid/total*100)}%;"></div>
+                      </div>
+                      ${nextEmi ? `<p style="font-size:12px;color:var(--muted);margin:0;">Next: ${money(nextEmi.amount)} due ${nextEmi.dueMonth} — paid with monthly collection</p>` : `<p style="font-size:12px;color:#16a34a;margin:0;">All EMIs paid — loan closing.</p>`}
+                    </div>`;
+                }).join("");
+              })()}
+            </div>
+          ` : ""}
+        </div>
+      </details>
+
           <details class="card collapsible">
             <summary class="card-header">
               <div><h3>Year Management</h3><p>${yearClosed ? `Year ${activeYearNum} closed · Start Year ${newYearNum}` : `Year ${activeYearNum} active · Close after meeting`}</p></div>
@@ -2673,6 +2775,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
     if (action.dataset.action === "close-current-year") await closeCurrentYear();
+    if (action.dataset.action === "toggle-emi") await toggleEmiEnabled();
 
     if (action.dataset.action === "save-rule") {
       const id = action.dataset.id;
@@ -3127,22 +3230,53 @@ async function setNewPassword(data) {
   renderAuth("login");
 }
 
+function updateEmiPreview() {
+  const previewEl = document.getElementById("lr-emi-preview");
+  if (!previewEl) return;
+  const amountEl = document.getElementById("lr-amount");
+  const tenureEl = document.getElementById("lr-tenure");
+  const tenureRow = document.getElementById("lr-tenure-row");
+  if (!amountEl || !tenureEl || tenureRow?.style.display === "none") { previewEl.innerHTML = ""; return; }
+  const principal = Number(amountEl.value);
+  const tenure = Number(tenureEl.value);
+  if (!principal || !tenure || tenure < 1) { previewEl.innerHTML = ""; return; }
+  const { emiAmount } = calcEmi(principal, tenure);
+  previewEl.innerHTML = `EMI: <strong>${money(emiAmount)}/month</strong> for ${tenure} months`;
+}
+
+async function toggleEmiEnabled() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const newVal = !state.settings.emiEnabled;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "emi_settings",
+    value: { enabled: newVal, interestRate: Number(state.settings.emiLoanInterestRateMonthly || 1.5) },
+  }));
+  await loadLiveState();
+  showToast(`EMI loans ${newVal ? "enabled" : "disabled"}.`);
+  render();
+}
+
 async function requestLoan(data) {
   const user = currentUser();
+  const loanType = data.loan_type || "full";
+  const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
+  if (loanType === "emi" && (!tenureMonths || tenureMonths < 1)) throw new Error("Please enter a valid tenure (months).");
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").insert({
       profile_id: user.id,
       amount: Number(data.amount),
       reason: data.reason.trim(),
+      loan_type: loanType,
+      tenure_months: tenureMonths,
     }));
-    await addLiveAudit(`${user.name} requested loan ${money(data.amount)}.`, "loan_requested");
+    await addLiveAudit(`${user.name} requested loan ${money(data.amount)}${loanType === "emi" ? ` (EMI ${tenureMonths}mo)` : ""}.`, "loan_requested");
     await loadLiveState();
     showToast("Loan request submitted.");
     render();
     return;
   }
 
-  state.loanRequests.push({ id: uid("q"), memberId: user.id, amount: Number(data.amount), reason: data.reason.trim(), status: "pending", date: today() });
+  state.loanRequests.push({ id: uid("q"), memberId: user.id, amount: Number(data.amount), reason: data.reason.trim(), status: "pending", date: today(), loanType, tenureMonths });
   state.audit.push({ id: uid("a"), date: today(), text: `${user.name} requested loan ${money(data.amount)}.` });
   saveState();
   showToast("Loan request submitted.");
@@ -3214,7 +3348,7 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
-    await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, expectedBankBalance(), id);
+    await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, id);
     showToast("Loan marked clear.");
     render();
     return;
@@ -3323,56 +3457,76 @@ async function approveLoan(id) {
   const request = state.loanRequests.find((item) => item.id === id);
   if (!request) return;
   const member = memberById(request.memberId);
+  const loanType = request.loanType || "full";
+  const tenure = request.tenureMonths || null;
   const renewalDate = new Date();
   renewalDate.setFullYear(renewalDate.getFullYear() + 1);
   const renewalDateStr = renewalDate.toISOString().slice(0, 10);
+  const interestRate = loanType === "emi"
+    ? Number(state.settings.emiLoanInterestRateMonthly || 1.5)
+    : Number(state.settings.loanInterestRateMonthly || 1.25);
+  const emiCalc = loanType === "emi" ? calcEmi(request.amount, tenure) : null;
+
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").update({
       status: "approved",
       decided_at: new Date().toISOString(),
       decided_by: currentProfileId(),
     }).eq("id", id));
-    await liveQuery(supabaseClient.from("current_loans").insert({
+    const loanRow = await liveQuery(supabaseClient.from("current_loans").insert({
       member_name: member?.name || "",
       member_phone: member?.phone || "",
       principal: request.amount,
       principal_paid: 0,
       interest_paid: 0,
-      interest_rate_monthly: state.settings.loanInterestRateMonthly,
-      monthly_interest: 0,
+      interest_rate_monthly: interestRate,
+      monthly_interest: loanType === "full" ? Math.round(request.amount * interestRate / 100) : 0,
       status: "active",
       purpose: request.reason,
       disbursed_at: today(),
       renewal_or_return_date: renewalDateStr,
       created_by: currentProfileId(),
-    }));
-    await addLiveAudit(`Approved loan ${money(request.amount)} for ${member?.name}.`, "loan_approved");
-    // Notify the borrower their loan was approved
+      loan_type: loanType,
+      tenure_months: tenure,
+      emi_amount: emiCalc ? emiCalc.emiAmount : null,
+      emis_paid: 0,
+    }).select("id").single());
+    // Generate EMI schedule for EMI-type loans
+    if (loanType === "emi" && loanRow?.id && tenure) {
+      const startMonth = currentMonth();
+      const [sy, sm] = startMonth.split("-").map(Number);
+      const emiRows = Array.from({ length: tenure }, (_, i) => {
+        const d = new Date(sy, sm - 1 + i);
+        const dueMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return {
+          loan_id: loanRow.id, emi_number: i + 1, due_month: dueMonth,
+          amount: emiCalc.emiAmount, principal_part: emiCalc.principalPart,
+          interest_part: emiCalc.interestPart, status: "pending",
+        };
+      });
+      await liveQuery(supabaseClient.from("loan_emis").insert(emiRows));
+    }
+    await addLiveAudit(`Approved ${loanType === "emi" ? `EMI loan (${tenure}mo)` : "loan"} ${money(request.amount)} for ${member?.name}.`, "loan_approved");
     if (request.memberId) {
       await notifyMember(
-        request.memberId,
-        "loan_approved",
-        "Loan approved",
-        `Your loan request of ${money(request.amount)} has been approved. Due for renewal on ${renewalDateStr}.`,
+        request.memberId, "loan_approved", "Loan approved",
+        `Your ${loanType === "emi" ? `EMI loan of ${money(request.amount)} (${tenure} months, ${money(emiCalc?.emiAmount)}/mo)` : `loan of ${money(request.amount)}`} has been approved.`,
         id
       );
     }
-    // Notify all other members so their available balance stays current
     await notifyAllActiveMembers(
-      "loan_disbursed",
-      "Loan disbursed",
-      `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`,
-      id
+      "loan_disbursed", "Loan disbursed",
+      `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`, id
     );
     await loadLiveState();
-    await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, expectedBankBalance(), id);
+    await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, id);
     showToast("Loan approved.");
     render();
     return;
   }
 
   request.status = "approved";
-  state.loans.push({ id: uid("l"), memberId: request.memberId, memberName: member?.name || "", amount: request.amount, principalPaid: 0, from: today(), renewalOrReturnDate: renewalDateStr, status: "active", purpose: request.reason });
+  state.loans.push({ id: uid("l"), memberId: request.memberId, memberName: member?.name || "", amount: request.amount, principalPaid: 0, from: today(), renewalOrReturnDate: renewalDateStr, status: "active", purpose: request.reason, loanType, tenureMonths: tenure, emiAmount: emiCalc?.emiAmount || 0, emisPaid: 0 });
   state.audit.push({ id: uid("a"), date: today(), text: `Approved loan ${money(request.amount)} for ${member?.name}.` });
   saveState();
   showToast("Loan approved.");
@@ -3749,7 +3903,25 @@ async function markPaymentPaid(memberId) {
       source: "manual",
     }, { onConflict: "profile_id,month" }));
     await loadLiveState();
-    await insertStatement("credit", amount, `${member.name} credited`, expectedBankBalance());
+    // Auto-mark the current pending EMI for all EMI loans of this member
+    const emiLoans = state.loans.filter(l =>
+      l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member)
+    );
+    for (const loan of emiLoans) {
+      const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
+      if (nextEmi) {
+        await liveQuery(supabaseClient.from("loan_emis").update({ status: "paid", paid_at: today() }).eq("id", nextEmi.id));
+        const newEmisPaid = loan.emisPaid + 1;
+        const allPaid = newEmisPaid >= loan.tenureMonths;
+        await liveQuery(supabaseClient.from("current_loans").update({
+          emis_paid: newEmisPaid,
+          ...(allPaid ? { status: "clear", principal_paid: loan.amount, closed_at: today() } : {}),
+        }).eq("id", loan.id));
+        if (allPaid) showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
+      }
+    }
+    if (emiLoans.length > 0) await loadLiveState();
+    await insertStatement("credit", amount, `${member.name} credited`);
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
     if (existing) existing.status = "paid";
