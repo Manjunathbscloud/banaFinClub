@@ -3740,7 +3740,7 @@ async function markPaymentPaid(memberId) {
   const month = currentMonth();
   const amount = memberMonthlyDue(member);
   if (liveBackendReady) {
-    const { error } = await liveQuery(supabaseClient.from("monthly_payments").upsert({
+    await liveQuery(supabaseClient.from("monthly_payments").upsert({
       profile_id: memberId,
       month,
       expected_amount: amount,
@@ -3748,7 +3748,6 @@ async function markPaymentPaid(memberId) {
       status: "paid",
       source: "manual",
     }, { onConflict: "profile_id,month" }));
-    if (error) { showToast("Failed to mark as paid."); return; }
     await loadLiveState();
     await insertStatement("credit", amount, `Monthly payment received from ${member.name} (${month})`, expectedBankBalance());
   } else {
