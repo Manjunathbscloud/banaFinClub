@@ -3763,12 +3763,98 @@ async function initApp() {
   // Splash screen — show immediately, run app load in parallel
   const splash = document.createElement("div");
   splash.id = "splash-screen";
+  const B = "cubic-bezier(0.34,1.56,0.64,1)";
   splash.innerHTML = `
-    <img src="./icon.svg" class="splash-logo" alt="Banakar FinClub"/>
-    <div class="splash-name">BANAKAR</div>
-    <div class="splash-sub">— FINCLUB —</div>
-    <div class="splash-tagline">SAVE • INVEST • GROW TOGETHER</div>
-    <div class="splash-loader"></div>`;
+    <div class="splash-tree-wrap">
+      <svg class="splash-tree" viewBox="0 0 320 400" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="sp-trunk" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#C89010"/>
+            <stop offset="100%" stop-color="#7A5010"/>
+          </linearGradient>
+          <radialGradient id="sp-glow" cx="50%" cy="55%" r="48%">
+            <stop offset="0%" stop-color="#2A44B8" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#0A1128" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <!-- background glow -->
+        <ellipse cx="160" cy="220" rx="130" ry="170" fill="url(#sp-glow)"/>
+
+        <!-- ROOTS -->
+        <path class="st-root st-r0" d="M 160,310 L 160,395"        stroke="#6A4010" stroke-width="5"/>
+        <path class="st-root st-r1" d="M 160,310 Q 122,342 82,366" stroke="#6A4010" stroke-width="4"/>
+        <path class="st-root st-r2" d="M 160,310 Q 198,342 238,366" stroke="#6A4010" stroke-width="4"/>
+        <path class="st-root st-r3" d="M 160,310 Q 105,352 52,388" stroke="#6A4010" stroke-width="3"/>
+        <path class="st-root st-r4" d="M 160,310 Q 215,352 268,388" stroke="#6A4010" stroke-width="3"/>
+
+        <!-- root tip dots -->
+        <circle cx="160" cy="395" r="4" fill="#6A4010" style="opacity:0;animation:st-bloom 0.3s ease-out 0.6s forwards"/>
+        <circle cx="82"  cy="366" r="3" fill="#6A4010" style="opacity:0;animation:st-bloom 0.3s ease-out 0.7s forwards"/>
+        <circle cx="238" cy="366" r="3" fill="#6A4010" style="opacity:0;animation:st-bloom 0.3s ease-out 0.7s forwards"/>
+        <circle cx="52"  cy="388" r="2.5" fill="#6A4010" style="opacity:0;animation:st-bloom 0.3s ease-out 0.8s forwards"/>
+        <circle cx="268" cy="388" r="2.5" fill="#6A4010" style="opacity:0;animation:st-bloom 0.3s ease-out 0.8s forwards"/>
+
+        <!-- TRUNK -->
+        <path class="st-trunk" d="M 160,310 C 157,258 163,200 160,68" stroke="url(#sp-trunk)" stroke-width="20"/>
+
+        <!-- BRANCHES (3 pairs, bottom → top) -->
+        <path class="st-branch st-b1" d="M 160,215 Q 110,186 68,168"  stroke="#A07820" stroke-width="10"/>
+        <path class="st-branch st-b2" d="M 160,215 Q 210,186 252,168" stroke="#A07820" stroke-width="10"/>
+        <path class="st-branch st-b3" d="M 160,168 Q 120,140 86,118"  stroke="#A07820" stroke-width="7"/>
+        <path class="st-branch st-b4" d="M 160,168 Q 200,140 234,118" stroke="#A07820" stroke-width="7"/>
+        <path class="st-branch st-b5" d="M 160,122 Q 132,96  106,76"  stroke="#A07820" stroke-width="5"/>
+        <path class="st-branch st-b6" d="M 160,122 Q 188,96  214,76"  stroke="#A07820" stroke-width="5"/>
+
+        <!-- LEAVES — bloom after each branch pair -->
+        <!-- Branch 1 (left wide) -->
+        <ellipse class="st-leaf" cx="64"  cy="160" rx="17" ry="11" fill="#2A9448" transform="rotate(-35 64 160)"  style="animation:st-bloom 0.5s ${B} 2.2s forwards"/>
+        <ellipse class="st-leaf" cx="48"  cy="172" rx="13" ry="8"  fill="#34A853" transform="rotate(-52 48 172)"  style="animation:st-bloom 0.5s ${B} 2.35s forwards"/>
+        <ellipse class="st-leaf" cx="78"  cy="153" rx="11" ry="7"  fill="#1E8040" transform="rotate(-18 78 153)"  style="animation:st-bloom 0.4s ${B} 2.45s forwards"/>
+        <!-- Branch 2 (right wide) -->
+        <ellipse class="st-leaf" cx="256" cy="160" rx="17" ry="11" fill="#2A9448" transform="rotate(35 256 160)"  style="animation:st-bloom 0.5s ${B} 2.25s forwards"/>
+        <ellipse class="st-leaf" cx="272" cy="172" rx="13" ry="8"  fill="#34A853" transform="rotate(52 272 172)"  style="animation:st-bloom 0.5s ${B} 2.40s forwards"/>
+        <ellipse class="st-leaf" cx="242" cy="153" rx="11" ry="7"  fill="#1E8040" transform="rotate(18 242 153)"  style="animation:st-bloom 0.4s ${B} 2.50s forwards"/>
+        <!-- Branch 3 (left mid) -->
+        <ellipse class="st-leaf" cx="82"  cy="110" rx="14" ry="9"  fill="#2A9448" transform="rotate(-30 82 110)"  style="animation:st-bloom 0.5s ${B} 2.6s forwards"/>
+        <ellipse class="st-leaf" cx="66"  cy="122" rx="11" ry="7"  fill="#34A853" transform="rotate(-48 66 122)"  style="animation:st-bloom 0.4s ${B} 2.75s forwards"/>
+        <!-- Branch 4 (right mid) -->
+        <ellipse class="st-leaf" cx="238" cy="110" rx="14" ry="9"  fill="#2A9448" transform="rotate(30 238 110)"  style="animation:st-bloom 0.5s ${B} 2.65s forwards"/>
+        <ellipse class="st-leaf" cx="254" cy="122" rx="11" ry="7"  fill="#34A853" transform="rotate(48 254 122)"  style="animation:st-bloom 0.4s ${B} 2.80s forwards"/>
+        <!-- Branch 5 (left high) -->
+        <ellipse class="st-leaf" cx="101" cy="68"  rx="13" ry="8"  fill="#2A9448" transform="rotate(-25 101 68)"  style="animation:st-bloom 0.4s ${B} 2.95s forwards"/>
+        <ellipse class="st-leaf" cx="86"  cy="79"  rx="10" ry="6"  fill="#34A853" transform="rotate(-42 86 79)"   style="animation:st-bloom 0.4s ${B} 3.10s forwards"/>
+        <!-- Branch 6 (right high) -->
+        <ellipse class="st-leaf" cx="219" cy="68"  rx="13" ry="8"  fill="#2A9448" transform="rotate(25 219 68)"   style="animation:st-bloom 0.4s ${B} 3.00s forwards"/>
+        <ellipse class="st-leaf" cx="234" cy="79"  rx="10" ry="6"  fill="#34A853" transform="rotate(42 234 79)"   style="animation:st-bloom 0.4s ${B} 3.15s forwards"/>
+        <!-- Top canopy -->
+        <ellipse class="st-leaf" cx="160" cy="52"  rx="22" ry="14" fill="#2A9448"  style="animation:st-bloom 0.5s ${B} 3.2s forwards"/>
+        <ellipse class="st-leaf" cx="142" cy="42"  rx="14" ry="9"  fill="#34A853" transform="rotate(-14 142 42)"  style="animation:st-bloom 0.4s ${B} 3.35s forwards"/>
+        <ellipse class="st-leaf" cx="178" cy="40"  rx="14" ry="9"  fill="#34A853" transform="rotate(14 178 40)"   style="animation:st-bloom 0.4s ${B} 3.40s forwards"/>
+        <ellipse class="st-leaf" cx="160" cy="32"  rx="10" ry="7"  fill="#1E8040"  style="animation:st-bloom 0.3s ${B} 3.52s forwards"/>
+
+        <!-- GOLD COINS (funds growing) -->
+        <circle class="st-coin" cx="62"  cy="156" r="10" fill="#D4A020" style="animation:st-coin-pop 0.5s ${B} 3.62s forwards"/>
+        <text   class="st-coin" x="62"   y="160"  text-anchor="middle" font-size="9" font-weight="800" fill="#162048" style="animation:st-coin-pop 0.5s ${B} 3.68s forwards">₹</text>
+        <circle class="st-coin" cx="258" cy="156" r="10" fill="#D4A020" style="animation:st-coin-pop 0.5s ${B} 3.70s forwards"/>
+        <text   class="st-coin" x="258"  y="160"  text-anchor="middle" font-size="9" font-weight="800" fill="#162048" style="animation:st-coin-pop 0.5s ${B} 3.76s forwards">₹</text>
+        <circle class="st-coin" cx="80"  cy="106" r="9"  fill="#D4A020" style="animation:st-coin-pop 0.5s ${B} 3.80s forwards"/>
+        <text   class="st-coin" x="80"   y="110"  text-anchor="middle" font-size="8" font-weight="800" fill="#162048" style="animation:st-coin-pop 0.5s ${B} 3.86s forwards">₹</text>
+        <circle class="st-coin" cx="240" cy="106" r="9"  fill="#D4A020" style="animation:st-coin-pop 0.5s ${B} 3.85s forwards"/>
+        <text   class="st-coin" x="240"  y="110"  text-anchor="middle" font-size="8" font-weight="800" fill="#162048" style="animation:st-coin-pop 0.5s ${B} 3.91s forwards">₹</text>
+        <circle class="st-coin" cx="160" cy="38"  r="11" fill="#D4A020" style="animation:st-coin-pop 0.5s ${B} 3.92s forwards"/>
+        <text   class="st-coin" x="160"  y="42"   text-anchor="middle" font-size="10" font-weight="800" fill="#162048" style="animation:st-coin-pop 0.5s ${B} 3.98s forwards">₹</text>
+        <!-- small sparkle coins -->
+        <circle class="st-coin" cx="99"  cy="64"  r="7"  fill="#F0C830" style="animation:st-coin-pop 0.4s ${B} 4.05s forwards"/>
+        <circle class="st-coin" cx="221" cy="64"  r="7"  fill="#F0C830" style="animation:st-coin-pop 0.4s ${B} 4.10s forwards"/>
+      </svg>
+    </div>
+
+    <div class="splash-brand">
+      <div class="splash-name">BANAKAR</div>
+      <div class="splash-sub">— FINCLUB —</div>
+      <div class="splash-tagline">SAVE • INVEST • GROW TOGETHER</div>
+    </div>`;
   document.body.appendChild(splash);
   const splashTimer = new Promise((r) => setTimeout(r, 5000));
 
