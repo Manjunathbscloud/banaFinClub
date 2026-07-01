@@ -3214,7 +3214,7 @@ async function clearCurrentLoan(id) {
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await loadLiveState();
-    await insertStatement("credit", loan.amount, `Loan closed – ${loanMemberName(loan)} (principal returned)`, expectedBankBalance(), id);
+    await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, expectedBankBalance(), id);
     showToast("Loan marked clear.");
     render();
     return;
@@ -3365,7 +3365,7 @@ async function approveLoan(id) {
       id
     );
     await loadLiveState();
-    await insertStatement("debit", request.amount, `Loan disbursed – ${member?.name || "member"}`, expectedBankBalance(), id);
+    await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, expectedBankBalance(), id);
     showToast("Loan approved.");
     render();
     return;
@@ -3749,7 +3749,7 @@ async function markPaymentPaid(memberId) {
       source: "manual",
     }, { onConflict: "profile_id,month" }));
     await loadLiveState();
-    await insertStatement("credit", amount, `Monthly payment received from ${member.name} (${month})`, expectedBankBalance());
+    await insertStatement("credit", amount, `${member.name} credited`, expectedBankBalance());
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
     if (existing) existing.status = "paid";
