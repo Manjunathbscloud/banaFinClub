@@ -1602,7 +1602,7 @@ function renderStatement() {
   const currentBal = expectedBankBalance();
 
   const rowsHtml = rows.length === 0
-    ? `<div class="stmt-empty">No transactions yet. Each time admin marks a monthly payment as collected, it will appear here with the exact date and running balance.</div>`
+    ? `<div class="stmt-empty">No transactions yet. Monthly payments, loan disbursals and closures will appear here as they happen.</div>`
     : rows.map((s) => {
         const isCredit = s.type === "credit";
         return `
@@ -1616,17 +1616,15 @@ function renderStatement() {
             </div>
             <div class="stmt-right">
               <span class="stmt-amount ${isCredit ? "credit" : "debit"}">${isCredit ? "+" : "−"}${money(s.amount)}</span>
-              <span class="stmt-balance">${money(s.balance)}</span>
             </div>
           </div>`;
       }).join("");
 
   return `
-    <div class="page-header"><h2>Statement</h2><p>Current bank balance: <strong>${money(currentBal)}</strong></p></div>
+    <div class="page-header"><h2>Statement</h2><p>Current bank balance</p><h3 style="margin:4px 0 0;font-size:22px;color:var(--saffron);">${money(currentBal)}</h3></div>
     <div class="stmt-legend">
       <span><span class="stmt-type-dot credit"></span> Credit (money in)</span>
       <span><span class="stmt-type-dot debit"></span> Debit (money out)</span>
-      <span class="stmt-legend-bal">Balance shown is post-transaction</span>
     </div>
     <div class="stmt-list">${rowsHtml}</div>`;
 }
