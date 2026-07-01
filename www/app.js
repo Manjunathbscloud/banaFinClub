@@ -3760,19 +3760,30 @@ async function markPaymentPaid(memberId) {
 }
 
 async function initApp() {
-  document.querySelector("#app").innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;">
-      <div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-      <p style="font-size:13px;color:#9ca3af;margin:0;">Loading…</p>
-    </div>`;
+  // Splash screen — show immediately, run app load in parallel
+  const splash = document.createElement("div");
+  splash.id = "splash-screen";
+  splash.innerHTML = `
+    <img src="./icon.svg" class="splash-logo" alt="Banakar FinClub"/>
+    <div class="splash-name">BANAKAR</div>
+    <div class="splash-sub">— FINCLUB —</div>
+    <div class="splash-tagline">SAVE • INVEST • GROW TOGETHER</div>
+    <div class="splash-loader"></div>`;
+  document.body.appendChild(splash);
+  const splashTimer = new Promise((r) => setTimeout(r, 5000));
+
+  document.querySelector("#app").innerHTML = "";
+
   if (liveBackendReady) {
     if (window.location.hash.includes("type=recovery")) {
       supabaseClient.auth.onAuthStateChange((event) => {
         if (event === "PASSWORD_RECOVERY") renderSetNewPassword();
       });
-      // Also check immediately in case the event already fired before listener registered
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session) renderSetNewPassword();
+      await splashTimer;
+      splash.classList.add("splash-exit");
+      setTimeout(() => splash.remove(), 700);
       return;
     }
     try {
@@ -3782,6 +3793,11 @@ async function initApp() {
       showToast(error.message || "Could not load live data.");
     }
   }
+
+  await splashTimer;
+  splash.classList.add("splash-exit");
+  await new Promise((r) => setTimeout(r, 700));
+  splash.remove();
   render();
 }
 
