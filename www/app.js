@@ -2947,15 +2947,16 @@ async function handleMpinKey(key) {
 function showMpinResetModal() {
   const modal = document.createElement("div");
   modal.className = "rules-modal-overlay";
+  modal.style.alignItems = "center";
   modal.innerHTML = `
-    <div class="rules-modal" style="max-width:300px;text-align:center;padding:28px 20px 20px;">
-      <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;">Reset MPIN</h3>
-      <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Enter your password to confirm your identity</p>
+    <div style="background:var(--panel);border-radius:20px;padding:28px 24px 24px;width:288px;text-align:center;box-shadow:0 24px 60px rgba(28,28,46,0.22);">
+      <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:var(--ink);">Reset MPIN</h3>
+      <p style="margin:0 0 20px;font-size:13px;color:var(--muted);line-height:1.45;">Enter your password to confirm your identity</p>
       <div class="form-group" style="text-align:left;">
-        <label style="font-size:13px;font-weight:600;">Password</label>
-        <input type="password" class="form-input mpin-reset-pw" placeholder="Your password" autocomplete="current-password" style="margin-top:6px;"/>
+        <label style="font-size:13px;font-weight:600;color:var(--ink);">Password</label>
+        <input type="password" class="form-input mpin-reset-pw" placeholder="Your password" autocomplete="current-password" style="margin-top:6px;width:100%;"/>
       </div>
-      <p class="mpin-reset-error" style="color:#dc2626;font-size:13px;margin:8px 0 0;display:none;"></p>
+      <p class="mpin-reset-error" style="color:#dc2626;font-size:13px;margin:8px 0 0;display:none;text-align:left;"></p>
       <div style="display:flex;gap:10px;margin-top:20px;">
         <button class="btn btn-outline mpin-reset-cancel" style="flex:1;">Cancel</button>
         <button class="btn btn-primary mpin-reset-submit" style="flex:1;">Verify &amp; Reset</button>
@@ -3007,6 +3008,7 @@ function showMpinSetupModal() {
   const modal = document.createElement("div");
   modal.id = "mpin-setup-modal";
   modal.className = "rules-modal-overlay";
+  modal.style.alignItems = "center";
   const render = () => {
     const dots = Array.from({ length: 4 }, (_, i) =>
       `<div class="mpin-dot ${i < pin1.length ? "mpin-dot-filled" : ""}"></div>`
@@ -3017,12 +3019,12 @@ function showMpinSetupModal() {
       : `<button class="mpin-key mpin-key-sm" data-setup-key="${k}" type="button">${k}</button>`
     ).join("");
     modal.innerHTML = `
-      <div class="rules-modal" style="max-width:300px;text-align:center;padding:28px 20px 20px;">
-        <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;">Set MPIN</h3>
-        <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Choose a 4-digit PIN for quick login next time</p>
-        <div class="mpin-dots" style="margin-bottom:18px;">${dots}</div>
+      <div style="background:var(--panel);border-radius:20px;padding:28px 24px 24px;width:288px;text-align:center;box-shadow:0 24px 60px rgba(28,28,46,0.22);">
+        <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:var(--ink);">Set your MPIN</h3>
+        <p style="margin:0 0 20px;font-size:13px;color:var(--muted);line-height:1.45;">Choose a 4-digit PIN for quick access next time</p>
+        <div class="mpin-dots" style="margin-bottom:20px;">${dots}</div>
         <div class="mpin-pad mpin-pad-sm">${pad}</div>
-        <button class="text-link" id="mpin-setup-skip" type="button" style="margin-top:16px;font-size:13px;">Skip for now</button>
+        <button class="text-link" id="mpin-setup-skip" type="button" style="margin-top:16px;font-size:12px;color:var(--muted);">Skip for now</button>
       </div>`;
     modal.querySelector("#mpin-setup-skip").addEventListener("click", () => {
       modal.remove();

@@ -533,7 +533,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  background: var(--page);
 }
 .mpin-inner {
   display: flex;
@@ -570,22 +570,24 @@ button:focus-visible {
 .mpin-dots {
   display: flex;
   gap: 16px;
+  justify-content: center;
   margin-bottom: 28px;
 }
 .mpin-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid var(--primary);
+  border: 2px solid var(--saffron);
   background: transparent;
   transition: background 0.15s ease;
 }
-.mpin-dot-filled { background: var(--primary); }
+.mpin-dot-filled { background: var(--saffron); }
 .mpin-dot-error  { border-color: #dc2626; background: #dc2626; }
 .mpin-pad {
   display: grid;
   grid-template-columns: repeat(3, 72px);
   gap: 12px;
+  margin: 0 auto;
 }
 .mpin-pad-sm {
   grid-template-columns: repeat(3, 60px);
@@ -595,8 +597,9 @@ button:focus-visible {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--panel);
+  border: 1.5px solid var(--line);
+  background: #F1F5F9;
+  box-shadow: 0 2px 4px rgba(28,28,46,0.07);
   font-size: 22px;
   font-weight: 500;
   color: var(--ink);
@@ -607,7 +610,7 @@ button:focus-visible {
   justify-content: center;
 }
 .mpin-key-sm { width: 60px; height: 60px; font-size: 18px; }
-.mpin-key:active { background: var(--border); transform: scale(0.92); }
+.mpin-key:active { background: var(--line); transform: scale(0.92); }
 
 /* ── Shell & Topbar ─────────────────────────── */
 .shell {
