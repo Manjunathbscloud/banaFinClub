@@ -363,6 +363,7 @@ function liveProfileToMember(profile) {
     status: profile.status,
     authUserId: profile.auth_user_id,
     avatarUrl: profile.avatar_url || "",
+    mpinHash: profile.mpin_hash || null,
   };
 }
 
@@ -533,7 +534,7 @@ async function loadLiveState() {
 
   const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
-    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
     liveQuery(supabaseClient.from("monthly_payments").select("*").gte("month", "2025-11").order("created_at", { ascending: false })),
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
@@ -1153,14 +1154,29 @@ function renderAuth(mode) {
 
 // ── MPIN helpers ─────────────────────────────────────────────────────────────
 
-const MPIN_KEY = "bfc_mpin";
 let mpinPending = false;
 let mpinEntry = "";
 
-function mpinSet() { return !!localStorage.getItem(MPIN_KEY); }
-function saveMpin(pin) { localStorage.setItem(MPIN_KEY, btoa(pin + "_bfc")); }
-function validateMpin(pin) { return localStorage.getItem(MPIN_KEY) === btoa(pin + "_bfc"); }
-function clearMpin() { localStorage.removeItem(MPIN_KEY); }
+async function hashMpin(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin + "_bfc"));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function mpinSet() { return !!currentUser()?.mpinHash; }
+async function saveMpin(pin) {
+  const hash = await hashMpin(pin);
+  await liveQuery(supabaseClient.from("profiles").update({ mpin_hash: hash }).eq("id", state.currentUserId));
+  const member = state.members.find(m => m.id === state.currentUserId);
+  if (member) member.mpinHash = hash;
+}
+async function validateMpin(pin) {
+  const hash = await hashMpin(pin);
+  return hash === currentUser()?.mpinHash;
+}
+async function clearMpin() {
+  await liveQuery(supabaseClient.from("profiles").update({ mpin_hash: null }).eq("id", state.currentUserId));
+  const member = state.members.find(m => m.id === state.currentUserId);
+  if (member) member.mpinHash = null;
+}
 
 function loginForm() {
   return `
@@ -2888,28 +2904,29 @@ function renderMpinScreen() {
         <div class="mpin-dots">${dots}</div>
         <div class="mpin-pad">${pad}</div>
         <button class="text-link" id="mpin-use-password" type="button" style="margin-top:24px;font-size:13px;">Use password instead</button>
+        <button class="text-link" id="mpin-reset" type="button" style="margin-top:8px;font-size:12px;color:var(--muted);">Forgot MPIN? Reset</button>
       </div>
     </div>
   `;
   document.getElementById("mpin-use-password").addEventListener("click", () => {
     mpinPending = false;
     mpinEntry = "";
-    clearMpin();
     render();
   });
+  document.getElementById("mpin-reset").addEventListener("click", () => showMpinResetModal());
   document.querySelectorAll(".mpin-key").forEach(btn => {
     btn.addEventListener("click", () => handleMpinKey(btn.dataset.mpinKey));
   });
 }
 
-function handleMpinKey(key) {
+async function handleMpinKey(key) {
   if (key === "⌫") {
     mpinEntry = mpinEntry.slice(0, -1);
   } else if (mpinEntry.length < 4) {
     mpinEntry += key;
   }
   if (mpinEntry.length === 4) {
-    if (validateMpin(mpinEntry)) {
+    if (await validateMpin(mpinEntry)) {
       mpinPending = false;
       mpinEntry = "";
       render();
@@ -2925,6 +2942,63 @@ function handleMpinKey(key) {
   } else {
     renderMpinScreen();
   }
+}
+
+function showMpinResetModal() {
+  const modal = document.createElement("div");
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal" style="max-width:300px;text-align:center;padding:28px 20px 20px;">
+      <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;">Reset MPIN</h3>
+      <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Enter your password to confirm your identity</p>
+      <div class="form-group" style="text-align:left;">
+        <label style="font-size:13px;font-weight:600;">Password</label>
+        <input type="password" class="form-input mpin-reset-pw" placeholder="Your password" autocomplete="current-password" style="margin-top:6px;"/>
+      </div>
+      <p class="mpin-reset-error" style="color:#dc2626;font-size:13px;margin:8px 0 0;display:none;"></p>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button class="btn btn-outline mpin-reset-cancel" style="flex:1;">Cancel</button>
+        <button class="btn btn-primary mpin-reset-submit" style="flex:1;">Verify &amp; Reset</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+  modal.querySelector(".mpin-reset-pw").focus();
+  modal.querySelector(".mpin-reset-cancel").addEventListener("click", () => {
+    modal.remove();
+    document.body.style.overflow = "";
+  });
+  modal.querySelector(".mpin-reset-submit").addEventListener("click", async () => {
+    const pw = modal.querySelector(".mpin-reset-pw").value;
+    const errorEl = modal.querySelector(".mpin-reset-error");
+    const submitBtn = modal.querySelector(".mpin-reset-submit");
+    if (!pw) { errorEl.textContent = "Please enter your password."; errorEl.style.display = ""; return; }
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Verifying…";
+    const email = currentUser()?.email;
+    if (!email) {
+      errorEl.textContent = "Could not verify identity. Try logging out and back in.";
+      errorEl.style.display = "";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Verify & Reset";
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pw });
+    if (error) {
+      errorEl.textContent = "Wrong password. Try again.";
+      errorEl.style.display = "";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Verify & Reset";
+      return;
+    }
+    await clearMpin();
+    modal.remove();
+    document.body.style.overflow = "";
+    mpinPending = false;
+    mpinEntry = "";
+    render();
+    setTimeout(showMpinSetupModal, 400);
+  });
 }
 
 function showMpinSetupModal() {
@@ -2955,12 +3029,12 @@ function showMpinSetupModal() {
       document.body.style.overflow = "";
     });
     modal.querySelectorAll("[data-setup-key]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const k = btn.dataset.setupKey;
         if (k === "⌫") { pin1 = pin1.slice(0, -1); render(); return; }
         if (pin1.length < 4) pin1 += k;
         if (pin1.length === 4) {
-          saveMpin(pin1);
+          await saveMpin(pin1);
           modal.remove();
           document.body.style.overflow = "";
           showToast("MPIN set! Use it next time you open the app.");
