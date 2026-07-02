@@ -527,46 +527,87 @@ button:focus-visible {
 
 .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0; }
 
-.biometric-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 12px;
-  margin: 2px 0;
-}
-.biometric-divider::before,
-.biometric-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-.biometric-btn {
+/* ── MPIN Screen ────────────────────────────── */
+.mpin-screen {
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  background: var(--bg);
+}
+.mpin-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 24px 40px;
   width: 100%;
-  padding: 13px 16px;
-  background: transparent;
-  border: 2px solid var(--saffron);
-  color: var(--saffron);
-  border-radius: var(--radius);
+  max-width: 320px;
+}
+.mpin-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.mpin-welcome {
   font-size: 15px;
-  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+  text-align: center;
+}
+.mpin-label {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 22px;
+}
+.mpin-dots {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.mpin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.mpin-dot-filled { background: var(--primary); }
+.mpin-dot-error  { border-color: #dc2626; background: #dc2626; }
+.mpin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 12px;
+}
+.mpin-pad-sm {
+  grid-template-columns: repeat(3, 60px);
+  gap: 10px;
+}
+.mpin-key {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--panel);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, transform 0.1s ease;
-  position: relative;
-  overflow: hidden;
+  transition: background 0.12s ease, transform 0.08s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.biometric-btn:hover {
-  background: color-mix(in srgb, var(--saffron) 12%, transparent);
-}
-.biometric-btn:active { transform: scale(0.98); }
-.biometric-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.biometric-btn svg { flex-shrink: 0; }
+.mpin-key-sm { width: 60px; height: 60px; font-size: 18px; }
+.mpin-key:active { background: var(--border); transform: scale(0.92); }
 
 /* ── Shell & Topbar ─────────────────────────── */
 .shell {

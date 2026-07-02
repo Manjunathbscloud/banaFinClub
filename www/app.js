@@ -984,6 +984,10 @@ function render() {
     renderAuth("login");
     return;
   }
+  if (mpinPending) {
+    renderMpinScreen();
+    return;
+  }
   resetIdleTimer();
 
   const openDetails = new Set(
@@ -1147,24 +1151,23 @@ function renderAuth(mode) {
   `;
 }
 
-function fingerprintSvg(size = 22) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72a.499.499 0 01-.41-.79C4.31 7.15 5.5 6.03 6.9 5.28c3.28-1.79 7.26-1.79 10.55 0 1.4.75 2.59 1.87 3.8 3.65.17.25.1.58-.15.75-.25.17-.58.1-.75-.15-1.12-1.64-2.19-2.64-3.44-3.31-3.06-1.66-6.8-1.66-9.85 0-1.26.68-2.33 1.68-3.45 3.31-.09.15-.25.19-.41.19zm6.25 12.07a.47.47 0 01-.35-.15c-.87-.87-1.34-1.43-2.01-2.64-.69-1.23-1.05-2.73-1.05-4.34 0-2.97 2.54-5.39 5.66-5.39s5.66 2.42 5.66 5.39c0 .28-.22.5-.5.5s-.5-.22-.5-.5c0-2.42-2.09-4.39-4.66-4.39-2.57 0-4.66 1.97-4.66 4.39 0 1.44.32 2.77.93 3.85.64 1.15 1.08 1.64 1.85 2.42.19.2.19.51 0 .71-.11.1-.24.15-.37.15zm7.17-1.85c-1.19 0-2.24-.3-3.1-.89-1.49-1.01-2.38-2.65-2.38-4.39 0-.28.22-.5.5-.5s.5.22.5.5c0 1.41.72 2.74 1.94 3.56.71.48 1.54.71 2.54.71.24 0 .64-.03 1.04-.1.27-.05.53.13.58.41.05.27-.13.53-.41.58-.57.11-1.07.12-1.21.12zM14.91 22c-.04 0-.09-.01-.13-.02-1.59-.44-2.63-1.03-3.72-2.1-1.4-1.38-2.17-3.25-2.17-5.22 0-1.62 1.38-2.94 3.08-2.94 1.7 0 3.08 1.32 3.08 2.94 0 1.07.93 1.94 2.08 1.94s2.08-.87 2.08-1.94c0-3.77-3.25-6.83-7.25-6.83-2.84 0-5.44 1.58-6.61 4.03-.39.81-.59 1.68-.59 2.8 0 .78.07 2.01.67 3.61.1.26-.03.55-.29.64-.26.1-.55-.03-.64-.29-.49-1.31-.73-2.61-.73-3.96 0-1.29.23-2.32.7-3.27 1.33-2.79 4.28-4.58 7.49-4.58 4.55 0 8.25 3.51 8.25 7.83 0 1.62-1.38 2.94-3.08 2.94s-3.08-1.32-3.08-2.94c0-1.07-.93-1.94-2.08-1.94s-2.08.87-2.08 1.94c0 1.71.66 3.31 1.87 4.51.95.94 1.86 1.46 3.27 1.85.27.07.42.35.35.61-.05.23-.26.38-.49.38z"/></svg>`;
-}
+// ── MPIN helpers ─────────────────────────────────────────────────────────────
+
+const MPIN_KEY = "bfc_mpin";
+let mpinPending = false;
+let mpinEntry = "";
+
+function mpinSet() { return !!localStorage.getItem(MPIN_KEY); }
+function saveMpin(pin) { localStorage.setItem(MPIN_KEY, btoa(pin + "_bfc")); }
+function validateMpin(pin) { return localStorage.getItem(MPIN_KEY) === btoa(pin + "_bfc"); }
+function clearMpin() { localStorage.removeItem(MPIN_KEY); }
 
 function loginForm() {
-  const showBiometric = biometricSupported() && biometricRegistered();
   return `
     <form class="form" data-form="login">
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" inputmode="tel" required /></label>
       ${passwordField("password", t("password"), liveBackendReady ? "" : "123456")}
       <button class="primary" type="submit">${t("signIn")}</button>
-      ${showBiometric ? `
-        <div class="biometric-divider"><span>or</span></div>
-        <button class="biometric-btn" type="button" data-action="biometric-login">
-          ${fingerprintSvg(22)}
-          Login with Fingerprint
-        </button>
-      ` : ""}
       <button class="text-link" type="button" data-auth-mode="reset">${t("forgotPassword")}?</button>
       <p class="hint">${liveBackendReady ? "Live backend is configured." : "Demo admin: 9591382942 / 123456. Add Supabase details in config.js to connect live data."}</p>
     </form>
@@ -2717,20 +2720,6 @@ document.addEventListener("click", async (event) => {
     render();
   }
 
-  if (action.dataset.action === "biometric-login") {
-    const btn = action;
-    const origHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `${fingerprintSvg(20)} Verifying…`;
-    try {
-      await loginWithBiometric();
-    } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = origHTML;
-      showToast(err.message || "Fingerprint login failed. Try password instead.");
-    }
-    return;
-  }
 
   if (action.dataset.action === "logout") {
     if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
@@ -2877,146 +2866,111 @@ document.addEventListener("change", (event) => {
   phoneInput.value = selected?.dataset.phone || "";
 });
 
-// ── WebAuthn / Biometric helpers ────────────────────────────────────────────
+// ── MPIN screen & setup ──────────────────────────────────────────────────────
 
-const BIOMETRIC_CRED_KEY = "bfc_webauthn_cred_id";
-const BIOMETRIC_SESSION_KEY = "bfc_biometric_session";
-
-function biometricSupported() {
-  return !!(window.PublicKeyCredential && navigator.credentials && liveBackendReady);
-}
-
-function biometricRegistered() {
-  return !!localStorage.getItem(BIOMETRIC_CRED_KEY);
-}
-
-function saveBiometricSession(session) {
-  if (!session?.refresh_token) return;
-  localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({
-    refresh_token: session.refresh_token,
-  }));
-}
-
-function loadBiometricSession() {
-  try {
-    const raw = localStorage.getItem(BIOMETRIC_SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function clearBiometricData() {
-  localStorage.removeItem(BIOMETRIC_CRED_KEY);
-  localStorage.removeItem(BIOMETRIC_SESSION_KEY);
-}
-
-function toBase64url(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function fromBase64url(str) {
-  const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
-}
-
-async function registerBiometric() {
-  const challenge = crypto.getRandomValues(new Uint8Array(32));
-  const credential = await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: { name: "Banakar FinClub", id: location.hostname },
-      user: {
-        id: crypto.getRandomValues(new Uint8Array(16)),
-        name: "bfc-member",
-        displayName: "Banakar FinClub Member",
-      },
-      pubKeyCredParams: [
-        { type: "public-key", alg: -7 },
-        { type: "public-key", alg: -257 },
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: "platform",
-        userVerification: "required",
-        residentKey: "preferred",
-      },
-      timeout: 60000,
-    },
-  });
-  localStorage.setItem(BIOMETRIC_CRED_KEY, toBase64url(credential.rawId));
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  saveBiometricSession(session);
-}
-
-async function loginWithBiometric() {
-  const credId = localStorage.getItem(BIOMETRIC_CRED_KEY);
-  if (!credId) throw new Error("No fingerprint registered. Log in with password first.");
-  const challenge = crypto.getRandomValues(new Uint8Array(32));
-  await navigator.credentials.get({
-    publicKey: {
-      challenge,
-      allowCredentials: [{ type: "public-key", id: fromBase64url(credId), transports: ["internal"] }],
-      userVerification: "required",
-      timeout: 60000,
-    },
-  });
-  const stored = loadBiometricSession();
-  if (!stored?.refresh_token) {
-    clearBiometricData();
-    throw new Error("Session data missing. Please log in with password to re-enable fingerprint.");
-  }
-  const { data: refreshed, error } = await supabaseClient.auth.refreshSession({
-    refresh_token: stored.refresh_token,
-  });
-  if (error || !refreshed?.session) {
-    clearBiometricData();
-    throw new Error("Session expired. Log in with password to re-enable fingerprint.");
-  }
-  saveBiometricSession(refreshed.session);
-  await addLiveAudit(`${member.name} logged in via fingerprint.`, "login");
-  await loadLiveState();
-  state.activeTab = "dashboard";
-  render();
-}
-
-function showBiometricEnrollModal() {
-  if (document.getElementById("biometric-enroll-modal")) return;
-  const modal = document.createElement("div");
-  modal.id = "biometric-enroll-modal";
-  modal.className = "rules-modal-overlay";
-  modal.innerHTML = `
-    <div class="rules-modal" style="max-width:320px;text-align:center;padding:32px 24px 24px;">
-      <div style="font-size:52px;line-height:1;margin-bottom:14px;color:var(--saffron);">${fingerprintSvg(52)}</div>
-      <h3 style="margin:0 0 10px;font-size:18px;font-weight:700;">Enable Fingerprint Login?</h3>
-      <p style="margin:0 0 24px;font-size:14px;color:var(--muted);line-height:1.5;">Skip the password next time — log in instantly with your fingerprint.</p>
-      <div style="display:flex;gap:10px;">
-        <button class="primary" id="biometric-enroll-yes" type="button" style="flex:1;">Enable</button>
-        <button class="secondary" id="biometric-enroll-skip" type="button" style="flex:1;">Skip</button>
+function renderMpinScreen() {
+  const member = currentUser();
+  const name = member?.name?.split(" ")[0] || "Member";
+  const dots = Array.from({ length: 4 }, (_, i) =>
+    `<div class="mpin-dot ${i < mpinEntry.length ? "mpin-dot-filled" : ""}"></div>`
+  ).join("");
+  const keys = [1,2,3,4,5,6,7,8,9,"","0","⌫"];
+  const pad = keys.map(k => k === ""
+    ? `<div></div>`
+    : `<button class="mpin-key" data-mpin-key="${k}" type="button">${k}</button>`
+  ).join("");
+  document.getElementById("app").innerHTML = `
+    <div class="mpin-screen">
+      <div class="mpin-inner">
+        <div class="mpin-avatar">${name[0].toUpperCase()}</div>
+        <p class="mpin-welcome">Welcome back, <strong>${escapeHtml(name)}</strong></p>
+        <p class="mpin-label">Enter your 4-digit MPIN</p>
+        <div class="mpin-dots">${dots}</div>
+        <div class="mpin-pad">${pad}</div>
+        <button class="text-link" id="mpin-use-password" type="button" style="margin-top:24px;font-size:13px;">Use password instead</button>
       </div>
     </div>
   `;
+  document.getElementById("mpin-use-password").addEventListener("click", () => {
+    mpinPending = false;
+    mpinEntry = "";
+    clearMpin();
+    render();
+  });
+  document.querySelectorAll(".mpin-key").forEach(btn => {
+    btn.addEventListener("click", () => handleMpinKey(btn.dataset.mpinKey));
+  });
+}
+
+function handleMpinKey(key) {
+  if (key === "⌫") {
+    mpinEntry = mpinEntry.slice(0, -1);
+  } else if (mpinEntry.length < 4) {
+    mpinEntry += key;
+  }
+  if (mpinEntry.length === 4) {
+    if (validateMpin(mpinEntry)) {
+      mpinPending = false;
+      mpinEntry = "";
+      render();
+    } else {
+      const dots = document.querySelectorAll(".mpin-dot");
+      dots.forEach(d => d.classList.add("mpin-dot-error"));
+      setTimeout(() => {
+        mpinEntry = "";
+        renderMpinScreen();
+      }, 600);
+      return;
+    }
+  } else {
+    renderMpinScreen();
+  }
+}
+
+function showMpinSetupModal() {
+  if (document.getElementById("mpin-setup-modal")) return;
+  let pin1 = "";
+  const modal = document.createElement("div");
+  modal.id = "mpin-setup-modal";
+  modal.className = "rules-modal-overlay";
+  const render = () => {
+    const dots = Array.from({ length: 4 }, (_, i) =>
+      `<div class="mpin-dot ${i < pin1.length ? "mpin-dot-filled" : ""}"></div>`
+    ).join("");
+    const keys = [1,2,3,4,5,6,7,8,9,"","0","⌫"];
+    const pad = keys.map(k => k === ""
+      ? `<div></div>`
+      : `<button class="mpin-key mpin-key-sm" data-setup-key="${k}" type="button">${k}</button>`
+    ).join("");
+    modal.innerHTML = `
+      <div class="rules-modal" style="max-width:300px;text-align:center;padding:28px 20px 20px;">
+        <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;">Set MPIN</h3>
+        <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Choose a 4-digit PIN for quick login next time</p>
+        <div class="mpin-dots" style="margin-bottom:18px;">${dots}</div>
+        <div class="mpin-pad mpin-pad-sm">${pad}</div>
+        <button class="text-link" id="mpin-setup-skip" type="button" style="margin-top:16px;font-size:13px;">Skip for now</button>
+      </div>`;
+    document.getElementById("mpin-setup-skip").addEventListener("click", () => {
+      modal.remove();
+      document.body.style.overflow = "";
+    });
+    modal.querySelectorAll("[data-setup-key]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.setupKey;
+        if (k === "⌫") { pin1 = pin1.slice(0, -1); render(); return; }
+        if (pin1.length < 4) pin1 += k;
+        if (pin1.length === 4) {
+          saveMpin(pin1);
+          modal.remove();
+          document.body.style.overflow = "";
+          showToast("MPIN set! Use it next time you open the app.");
+        } else { render(); }
+      });
+    });
+  };
+  render();
   document.body.appendChild(modal);
   document.body.style.overflow = "hidden";
-
-  document.getElementById("biometric-enroll-yes").addEventListener("click", async () => {
-    const btn = document.getElementById("biometric-enroll-yes");
-    btn.disabled = true;
-    btn.innerHTML = "Setting up…";
-    try {
-      await registerBiometric();
-      modal.remove();
-      document.body.style.overflow = "";
-      showToast("Fingerprint login enabled!");
-    } catch (err) {
-      modal.remove();
-      document.body.style.overflow = "";
-      if (err.name !== "NotAllowedError") showToast("Could not enable fingerprint: " + (err.message || err.name));
-    }
-  });
-
-  document.getElementById("biometric-enroll-skip").addEventListener("click", () => {
-    modal.remove();
-    document.body.style.overflow = "";
-  });
 }
 
 // ── Form / event wiring ─────────────────────────────────────────────────────
@@ -3116,9 +3070,7 @@ async function login(data) {
     await loadLiveState();
     state.activeTab = "dashboard";
     render();
-    if (biometricSupported() && !biometricRegistered()) {
-      setTimeout(showBiometricEnrollModal, 600);
-    }
+    if (!mpinSet()) setTimeout(showMpinSetupModal, 600);
     return;
   }
 
@@ -4052,6 +4004,8 @@ async function initApp() {
   splash.classList.add("splash-exit");
   await new Promise((r) => setTimeout(r, 700));
   splash.remove();
+  // If session is valid and MPIN is set, require MPIN before entering the app
+  if (state.currentUserId && mpinSet()) mpinPending = true;
   render();
 }
 
