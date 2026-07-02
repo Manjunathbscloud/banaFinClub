@@ -3145,8 +3145,13 @@ async function login(data) {
     await addLiveAudit(`${member.name} logged in.`, "login");
     await loadLiveState();
     state.activeTab = "dashboard";
+    if (mpinSet()) {
+      mpinPending = true;
+      render();
+      return;
+    }
     render();
-    if (!mpinSet()) setTimeout(showMpinSetupModal, 600);
+    setTimeout(showMpinSetupModal, 600);
     return;
   }
 
