@@ -3868,14 +3868,20 @@ function resetIdleTimer() {
   if (!state.currentUserId) return;
   localStorage.setItem(IDLE_TS_KEY, Date.now().toString());
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(async () => {
+  idleTimer = setTimeout(() => {
     if (!state.currentUserId) return;
-    if (liveBackendReady) await supabaseClient.auth.signOut();
-    state.currentUserId = null;
-    localStorage.removeItem(IDLE_TS_KEY);
-    saveState();
-    showToast("You have been logged out due to inactivity.");
-    render();
+    if (mpinSet()) {
+      mpinPending = true;
+      mpinEntry = "";
+      render();
+    } else {
+      if (liveBackendReady) supabaseClient.auth.signOut();
+      state.currentUserId = null;
+      localStorage.removeItem(IDLE_TS_KEY);
+      saveState();
+      showToast("Logged out due to inactivity.");
+      render();
+    }
   }, IDLE_TIMEOUT_MS);
 }
 
@@ -3883,10 +3889,15 @@ async function checkIdleExpiry() {
   const last = parseInt(localStorage.getItem(IDLE_TS_KEY) || "0", 10);
   if (!last) return;
   if (Date.now() - last > IDLE_TIMEOUT_MS) {
-    if (liveBackendReady) await supabaseClient.auth.signOut();
-    state.currentUserId = null;
-    localStorage.removeItem(IDLE_TS_KEY);
-    saveState();
+    if (mpinSet()) {
+      mpinPending = true;
+      mpinEntry = "";
+    } else {
+      if (liveBackendReady) await supabaseClient.auth.signOut();
+      state.currentUserId = null;
+      localStorage.removeItem(IDLE_TS_KEY);
+      saveState();
+    }
   }
 }
 
