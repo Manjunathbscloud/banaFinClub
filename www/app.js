@@ -2787,7 +2787,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
     if (action.dataset.action === "close-current-year") await closeCurrentYear();
-    if (action.dataset.action === "toggle-emi") await toggleEmiEnabled();
+    if (action.dataset.action === "toggle-emi") { event.preventDefault(); await toggleEmiEnabled(); }
 
     if (action.dataset.action === "save-rule") {
       const id = action.dataset.id;
