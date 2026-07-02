@@ -3024,7 +3024,7 @@ function showMpinSetupModal() {
         <div class="mpin-pad mpin-pad-sm">${pad}</div>
         <button class="text-link" id="mpin-setup-skip" type="button" style="margin-top:16px;font-size:13px;">Skip for now</button>
       </div>`;
-    document.getElementById("mpin-setup-skip").addEventListener("click", () => {
+    modal.querySelector("#mpin-setup-skip").addEventListener("click", () => {
       modal.remove();
       document.body.style.overflow = "";
     });
