@@ -2738,10 +2738,16 @@ document.addEventListener("click", async (event) => {
 
 
   if (action.dataset.action === "logout") {
-    if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
-    state.currentUserId = null;
-    saveState();
-    render();
+    if (mpinSet()) {
+      mpinPending = true;
+      mpinEntry = "";
+      render();
+    } else {
+      if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
+      state.currentUserId = null;
+      saveState();
+      render();
+    }
   }
 
   if (action.dataset.action === "edit-rule") {
@@ -2908,9 +2914,12 @@ function renderMpinScreen() {
       </div>
     </div>
   `;
-  document.getElementById("mpin-use-password").addEventListener("click", () => {
+  document.getElementById("mpin-use-password").addEventListener("click", async () => {
     mpinPending = false;
     mpinEntry = "";
+    if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
+    state.currentUserId = null;
+    saveState();
     render();
   });
   document.getElementById("mpin-reset").addEventListener("click", () => showMpinResetModal());
