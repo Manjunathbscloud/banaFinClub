@@ -1544,6 +1544,62 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 
 .eye-btn:hover { color: var(--saffron); background: var(--saffron-soft); }
 
+/* ── Toggle switch ──────────────────────────── */
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-switch-track {
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.2s ease;
+  display: inline-block;
+}
+
+.toggle-switch-thumb {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 3px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-switch-track {
+  background: var(--saffron);
+}
+
+.toggle-switch input:checked + .toggle-switch-track .toggle-switch-thumb {
+  transform: translateX(20px);
+}
+
+.toggle-switch input:disabled + .toggle-switch-track {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-switch input:focus-visible + .toggle-switch-track {
+  outline: 2px solid var(--saffron-mid);
+  outline-offset: 2px;
+}
+
 /* ── Button loading ─────────────────────────── */
 .primary:disabled { opacity: 0.68; cursor: not-allowed; transform: none; }
 

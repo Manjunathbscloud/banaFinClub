@@ -2524,9 +2524,10 @@ function renderAdmin() {
               <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, members can request loans in EMI format at <strong>1.5%/month</strong> with a custom tenure.</p>
               <p style="font-size:13px;color:var(--muted);margin:0;">Full-repayment loans remain available at <strong>1.25%/month</strong>.</p>
             </div>
-            <button class="${state.settings.emiEnabled ? "primary" : "secondary"}" data-action="toggle-emi" type="button" style="min-width:64px;flex-shrink:0;">
-              ${state.settings.emiEnabled ? "ON" : "OFF"}
-            </button>
+            <label class="toggle-switch" aria-label="Enable EMI loans">
+              <input type="checkbox" data-action="toggle-emi" ${state.settings.emiEnabled ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
           </div>
           ${state.settings.emiEnabled ? `
             <div style="margin-top:12px;">
