@@ -1039,6 +1039,7 @@ function render() {
   }
 
   renderChatFab();
+  renderAiFab();
   requestAnimationFrame(runPageAnimations);
 }
 
@@ -2657,6 +2658,28 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "open-ai-chat") {
+    openAiPanel();
+    return;
+  }
+
+  if (action.dataset.action === "close-ai-chat") {
+    closeAiPanel();
+    return;
+  }
+
+  if (action.dataset.action === "send-ai-message") {
+    await sendAiMessage();
+    return;
+  }
+
+  if (action.dataset.action === "clear-ai-chat") {
+    aiHistory = [];
+    const messagesEl = document.getElementById("ai-messages");
+    if (messagesEl) messagesEl.innerHTML = aiEmptyHtml();
+    return;
+  }
+
   if (action.dataset.action === "show-deposit-year") {
     showDepositYearModal(action.dataset.year);
     return;
@@ -4172,6 +4195,12 @@ function initPullToRefresh() {
 let chatOpen = false;
 let chatChannel = null;
 
+// ── AI Chat ───────────────────────────────────────────────────────────────
+
+let aiChatOpen = false;
+let aiHistory = [];
+let aiLoading = false;
+
 function chatUnreadCount() {
   if (!currentProfileId()) return 0;
   const lastRead = localStorage.getItem("chatLastRead") || "1970-01-01T00:00:00Z";
@@ -4434,6 +4463,205 @@ function initRealtimeChat() {
       }
     })
     .subscribe();
+}
+
+// ── AI Assistant ──────────────────────────────────────────────────────────
+
+function renderAiFab() {
+  const existing = document.getElementById("ai-fab");
+  if (existing) existing.remove();
+  if (!currentUser() || !liveBackendReady) return;
+
+  const fab = document.createElement("button");
+  fab.id = "ai-fab";
+  fab.setAttribute("aria-label", "Open AI assistant");
+  fab.setAttribute("data-action", "open-ai-chat");
+  fab.innerHTML = `<span class="ai-fab-icon">✦</span>`;
+  document.body.appendChild(fab);
+}
+
+function aiEmptyHtml() {
+  const user = currentUser();
+  const isAdm = isAdmin();
+  const suggestions = isAdm
+    ? ["Who hasn't paid this month?", "Show me all active loans", "What's the bank balance?", "Give me a club overview"]
+    : ["Have I paid this month?", "What's my loan outstanding?", "Show my payment history", "When is my next EMI?"];
+  return `
+    <div class="ai-empty">
+      <div class="ai-empty-icon">✦</div>
+      <p class="ai-empty-title">Hi ${escapeHtml(user?.name?.split(" ")[0] || "there")}!</p>
+      <p class="ai-empty-sub">Ask me anything about your account or general finance questions.</p>
+      <div class="ai-suggestions">
+        ${suggestions.map(s => `<button class="ai-suggestion" data-suggestion="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("")}
+      </div>
+    </div>`;
+}
+
+function openAiPanel() {
+  const existing = document.getElementById("ai-panel");
+  if (existing) { existing.remove(); document.body.style.overflow = ""; aiChatOpen = false; return; }
+
+  aiChatOpen = true;
+
+  const html = `
+    <div id="ai-panel" class="ai-panel-overlay">
+      <div class="ai-panel-sheet" id="ai-panel-sheet">
+        <div class="ai-panel-header">
+          <div class="ai-panel-header-left">
+            <span class="ai-panel-logo">✦</span>
+            <div>
+              <h3>Banakar AI</h3>
+              <p>Powered by Gemini · Your personal finance assistant</p>
+            </div>
+          </div>
+          <div class="ai-panel-header-actions">
+            <button class="ai-icon-btn" data-action="clear-ai-chat" title="Clear chat">↺</button>
+            <button class="ai-icon-btn" data-action="close-ai-chat" title="Close">✕</button>
+          </div>
+        </div>
+        <div class="ai-messages" id="ai-messages">
+          ${aiHistory.length === 0 ? aiEmptyHtml() : renderAiHistory()}
+        </div>
+        <div class="ai-input-wrap">
+          <input id="ai-input" class="ai-input" placeholder="Ask anything…" maxlength="500" autocomplete="off" />
+          <button id="ai-send-btn" class="ai-send-btn" data-action="send-ai-message">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+
+  const messagesEl = document.getElementById("ai-messages");
+  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  const input = document.getElementById("ai-input");
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAiMessage(); }
+    });
+    setTimeout(() => input.focus(), 120);
+  }
+
+  // Suggestion chip clicks
+  document.getElementById("ai-panel")?.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-suggestion]");
+    if (chip) {
+      const text = chip.dataset.suggestion;
+      const inp = document.getElementById("ai-input");
+      if (inp && text) { inp.value = text; inp.focus(); sendAiMessage(); }
+    }
+  });
+}
+
+function closeAiPanel() {
+  const panel = document.getElementById("ai-panel");
+  if (panel) { panel.remove(); document.body.style.overflow = ""; }
+  aiChatOpen = false;
+}
+
+function renderAiHistory() {
+  let html = "";
+  for (const turn of aiHistory) {
+    const role = turn.role;
+    const text = turn.parts?.[0]?.text || "";
+    if (!text) continue;
+    if (role === "user") {
+      html += `<div class="ai-msg ai-msg-user"><div class="ai-bubble ai-bubble-user">${escapeHtml(text)}</div></div>`;
+    } else {
+      html += `<div class="ai-msg ai-msg-ai"><span class="ai-avatar">✦</span><div class="ai-bubble ai-bubble-ai">${formatAiText(text)}</div></div>`;
+    }
+  }
+  return html;
+}
+
+function formatAiText(text) {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
+}
+
+function appendAiMessage(role, text) {
+  const messagesEl = document.getElementById("ai-messages");
+  if (!messagesEl) return;
+
+  // Remove empty state if present
+  const empty = messagesEl.querySelector(".ai-empty");
+  if (empty) empty.remove();
+
+  const div = document.createElement("div");
+  div.className = `ai-msg ai-msg-${role === "user" ? "user" : "ai"}`;
+  if (role === "user") {
+    div.innerHTML = `<div class="ai-bubble ai-bubble-user">${escapeHtml(text)}</div>`;
+  } else {
+    div.innerHTML = `<span class="ai-avatar">✦</span><div class="ai-bubble ai-bubble-ai">${formatAiText(text)}</div>`;
+  }
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function showAiTyping() {
+  const messagesEl = document.getElementById("ai-messages");
+  if (!messagesEl || document.getElementById("ai-typing")) return;
+  const div = document.createElement("div");
+  div.id = "ai-typing";
+  div.className = "ai-msg ai-msg-ai";
+  div.innerHTML = `<span class="ai-avatar">✦</span><div class="ai-bubble ai-bubble-ai ai-typing-indicator"><span></span><span></span><span></span></div>`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeAiTyping() {
+  document.getElementById("ai-typing")?.remove();
+}
+
+async function sendAiMessage() {
+  const input = document.getElementById("ai-input");
+  const message = (input?.value || "").trim();
+  if (!message || aiLoading || !liveBackendReady) return;
+
+  const btn = document.getElementById("ai-send-btn");
+  input.value = "";
+  aiLoading = true;
+  if (btn) btn.setAttribute("disabled", "true");
+
+  appendAiMessage("user", message);
+  showAiTyping();
+
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) throw new Error("No session");
+
+    const edgeFnUrl = `${appConfig.supabaseUrl}/functions/v1/ai-chat`;
+    const res = await fetch(edgeFnUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": appConfig.supabaseAnonKey,
+      },
+      body: JSON.stringify({ message, history: aiHistory }),
+    });
+
+    const json = await res.json();
+    removeAiTyping();
+
+    if (!res.ok || json.error) {
+      appendAiMessage("ai", `⚠️ ${json.error || "Something went wrong. Please try again."}`);
+    } else {
+      appendAiMessage("ai", json.response);
+      aiHistory = json.updatedHistory || aiHistory;
+    }
+  } catch (err) {
+    removeAiTyping();
+    appendAiMessage("ai", "⚠️ Could not reach the AI service. Check your connection and try again.");
+  } finally {
+    aiLoading = false;
+    if (btn) btn.removeAttribute("disabled");
+    input?.focus();
+  }
 }
 
 initApp().then(() => { initPullToRefresh(); initRealtimeChat(); });
