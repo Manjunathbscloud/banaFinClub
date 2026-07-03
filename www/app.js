@@ -4566,11 +4566,11 @@ function renderAiHistory() {
   let html = "";
   for (const turn of aiHistory) {
     const role = turn.role;
-    const text = turn.parts?.[0]?.text || "";
+    const text = turn.content || "";
     if (!text) continue;
     if (role === "user") {
       html += `<div class="ai-msg ai-msg-user"><div class="ai-bubble ai-bubble-user">${escapeHtml(text)}</div></div>`;
-    } else {
+    } else if (role === "assistant") {
       html += `<div class="ai-msg ai-msg-ai"><span class="ai-avatar">✦</span><div class="ai-bubble ai-bubble-ai">${formatAiText(text)}</div></div>`;
     }
   }
