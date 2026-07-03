@@ -1038,7 +1038,7 @@ function render() {
     });
   }
 
-  renderChatFab();
+  // renderChatFab();
   renderAiFab();
   requestAnimationFrame(runPageAnimations);
 }
