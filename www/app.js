@@ -4082,7 +4082,7 @@ async function initApp() {
             text-anchor="middle"
             font-family="Georgia,'Times New Roman',serif"
             font-weight="900" font-size="115"
-            fill="url(#sp-gv)">B</text>
+            fill="url(#sp-gv)">$</text>
           <rect x="64" y="156" width="92" height="3" rx="1.5"
             fill="url(#sp-gh)" opacity="0.9"/>
         </g>
