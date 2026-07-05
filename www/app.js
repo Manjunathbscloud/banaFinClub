@@ -526,7 +526,17 @@ async function insertStatement(type, amount, description, relatedId = null) {
 async function loadLiveState() {
   if (!liveBackendReady) return;
   const prefs = loadPrefs();
-  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+  let { data: authData, error: authError } = await supabaseClient.auth.getUser();
+  if (authError || !authData?.user) {
+    // Access token may have simply expired while the app was idle/backgrounded.
+    // Try a refresh before treating this as a real logout, so MPIN lock (not
+    // full login) is what greets the member when the app wakes back up.
+    const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+    if (!refreshError && refreshData?.user) {
+      authData = refreshData;
+      authError = null;
+    }
+  }
   if (authError || !authData?.user) {
     state = { ...structuredClone(initialState), ...prefs, currentUserId: null };
     return;
