@@ -603,6 +603,11 @@ async function loadLiveState() {
     audit: audit.reverse().map(liveAuditToLocal),
   };
 
+  // Cache identity + MPIN hash locally so the MPIN lock can greet the member on
+  // next open even before the live session is restored.
+  const activeUser = current?.status === "active" ? state.members.find((m) => m.id === current.id) : null;
+  if (activeUser?.mpinHash) saveMpinIdentity(activeUser);
+
   // Clear payInitiated flag if this user's current month payment is already paid
   const myPayment = state.monthlyPayments.find((p) => p.memberId === state.currentUserId && p.month === currentMonth());
   if (myPayment?.status === "paid") localStorage.removeItem(`payInitiated_${currentMonth()}`);
@@ -990,13 +995,16 @@ function escapeHtml(value) {
 function render() {
   document.body.classList.toggle("kannada", state.lang === "kn");
   const user = currentUser();
+  // MPIN gate wins over the login screen: if an MPIN is pending and we know who
+  // the member is (live session OR cached identity), show the MPIN lock — not
+  // the full phone+password login.
+  if (mpinPending && (user || mpinIdentity())) {
+    renderMpinScreen();
+    return;
+  }
   if (!user) {
     clearTimeout(idleTimer);
     renderAuth("login");
-    return;
-  }
-  if (mpinPending) {
-    renderMpinScreen();
     return;
   }
   resetIdleTimer();
@@ -1168,25 +1176,41 @@ function renderAuth(mode) {
 let mpinPending = false;
 let mpinEntry = "";
 
+// Locally-cached identity so the MPIN lock works even before the live Supabase
+// session has been restored (e.g. reopening the app after days). Holds just
+// enough to show + verify MPIN offline, then restore the session in background.
+const MPIN_IDENTITY_KEY = "bfc_mpin_identity";
+function mpinIdentity() {
+  try { return JSON.parse(localStorage.getItem(MPIN_IDENTITY_KEY)); } catch (_) { return null; }
+}
+function saveMpinIdentity(member) {
+  if (!member?.mpinHash) return;
+  localStorage.setItem(MPIN_IDENTITY_KEY, JSON.stringify({
+    userId: member.id, name: member.name, phone: member.phone, mpinHash: member.mpinHash,
+  }));
+}
+function clearMpinIdentity() { localStorage.removeItem(MPIN_IDENTITY_KEY); }
+
 async function hashMpin(pin) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin + "_bfc"));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
-function mpinSet() { return !!currentUser()?.mpinHash; }
+function mpinSet() { return !!(currentUser()?.mpinHash || mpinIdentity()?.mpinHash); }
 async function saveMpin(pin) {
   const hash = await hashMpin(pin);
   await liveQuery(supabaseClient.from("profiles").update({ mpin_hash: hash }).eq("id", state.currentUserId));
   const member = state.members.find(m => m.id === state.currentUserId);
-  if (member) member.mpinHash = hash;
+  if (member) { member.mpinHash = hash; saveMpinIdentity(member); }
 }
 async function validateMpin(pin) {
   const hash = await hashMpin(pin);
-  return hash === currentUser()?.mpinHash;
+  return hash === currentUser()?.mpinHash || hash === mpinIdentity()?.mpinHash;
 }
 async function clearMpin() {
   await liveQuery(supabaseClient.from("profiles").update({ mpin_hash: null }).eq("id", state.currentUserId));
   const member = state.members.find(m => m.id === state.currentUserId);
   if (member) member.mpinHash = null;
+  clearMpinIdentity();
 }
 
 function loginForm() {
@@ -2777,6 +2801,7 @@ document.addEventListener("click", async (event) => {
       mpinEntry = "";
       render();
     } else {
+      sessionStorage.removeItem("mpinVerified");
       if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
       state.currentUserId = null;
       saveState();
@@ -2925,7 +2950,7 @@ document.addEventListener("change", (event) => {
 // ── MPIN screen & setup ──────────────────────────────────────────────────────
 
 function renderMpinScreen() {
-  const member = currentUser();
+  const member = currentUser() || mpinIdentity();
   const name = member?.name?.split(" ")[0] || "Member";
   const dots = Array.from({ length: 4 }, (_, i) =>
     `<div class="mpin-dot ${i < mpinEntry.length ? "mpin-dot-filled" : ""}"></div>`
@@ -2951,6 +2976,8 @@ function renderMpinScreen() {
   document.getElementById("mpin-use-password").addEventListener("click", async () => {
     mpinPending = false;
     mpinEntry = "";
+    sessionStorage.removeItem("mpinVerified");
+    clearMpinIdentity();
     if (liveBackendReady) await supabaseClient.auth.signOut({ scope: "local" });
     state.currentUserId = null;
     saveState();
@@ -2970,9 +2997,27 @@ async function handleMpinKey(key) {
   }
   if (mpinEntry.length === 4) {
     if (await validateMpin(mpinEntry)) {
-      mpinPending = false;
       mpinEntry = "";
-      render();
+      sessionStorage.setItem("mpinVerified", "1");
+      // If the live session isn't loaded yet (app reopened after a long gap),
+      // restore it now that the member has proven identity via MPIN.
+      if (liveBackendReady && !state.currentUserId) {
+        try { await loadLiveState(); } catch (_) {}
+      }
+      if (!liveBackendReady || state.currentUserId) {
+        mpinPending = false;
+        render();
+      } else {
+        // Refresh token is truly dead — password is required to re-authenticate.
+        // Keep it painless: drop to login with the phone pre-filled.
+        mpinPending = false;
+        sessionStorage.removeItem("mpinVerified");
+        const phone = mpinIdentity()?.phone || "";
+        renderAuth("login");
+        const phoneInput = document.querySelector('[data-form="login"] [name="phone"]');
+        if (phoneInput && phone) phoneInput.value = phone;
+        showToast("Session expired — please enter your password once to continue.");
+      }
     } else {
       const dots = document.querySelectorAll(".mpin-dot");
       dots.forEach(d => d.classList.add("mpin-dot-error"));
@@ -3130,6 +3175,9 @@ async function login(data) {
   const phone = requireValidPhone(data.phone);
   if (liveBackendReady) {
     const authEmail = await resolveAuthEmail(phone);
+    // Drop any previously-cached MPIN identity so only the freshly authenticated
+    // user can be cached (loadLiveState re-caches them if they have an MPIN).
+    clearMpinIdentity();
     await liveQuery(supabaseClient.auth.signInWithPassword({
       email: authEmail,
       password: data.password,
@@ -3905,15 +3953,14 @@ function resetIdleTimer() {
   idleTimer = setTimeout(() => {
     if (!state.currentUserId) return;
     if (mpinSet()) {
+      sessionStorage.removeItem("mpinVerified");
       mpinPending = true;
       mpinEntry = "";
       render();
     } else {
-      if (liveBackendReady) supabaseClient.auth.signOut();
       state.currentUserId = null;
       localStorage.removeItem(IDLE_TS_KEY);
       saveState();
-      showToast("Logged out due to inactivity.");
       render();
     }
   }, IDLE_TIMEOUT_MS);
@@ -3924,10 +3971,10 @@ async function checkIdleExpiry() {
   if (!last) return;
   if (Date.now() - last > IDLE_TIMEOUT_MS) {
     if (mpinSet()) {
+      sessionStorage.removeItem("mpinVerified");
       mpinPending = true;
       mpinEntry = "";
     } else {
-      if (liveBackendReady) await supabaseClient.auth.signOut();
       state.currentUserId = null;
       localStorage.removeItem(IDLE_TS_KEY);
       saveState();
@@ -4144,8 +4191,10 @@ async function initApp() {
   splash.classList.add("splash-exit");
   await new Promise((r) => setTimeout(r, 700));
   splash.remove();
-  // If session is valid and MPIN is set, require MPIN before entering the app
-  if (state.currentUserId && mpinSet()) mpinPending = true;
+  // Require MPIN before entering the app whenever one is set — whether the live
+  // session is available or only the cached identity is (app reopened after a
+  // long gap). mpinSet() checks both, so this also covers the expired-session case.
+  if (mpinSet() && !sessionStorage.getItem("mpinVerified")) mpinPending = true;
   render();
 }
 
@@ -4526,7 +4575,7 @@ function openAiPanel() {
             <span class="ai-panel-logo">✦</span>
             <div>
               <h3>Banakar AI</h3>
-              <p>Powered by Gemini · Your personal finance assistant</p>
+              <p>Powered by Groq · Your personal finance assistant</p>
             </div>
           </div>
           <div class="ai-panel-header-actions">
@@ -4566,7 +4615,7 @@ function openAiPanel() {
     if (chip) {
       const text = chip.dataset.suggestion;
       const inp = document.getElementById("ai-input");
-      if (inp && text) { inp.value = text; inp.focus(); sendAiMessage(); }
+      if (inp && text) { inp.value = text; inp.focus(); }
     }
   });
 }
@@ -4595,6 +4644,9 @@ function renderAiHistory() {
 function formatAiText(text) {
   return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^[-*•]\s+(.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>")
+    .replace(/^\d+\.\s+(.+)$/gm, "<li>$1</li>")
     .replace(/\n/g, "<br>");
 }
 
