@@ -371,21 +371,6 @@ Deno.serve(async (req) => {
           }
           case "get_bank_balance": {
             if (!isAdmin) { result = { message: "Only the president can view the bank balance." }; break; }
-            // Try settings table first (manually maintained balance)
-            const { data: balSetting } = await db
-              .from("settings")
-              .select("value")
-              .eq("id", "bank_balance")
-              .maybeSingle();
-            if (balSetting?.value?.amount !== undefined) {
-              result = {
-                currentBalance: Number(balSetting.value.amount),
-                asOf: balSetting.value.updatedAt || "unknown",
-                note: "Balance from club records",
-              };
-              break;
-            }
-            // Fall back to latest statement row
             const { data: stmtRow, error: stmtErr } = await db
               .from("statements")
               .select("balance, created_at")
@@ -399,7 +384,7 @@ Deno.serve(async (req) => {
             }
             result = stmtRow
               ? { currentBalance: Number(stmtRow.balance), asOf: stmtRow.created_at }
-              : { message: "No bank balance record found. Please update the bank balance in settings." };
+              : { message: "No statement entries found. The bank balance has not been recorded yet." };
             break;
           }
           case "get_member_summary": {
