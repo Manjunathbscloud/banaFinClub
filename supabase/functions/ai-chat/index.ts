@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     // Fetch profile and club settings in parallel
     const db = createClient(SUPABASE_URL, SERVICE_ROLE);
     const [{ data: profile }, { data: settingsRows }] = await Promise.all([
-      db.from("profiles").select("id, full_name, role, status").eq("auth_user_id", user.id).single(),
+      db.from("profiles").select("id, full_name, phone, role, status").eq("auth_user_id", user.id).single(),
       db.from("settings").select("id, value"),
     ]);
 
@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
             const { data, error } = await db
               .from("current_loans")
               .select("id, principal, loan_type, monthly_interest, interest_rate_monthly, tenure_months, emi_amount, emis_paid")
-              .or(`profile_id.eq.${profileId},member_name.eq."${profile.full_name}"`)
+              .eq("member_name", profile.full_name)
               .eq("status", "active");
             if (error) { console.error("get_my_loans error:", error); result = { message: "Could not fetch loan data. Please try again." }; break; }
             if (!data || data.length === 0) { result = { message: "You have no active loans." }; break; }
@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
             const { data: loans, error: lErr } = await db
               .from("current_loans")
               .select("id, tenure_months, emi_amount, emis_paid, principal, interest_rate_monthly")
-              .or(`profile_id.eq.${profileId},member_name.eq."${profile.full_name}"`)
+              .eq("member_name", profile.full_name)
               .eq("status", "active")
               .eq("loan_type", "emi");
             if (lErr) { console.error("get_my_emis loans error:", lErr); result = { message: "Could not fetch EMI data. Please try again." }; break; }
@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
             const { data: loans, error: lErr } = await db
               .from("current_loans")
               .select("principal, loan_type, monthly_interest, interest_rate_monthly, tenure_months, emi_amount, emis_paid")
-              .or(`profile_id.eq.${profileId},member_name.eq."${profile.full_name}"`)
+              .eq("member_name", profile.full_name)
               .eq("status", "active");
             if (lErr) { console.error("get_my_total_monthly_due error:", lErr); result = { message: "Could not calculate monthly due. Please try again." }; break; }
 
@@ -405,7 +405,7 @@ Deno.serve(async (req) => {
             if (!member) { result = { message: `Member "${args.member_name}" not found.` }; break; }
             const [{ data: payment }, { data: loans }] = await Promise.all([
               db.from("monthly_payments").select("status, paid_amount").eq("profile_id", member.id).eq("month", currentMonth).maybeSingle(),
-              db.from("current_loans").select("principal, loan_type, tenure_months, emis_paid").or(`profile_id.eq.${member.id},member_name.eq."${member.full_name}"`).eq("status", "active"),
+              db.from("current_loans").select("principal, loan_type, tenure_months, emis_paid").eq("member_name", member.full_name).eq("status", "active"),
             ]);
             const totalOutstanding = (loans || []).reduce((sum: number, l: any) =>
               sum + (l.loan_type === "emi"
@@ -495,7 +495,7 @@ RULES:
 1. Call a tool FIRST for every club question. Never skip this.
 2. Use ONLY the numbers the tool returns. Never add, modify, or guess.
 3. If a tool returns a "message" field, relay that message to the user — do NOT retry the tool.
-4. For general finance knowledge (not about this club) → answer from your own knowledge.
+4. For general knowledge questions (finance, time zones, currencies, banking concepts, anything not specific to this club) → answer from your own knowledge. Do NOT say you cannot answer general questions.
 5. NEVER output raw function/tool syntax like <function>...</function> or JSON tool calls as text.
 6. If data is unavailable, say so in plain English and stop — do NOT attempt to retry inline.
 
