@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
         type: "function",
         function: {
           name: "get_my_deposit_summary",
-          description: "Get the current member's total deposits grouped by year. Call this when user asks for their yearly total, deposit summary, or how much they have deposited overall.",
+          description: "Get the club's yearly financial summary (principal collected, interest earned, balance per year). Call this when user asks for yearly totals, deposit summary, club financial history, or how much has been collected overall.",
           parameters: { type: "object", properties: {} },
         },
       },
@@ -208,13 +208,13 @@ Deno.serve(async (req) => {
           case "get_my_payment_status": {
             const { data, error } = await db
               .from("monthly_payments")
-              .select("month, expected_amount, paid_amount, status, paid_at")
+              .select("month, expected_amount, paid_amount, status, created_at")
               .eq("profile_id", profileId)
               .eq("month", month)
               .maybeSingle();
             if (error) { console.error("get_my_payment_status error:", error); result = { message: "Could not fetch payment status. Please try again." }; break; }
             result = data
-              ? { month: data.month, paid: data.status === "paid", expectedAmount: data.expected_amount, paidAmount: data.paid_amount, paidAt: data.paid_at }
+              ? { month: data.month, paid: data.status === "paid", expectedAmount: data.expected_amount, paidAmount: data.paid_amount, recordedAt: data.created_at }
               : { month, paid: false, message: `No payment record found for ${month}. You may not have paid yet.` };
             break;
           }
@@ -243,27 +243,33 @@ Deno.serve(async (req) => {
           case "get_my_emis": {
             const { data: loans, error: lErr } = await db
               .from("current_loans")
-              .select("id, tenure_months, emi_amount, emis_paid")
+              .select("id, tenure_months, emi_amount, emis_paid, principal, interest_rate_monthly")
               .or(`profile_id.eq.${profileId},member_name.eq."${profile.full_name}"`)
               .eq("status", "active")
               .eq("loan_type", "emi");
             if (lErr) { console.error("get_my_emis loans error:", lErr); result = { message: "Could not fetch EMI data. Please try again." }; break; }
             if (!loans?.length) { result = { message: "You have no active EMI loans." }; break; }
-            const { data: emis } = await db
-              .from("loan_emis")
-              .select("emi_number, due_month, amount, status")
-              .in("loan_id", loans.map((l: any) => l.id))
-              .eq("status", "pending")
-              .order("due_month")
-              .limit(6);
-            result = { pendingEmis: emis || [] };
+            result = loans.map((l: any) => {
+              const paid = Number(l.emis_paid || 0);
+              const total = Number(l.tenure_months || 0);
+              const remaining = Math.max(0, total - paid);
+              return {
+                emiAmount: l.emi_amount,
+                emisPaid: paid,
+                totalEmis: total,
+                remainingEmis: remaining,
+                note: remaining > 0
+                  ? `${remaining} EMI(s) of ₹${l.emi_amount} remaining`
+                  : "All EMIs paid",
+              };
+            });
             break;
           }
           case "get_my_statement": {
             const limit = (args.limit as number) || 6;
             const { data, error } = await db
               .from("monthly_payments")
-              .select("month, paid_amount, status, paid_at")
+              .select("month, paid_amount, status, created_at")
               .eq("profile_id", profileId)
               .order("month", { ascending: false })
               .limit(limit);
@@ -274,11 +280,12 @@ Deno.serve(async (req) => {
           case "get_my_deposit_summary": {
             const { data, error } = await db
               .from("deposit_summaries")
-              .select("year, total_paid, months_paid")
-              .eq("profile_id", profileId)
+              .select("year, label, principal, interest, expenditure, balance")
               .order("year", { ascending: false });
             if (error) { console.error("get_my_deposit_summary error:", error); result = { message: "Could not fetch deposit summary. Please try again." }; break; }
-            result = data && data.length > 0 ? data : { message: "No deposit summary found." };
+            result = data && data.length > 0
+              ? { note: "Club-wide yearly financial summary", years: data }
+              : { message: "No deposit summary found." };
             break;
           }
           case "get_club_settings": {
