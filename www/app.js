@@ -589,6 +589,8 @@ async function loadLiveState() {
       id: item.id, year: item.year, label: item.label,
       principal: Number(item.principal || 0), interest: Number(item.interest || 0),
       expenditure: Number(item.expenditure || 0), balance: Number(item.balance || 0),
+      exit_payouts: Number(item.exit_payouts || 0),
+      breakdown: item.breakdown || null,
     })),
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
@@ -1657,7 +1659,7 @@ function depositYearCard(d) {
     <summary class="card-header">
       <div>
         <h3>${escapeHtml(d.label)}</h3>
-        <p>Principal ${money(d.principal)} · Interest <span style="color:#16a34a;">${money(d.interest)}</span> · Expenditure <span style="color:#dc2626;">${money(d.expenditure)}</span> · Balance <strong style="color:#2563eb;">${money(d.balance)}</strong></p>
+        <p>Principal ${money(d.principal)} · Interest <span style="color:#16a34a;">${money(d.interest)}</span> · Expenditure <span style="color:#dc2626;">${money((Number(d.expenditure)||0) + (Number(d.exit_payouts)||0))}</span> · Balance <strong style="color:#2563eb;">${money(d.balance)}</strong></p>
       </div>
       <span class="collapse-icon">⌄</span>
     </summary>
@@ -1737,7 +1739,18 @@ function renderDeposits() {
   const livePayments = state.monthlyPayments
     .filter((p) => p.status === "paid" && p.month >= activeYearStart)
     .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-  const activeBalance = activeHistBase + activeYearRenewalFee - exitPayouts + livePayments;
+
+  let activeBalance;
+  if (activeYearNum === 6) {
+    // Year 6: DB balance cleared — use hardcoded pre-Jul hist total + live July+ payments
+    const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834; // 129805
+    const yr6LiveTotal = state.monthlyPayments
+      .filter(p => p.status === "paid" && p.month >= "2026-07")
+      .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+    activeBalance = yr6HistFixed + yr6LiveTotal;
+  } else {
+    activeBalance = activeHistBase + activeYearRenewalFee - exitPayouts + livePayments;
+  }
 
   const closedRows = state.deposits
     .filter(d => d.year < activeYearDbYear)
@@ -1754,7 +1767,7 @@ function renderDeposits() {
     {
       key: "active",
       label: activeYearLabel,
-      sub: `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()} – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`,
+      sub: `${activeYearNum === 6 ? "Nov 2025" : `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()}`} – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`,
       balance: activeBalance,
       active: true,
     },
@@ -1801,7 +1814,7 @@ function showDepositYearModal(yearKey) {
     const activeYearDbYear = 2020 + activeYearNum;
     const activeHistBase = Number(state.deposits.find(d => d.year === activeYearDbYear)?.balance || 0);
 
-    if (activeYearNum === 6 && activeHistBase > 0) {
+    if (activeYearNum === 6) {
       // Year 6 with existing historical base — show the rich Year 6 hardcoded breakdown + live rows
       const livePayments = state.monthlyPayments
         .filter((p) => p.status === "paid" && p.month >= activeYearStart)
@@ -1827,7 +1840,9 @@ function showDepositYearModal(yearKey) {
         ];
       });
       const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-      const yr6RunningTotal = activeHistBase + liveTotal;
+      // Sum from hardcoded pre-Jul rows: renewal + Nov + Dec + Jan-Jun + EMI + interest + addl interest - member exit
+      const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834; // 129805
+      const yr6RunningTotal = yr6HistFixed + liveTotal;
       const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
       const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
       const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
@@ -1921,13 +1936,27 @@ function showDepositYearModal(yearKey) {
       const dbRow = state.deposits.find(d => d.year === yearNum);
       if (!dbRow) return;
       title = dbRow.label || `Year ${yearNum}`;
-      bodyHtml = `
-        <ul class="year-modal-list">
-          <li class="year-modal-item"><div><span class="year-modal-label">Total Deposits Collected</span><span class="year-modal-detail">Principal collected</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.principal)}</strong></li>
-          <li class="year-modal-item"><div><span class="year-modal-label">Interest Earned</span><span class="year-modal-detail">From loan interest</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.interest)}</strong></li>
-          ${Number(dbRow.expenditure) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Member Exits / Expenses</span><span class="year-modal-detail">Paid out</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.expenditure)}</strong></li>` : ""}
-        </ul>
-        <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+      const savedBreakdown = Array.isArray(dbRow.breakdown) ? dbRow.breakdown : [];
+      if (savedBreakdown.length > 0) {
+        bodyHtml = `
+          <ul class="year-modal-list">
+            ${savedBreakdown.map(row => `
+              <li class="year-modal-item">
+                <div><span class="year-modal-label">${escapeHtml(row.description)}</span><span class="year-modal-detail">${escapeHtml(row.details)}</span></div>
+                <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
+              </li>`).join("")}
+          </ul>
+          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+      } else {
+        bodyHtml = `
+          <ul class="year-modal-list">
+            <li class="year-modal-item"><div><span class="year-modal-label">Total Deposits Collected</span><span class="year-modal-detail">Principal collected</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.principal)}</strong></li>
+            <li class="year-modal-item"><div><span class="year-modal-label">Interest Earned</span><span class="year-modal-detail">From loan interest</span></div><strong class="year-modal-amount" style="color:#16a34a;">${money(dbRow.interest)}</strong></li>
+            ${Number(dbRow.exit_payouts) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Member Exit Payouts</span><span class="year-modal-detail">Paid to exiting members</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.exit_payouts)}</strong></li>` : ""}
+            ${Number(dbRow.expenditure) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Meeting Expenses</span><span class="year-modal-detail">Annual meeting cost</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.expenditure)}</strong></li>` : ""}
+          </ul>
+          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+      }
     }
   }
 
@@ -2179,30 +2208,43 @@ function renderMembers() {
 
 function renderMeetings() {
   const now = new Date();
-  // Year 6 chart: read historical from deposit_summaries (DB) + actual active-year paid data
-  const yr6DbRow = state.deposits.find((d) => d.year === 2026);
-  const yr6HistoricalDeposits = Number(yr6DbRow?.principal || 0);
-  const yr6HistoricalInterest = Number(yr6DbRow?.interest || 0);
-  let yr6JulyDeposits = 0;
-  let yr6JulyInterest = 0;
+  const activeYearNum = state.settings.activeYearNumber || 6;
+  const activeYearDbYear = 2020 + activeYearNum;
+  const activeYearStart = activeYearCutoffMonth();
+
+  // Closed years: read principal/interest from DB (finalized at year close)
+  // Year 6 special: DB was cleared — use hardcoded hist totals for Nov-Jun, add live July+ from payments
+  const closedYearsForChart = (state.deposits.length ? state.deposits : initialState.deposits)
+    .filter(d => d.year < activeYearDbYear)
+    .sort((a, b) => a.year - b.year)
+    .map((d, i) => {
+      if (d.year === 2026) {
+        // Year 6 DB was cleared; restore correct totals from hardcoded hist values
+        return { label: `Yr${i + 1}`, deposits: 174922, interest: 76717 };
+      }
+      return { label: `Yr${i + 1}`, deposits: d.principal, interest: d.interest };
+    });
+
+  // Active year: calculate deposits and interest from monthly_payments since year start
+  let activeLiveDeposits = 0, activeLiveInterest = 0;
   state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= activeYearCutoffMonth())
+    .filter((p) => p.status === "paid" && p.month >= activeYearStart)
     .forEach((p) => {
       const mem = memberById(p.memberId);
       if (!mem) return;
       const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
       const paid = Number(p.paidAmount || p.amount || 0);
       const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
-      yr6JulyDeposits += dep;
-      yr6JulyInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+      activeLiveDeposits += dep;
+      activeLiveInterest += hasEmi ? 0 : Math.max(0, paid - dep);
     });
-  const yr6Deposits = yr6HistoricalDeposits + yr6JulyDeposits;
-  const yr6Interest = yr6HistoricalInterest + yr6JulyInterest;
+  const activeRenewalFee = activeYearNum === 6 ? 21000 : Number(state.settings.activeYearRenewalFee || 0);
+  const activeChartDeposits = activeRenewalFee + activeLiveDeposits;
+  const activeChartInterest = activeLiveInterest;
 
-  const baseDeposits = (state.deposits.length ? state.deposits : initialState.deposits).filter(d => d.year <= 2025);
   const chartData = [
-    ...baseDeposits.map((d, i) => ({ label: `Yr${i + 1}`, deposits: d.principal, interest: d.interest })),
-    { label: "Yr6", deposits: yr6Deposits, interest: yr6Interest, live: true },
+    ...closedYearsForChart,
+    { label: `Yr${activeYearNum}`, deposits: activeChartDeposits, interest: activeChartInterest, live: true },
   ];
   const maxVal = Math.max(...chartData.flatMap(d => [d.deposits, d.interest]), 1);
 
@@ -2507,14 +2549,27 @@ function renderAdmin() {
         const newYearNum = activeYearNum + 1;
         const newYearLabel = ORDINALS[newYearNum - 1] ? `${ORDINALS[newYearNum - 1]} Year` : `Year ${newYearNum}`;
 
+        const activeYearDbYear = 2020 + activeYearNum;
+        const currentExpenditure = Number(state.deposits.find(d => d.year === activeYearDbYear)?.expenditure || 0);
+
         const openBody = `
           <div style="margin-bottom:12px;">
             <p style="color:var(--muted);font-size:13px;margin-bottom:8px;">Run this after the annual meeting to finalize Year ${activeYearNum} and start Year ${newYearNum}.</p>
             <div style="background:var(--panel-alt,#f8fafc);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;">
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Pool base (Year 1–${activeYearNum})</span><strong>${money(closedYearsBasePool())}</strong></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Pool Balance (live)</span><strong>${money(currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0) + expectedBankBalance())}</strong></div>
               <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Active loans to carry forward</span><strong>${activeLoans.length}</strong></div>
               <div style="display:flex;justify-content:space-between;"><span>Active members</span><strong>${activeMembers().length}</strong></div>
             </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Annual Meeting Expense</p>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="number" id="meeting-expense-input" placeholder="e.g. 20000" min="0"
+                value="${currentExpenditure > 0 ? currentExpenditure : ''}"
+                style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;" />
+              <button class="secondary" data-action="save-meeting-expense" type="button" style="white-space:nowrap;">Save</button>
+            </div>
+            ${currentExpenditure > 0 ? `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Saved: ${money(currentExpenditure)}</p>` : `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Add after the annual meeting is done.</p>`}
           </div>
           <button class="danger" data-action="close-current-year" type="button" style="width:100%;">
             Close Year ${activeYearNum} &amp; Finalize Records
@@ -2845,6 +2900,12 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
     if (action.dataset.action === "close-current-year") await closeCurrentYear();
+    if (action.dataset.action === "save-meeting-expense") {
+      const input = document.getElementById("meeting-expense-input");
+      const amount = Number(input?.value || 0);
+      if (amount <= 0) { showToast("Please enter a valid amount."); return; }
+      await saveMeetingExpense(amount);
+    }
     if (action.dataset.action === "toggle-emi") { event.preventDefault(); await toggleEmiEnabled(); }
 
     if (action.dataset.action === "save-rule") {
@@ -3394,6 +3455,10 @@ async function requestLoan(data) {
       tenure_months: tenureMonths,
     }));
     await addLiveAudit(`${user.name} requested loan ${money(data.amount)}${loanType === "emi" ? ` (EMI ${tenureMonths}mo)` : ""}.`, "loan_requested");
+    const admins = state.members.filter(m => m.role === "admin" && m.status === "active");
+    for (const admin of admins) {
+      await notifyMember(admin.id, "loan_requested", "New loan request", `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the admin panel.`);
+    }
     await loadLiveState();
     showToast("Loan request submitted.");
     render();
@@ -3520,6 +3585,7 @@ async function approveSignup(id) {
       approved_by: currentProfileId(),
     }).eq("id", id));
     await addLiveAudit(`Approved new member ${request.name}.`, "member_approved");
+    await notifyMember(id, "signup_approved", "Welcome to Banakar FinClub!", `Hi ${request.name}, your membership has been approved! You can now log in to the app.`);
     await loadLiveState();
     showToast("Member approved.");
     render();
@@ -3539,6 +3605,7 @@ async function rejectSignup(id) {
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("profiles").update({ status: "rejected" }).eq("id", id));
     await addLiveAudit(`Rejected signup ${request?.name || id}.`, "member_rejected");
+    await notifyMember(id, "signup_rejected", "Membership request not approved", `Hi ${request?.name || "there"}, your membership request could not be approved at this time. Please contact the admin for more details.`);
     await loadLiveState();
     render();
     return;
@@ -3671,6 +3738,7 @@ async function rejectLoan(id) {
       decided_by: currentProfileId(),
     }).eq("id", id));
     await addLiveAudit(`Rejected loan request for ${memberById(request.memberId)?.name}.`, "loan_rejected");
+    await notifyMember(request.memberId, "loan_rejected", "Loan request not approved", `Your ${request.loanType === "emi" ? "EMI loan" : "loan"} request of ${money(request.amount)} could not be approved at this time. Please contact the admin for more information.`);
     await loadLiveState();
     render();
     return;
@@ -3779,6 +3847,17 @@ async function rejectExtension(id, profileId) {
 
 // ── Year Close / New Year Start ───────────────────────────────────────────────
 
+async function saveMeetingExpense(amount) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const activeYearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+  await liveQuery(supabaseClient.from("deposit_summaries")
+    .update({ expenditure: Math.round(amount) })
+    .eq("year", activeYearDbYear));
+  await loadLiveState();
+  showToast(`Meeting expense of ${money(Math.round(amount))} saved.`);
+  render();
+}
+
 async function closeCurrentYear() {
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const activeYearNum = state.settings.activeYearNumber || 6;
@@ -3786,12 +3865,12 @@ async function closeCurrentYear() {
   const activeYearDbYear = 2020 + activeYearNum;
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
 
+  // histRow used only for mid-year admin entries (expenditure from meeting, exit_payouts display)
+  // Principal and interest are always calculated fresh from monthly_payments — no partial snapshots
   const histRow = state.deposits.find(d => d.year === activeYearDbYear);
-  const histPrincipal = Number(histRow?.principal || 0);
-  const histInterest = Number(histRow?.interest || 0);
   const histExpenditure = Number(histRow?.expenditure || 0);
 
-  let liveDeposits = 0, liveInterest = 0;
+  let allDeposits = 0, allInterest = 0;
   state.monthlyPayments
     .filter(p => p.status === "paid" && p.month >= activeYearStart)
     .forEach(p => {
@@ -3800,18 +3879,19 @@ async function closeCurrentYear() {
       const hasEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
       const paid = Number(p.paidAmount || p.amount || 0);
       const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
-      liveDeposits += dep;
-      liveInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+      allDeposits += dep;
+      allInterest += hasEmi ? 0 : Math.max(0, paid - dep);
     });
 
   const renewalFee = Number(state.settings.activeYearRenewalFee || 0);
   const activeYearExits = state.settings.activeYearExits || [];
   const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
 
-  const finalPrincipal = histPrincipal + renewalFee + liveDeposits;
-  const finalInterest = histInterest + liveInterest;
-  const finalExpenditure = histExpenditure + exitPayouts;
-  const finalBalance = finalPrincipal + finalInterest - finalExpenditure;
+  const finalPrincipal = renewalFee + allDeposits;
+  const finalInterest = allInterest;
+  const finalExpenditure = histExpenditure;
+  const finalExitPayouts = exitPayouts;
+  const finalBalance = finalPrincipal + finalInterest - finalExpenditure - finalExitPayouts;
 
   const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
   const emiLoans = currentLoans().filter(l => l.notes === "emi_entry");
@@ -3829,13 +3909,33 @@ async function closeCurrentYear() {
   if (!confirmed) return;
 
   const yearLabel = `${ORDINALS[activeYearNum - 1] || "Year " + activeYearNum} Year (${activeYearDbYear})`;
+
+  const breakdownItems = [];
+  if (renewalFee > 0) {
+    breakdownItems.push({ description: "Yearly Renewal Fee", details: "Collected at year start", amount: Math.round(renewalFee) });
+  }
+  const monthlyDepositsTotal = Math.round(finalPrincipal - renewalFee);
+  if (monthlyDepositsTotal > 0) {
+    breakdownItems.push({ description: "Total Monthly Deposits", details: "Member contributions for the year", amount: monthlyDepositsTotal });
+  }
+  breakdownItems.push({ description: "Total Interest Earned", details: "From outstanding loans", amount: Math.round(finalInterest) });
+  if (finalExpenditure > 0) {
+    breakdownItems.push({ description: "Meeting Expenses", details: "Annual meeting cost", amount: -Math.round(finalExpenditure) });
+  }
+  if (finalExitPayouts > 0) {
+    const exitNames = activeYearExits.map(e => e.name || "Member").join(", ");
+    breakdownItems.push({ description: "Member Exit", details: `${exitNames} – amount paid out`, amount: -Math.round(finalExitPayouts) });
+  }
+
   await liveQuery(supabaseClient.from("deposit_summaries").upsert({
     year: activeYearDbYear,
     label: yearLabel,
     principal: Math.round(finalPrincipal),
     interest: Math.round(finalInterest),
     expenditure: Math.round(finalExpenditure),
+    exit_payouts: Math.round(finalExitPayouts),
     balance: Math.round(finalBalance),
+    breakdown: breakdownItems,
   }, { onConflict: "year" }));
 
   const closingDate = today();
@@ -4060,6 +4160,7 @@ async function markPaymentPaid(memberId) {
     }
     if (emiLoans.length > 0) await loadLiveState();
     await insertStatement("credit", amount, `${member.name} credited`);
+    await notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`);
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
     if (existing) existing.status = "paid";
