@@ -2552,6 +2552,32 @@ function renderAdmin() {
         const activeYearDbYear = 2020 + activeYearNum;
         const currentExpenditure = Number(state.deposits.find(d => d.year === activeYearDbYear)?.expenditure || 0);
 
+        // --- Year close readiness checks ---
+        const activeYearStart = activeYearCutoffMonth();
+        const MNAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const latestPaidMonth = state.monthlyPayments
+          .filter(p => p.month >= activeYearStart && p.status === "paid")
+          .map(p => p.month).sort().pop();
+        const allMembersPaid = latestPaidMonth
+          ? activeMembers().every(m => state.monthlyPayments.some(p => p.memberId === m.id && p.month === latestPaidMonth && p.status === "paid"))
+          : false;
+        const latestMonthLabel = latestPaidMonth
+          ? `${MNAMES_SHORT[Number(latestPaidMonth.split("-")[1]) - 1]} ${latestPaidMonth.split("-")[0]}`
+          : "—";
+        const pendingLoans = state.loanRequests.filter(r => r.status === "pending").length;
+        const _now2 = new Date();
+        const _thisMonth = `${_now2.getFullYear()}-${String(_now2.getMonth() + 1).padStart(2, "0")}`;
+        const _lastMonth = (() => { const d = new Date(_now2.getFullYear(), _now2.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
+        const bankCurrent = state.statementRows.some(s => s.date && (s.date.startsWith(_thisMonth) || s.date.startsWith(_lastMonth)));
+
+        const readinessChecks = [
+          { ok: allMembersPaid,       label: allMembersPaid ? `All members paid for ${latestMonthLabel}` : `Not all members paid for ${latestMonthLabel}` },
+          { ok: currentExpenditure > 0, label: currentExpenditure > 0 ? `Meeting expense recorded (${money(currentExpenditure)})` : "Meeting expense not recorded yet" },
+          { ok: pendingLoans === 0,   label: pendingLoans === 0 ? "No pending loan requests" : `${pendingLoans} loan request${pendingLoans > 1 ? "s" : ""} pending approval` },
+          { ok: bankCurrent,          label: bankCurrent ? "Bank statement up to date" : "Bank statement not updated this month" },
+        ];
+        const allReady = readinessChecks.every(c => c.ok);
+
         const openBody = `
           <div style="margin-bottom:12px;">
             <p style="color:var(--muted);font-size:13px;margin-bottom:8px;">Run this after the annual meeting to finalize Year ${activeYearNum} and start Year ${newYearNum}.</p>
@@ -2560,6 +2586,17 @@ function renderAdmin() {
               <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Active loans to carry forward</span><strong>${activeLoans.length}</strong></div>
               <div style="display:flex;justify-content:space-between;"><span>Active members</span><strong>${activeMembers().length}</strong></div>
             </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Year Close Readiness</p>
+            <div style="background:var(--panel-alt,#f8fafc);border-radius:8px;padding:10px 12px;">
+              ${readinessChecks.map(c => `
+                <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px;font-size:13px;">
+                  <span>${c.ok ? "✅" : "❌"}</span>
+                  <span style="color:${c.ok ? "inherit" : "#dc2626"};">${c.label}</span>
+                </div>`).join("")}
+            </div>
+            ${!allReady ? `<p style="font-size:12px;color:#b45309;margin-top:6px;">⚠️ Resolve the above items before closing the year.</p>` : `<p style="font-size:12px;color:#16a34a;margin-top:6px;">✓ All checks passed — ready to close Year ${activeYearNum}.</p>`}
           </div>
           <div style="margin-bottom:12px;">
             <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Annual Meeting Expense</p>
