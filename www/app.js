@@ -1460,6 +1460,7 @@ function renderDashboard() {
               <div class="journey-content">
                 <strong>Year 5 · 2025 ✨</strong>
                 <p>Extended to 10 years. New member Appanna joined; Sarpa exited. Per member share ₹1,21,833.57. Annual meeting at Sandur Wonder Valley Resort.</p>
+                <button class="photos-btn" data-action="show-meeting-photos" data-year="5">📸 5 photos</button>
               </div>
             </div>
           </div>
@@ -1590,12 +1591,13 @@ function showMeetingPhotosModal(year) {
   const existing = document.getElementById("photos-modal");
   if (existing) existing.remove();
 
-  const photoCounts = { 1: 4, 2: 3, 3: 3, 4: 3 };
+  const photoCounts = { 1: 4, 2: 3, 3: 3, 4: 3, 5: 5 };
   const labels = {
     1: "Year 1 · 2021 · M Thumbaraguddi",
     2: "Year 2 · 2022 · Sampige Heritage Resort, Koppal",
     3: "Year 3 · 2023 · Cotton County Club, Hubballi",
     4: "Year 4 · 2024 · Jungle Vibes Resort, Dandeli",
+    5: "Year 5 · 2025 · Sandur Wonder Valley Resort",
   };
   const count = photoCounts[year] || 0;
   const label = labels[year] || `Year ${year}`;
