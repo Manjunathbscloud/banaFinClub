@@ -1602,9 +1602,11 @@ function showMeetingPhotosModal(year) {
   const count = photoCounts[year] || 0;
   const label = labels[year] || `Year ${year}`;
 
-  const photosHtml = Array.from({ length: count }, (_, i) => `
-    <div class="photo-thumb-wrap" data-action="open-photo" data-src="./images/meetings/yr${year}/meeting${i + 1}.jpg">
-      <img src="./images/meetings/yr${year}/meeting${i + 1}.jpg" class="photo-thumb" loading="lazy" alt="Meeting photo ${i + 1}" />
+  const gallery = Array.from({ length: count }, (_, i) => `./images/meetings/yr${year}/meeting${i + 1}.jpg`);
+  const galleryJson = escapeHtml(JSON.stringify(gallery));
+  const photosHtml = gallery.map((src, i) => `
+    <div class="photo-thumb-wrap" data-action="open-photo" data-gallery="${galleryJson}" data-index="${i}">
+      <img src="${src}" class="photo-thumb" loading="lazy" alt="Meeting photo ${i + 1}" />
     </div>
   `).join("");
 
@@ -1632,17 +1634,54 @@ function showMeetingPhotosModal(year) {
   });
 }
 
-function openPhotoLightbox(src) {
+let lightboxSources = [];
+let lightboxIndex = 0;
+let lightboxTouchStartX = null;
+
+function openPhotoLightbox(sources, startIndex = 0) {
+  lightboxSources = Array.isArray(sources) ? sources : [sources];
+  lightboxIndex = Math.min(Math.max(startIndex, 0), lightboxSources.length - 1);
+  renderPhotoLightbox();
+}
+
+function renderPhotoLightbox() {
   const existing = document.getElementById("photo-lightbox");
   if (existing) existing.remove();
 
+  const multi = lightboxSources.length > 1;
   const html = `
     <div id="photo-lightbox" class="photo-lightbox" data-action="close-lightbox">
       <button class="photo-lightbox-close" data-action="close-lightbox">✕</button>
-      <img src="${escapeHtml(src)}" class="photo-lightbox-img" alt="Meeting photo" />
+      ${multi ? `<button class="photo-lightbox-nav photo-lightbox-prev" data-action="lightbox-prev">‹</button>` : ""}
+      <img src="${escapeHtml(lightboxSources[lightboxIndex])}" class="photo-lightbox-img" alt="Meeting photo" />
+      ${multi ? `<button class="photo-lightbox-nav photo-lightbox-next" data-action="lightbox-next">›</button>` : ""}
+      ${multi ? `<div class="photo-lightbox-counter">${lightboxIndex + 1} / ${lightboxSources.length}</div>` : ""}
     </div>`;
   document.body.insertAdjacentHTML("beforeend", html);
+
+  const lb = document.getElementById("photo-lightbox");
+  lb.addEventListener("touchstart", (e) => { lightboxTouchStartX = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener("touchend", (e) => {
+    if (lightboxTouchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - lightboxTouchStartX;
+    lightboxTouchStartX = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) lightboxShow(lightboxIndex + 1); else lightboxShow(lightboxIndex - 1);
+  }, { passive: true });
 }
+
+function lightboxShow(index) {
+  if (!lightboxSources.length) return;
+  lightboxIndex = (index + lightboxSources.length) % lightboxSources.length;
+  renderPhotoLightbox();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!document.getElementById("photo-lightbox")) return;
+  if (e.key === "ArrowRight") lightboxShow(lightboxIndex + 1);
+  else if (e.key === "ArrowLeft") lightboxShow(lightboxIndex - 1);
+  else if (e.key === "Escape") document.getElementById("photo-lightbox")?.remove();
+});
 
 function appannaEmiProgress() {
   const startYear = 2026, startMon = 1;
@@ -2842,13 +2881,27 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "open-photo") {
-    openPhotoLightbox(action.dataset.src);
+    if (action.dataset.gallery) {
+      openPhotoLightbox(JSON.parse(action.dataset.gallery), Number(action.dataset.index || 0));
+    } else {
+      openPhotoLightbox(action.dataset.src);
+    }
     return;
   }
 
   if (action.dataset.action === "close-lightbox") {
     const lb = document.getElementById("photo-lightbox");
     if (lb) lb.remove();
+    return;
+  }
+
+  if (action.dataset.action === "lightbox-prev") {
+    lightboxShow(lightboxIndex - 1);
+    return;
+  }
+
+  if (action.dataset.action === "lightbox-next") {
+    lightboxShow(lightboxIndex + 1);
     return;
   }
 

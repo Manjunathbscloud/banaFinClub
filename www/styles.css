@@ -1872,7 +1872,7 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .photo-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  z-index: 1200;
   background: rgba(0,0,0,0.94);
   display: flex;
   align-items: center;
@@ -1900,6 +1900,40 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 }
 
 .photo-lightbox-close:hover { background: rgba(255,255,255,0.25); }
+
+.photo-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.photo-lightbox-nav:hover { background: rgba(255,255,255,0.25); }
+.photo-lightbox-prev { left: 10px; }
+.photo-lightbox-next { right: 10px; }
+
+.photo-lightbox-counter {
+  position: absolute;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
 
 /* ── Avatar picker ──────────────────────────── */
 .avatar-picker-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
