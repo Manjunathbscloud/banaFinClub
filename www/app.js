@@ -1346,6 +1346,11 @@ function renderDashboard() {
     (() => {
       const myEmiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, user) && l.loanType === "emi" && l.status === "active");
       if (myEmiLoan) return { icon: "💳", title: "LOANS", sub: `EMI Loan · ${myEmiLoan.emisPaid}/${myEmiLoan.tenureMonths} paid · ${money(myEmiLoan.emiAmount)}/mo`, action: "show-loans" };
+      const myLegacyEmi = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, user) && l.status === "active");
+      if (myLegacyEmi) {
+        const prog = appannaEmiProgress();
+        return { icon: "💳", title: "LOANS", sub: `EMI · ${prog.paid}/${prog.totalMonths} paid · ${money(prog.monthlyEmi)}/mo`, action: "show-loans" };
+      }
       return { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" };
     })(),
     { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
@@ -1560,7 +1565,42 @@ function showLoansModal() {
     const isActive = loan.status === "active";
     const outstanding = loanOutstanding(loan);
     const statusColor = isActive ? "#16a34a" : "#6b7280";
+    const isLegacyEmi = loan.notes === "emi_entry";
     const isEmi = loan.loanType === "emi";
+
+    if (isLegacyEmi) {
+      const prog = appannaEmiProgress();
+      const paid = prog.paid;
+      const total = prog.totalMonths;
+      const remaining = prog.remaining;
+      const pct = Math.round(paid / total * 100);
+      return `
+        <div class="rules-section-block" style="border-left:3px solid #16a34a;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+            <h4 style="margin:0;">💳 EMI Commitment</h4>
+            <span class="badge info">EMI ${paid}/${total}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:13px;margin-bottom:14px;">
+            <div><span style="color:var(--muted);">Total Amount</span><br/><strong>${money(prog.totalAmount)}</strong></div>
+            <div><span style="color:var(--muted);">Monthly</span><br/><strong>${money(prog.monthlyEmi)}</strong></div>
+            <div><span style="color:var(--muted);">Months Paid</span><br/><strong>${paid} of ${total}</strong></div>
+            <div><span style="color:var(--muted);">Remaining</span><br/><strong>${remaining} months</strong></div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;">
+              <span>Progress</span><span>${pct}%</span>
+            </div>
+            <div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+              <div style="height:100%;background:var(--saffron);border-radius:4px;width:${pct}%;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">
+              <span>${paid} paid</span><span>${remaining} remaining</span>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">No interest · Membership balance contribution</p>
+          <span class="badge good">Active</span>
+        </div>`;
+    }
 
     if (isEmi) {
       const paid = loan.emisPaid || 0;
@@ -2327,8 +2367,7 @@ function renderMeetings() {
     const yr6HistDeposits = 74533;
     const yr6HistInterest = 87967;
     // Live loop: only add August 2026 onwards (Jul and earlier are in the hist base).
-    // For legacy-EMI members (Appanna): count only base deposit and compute interest
-    // from his loan directly — his full paidAmount must NOT be treated as deposit.
+    // paymentSplit handles legacy-EMI (Appanna) correctly: full payment → deposit, 0 interest.
     let yr6LiveDeposits = 0, yr6LiveInterest = 0;
     state.monthlyPayments
       .filter((p) => p.status === "paid" && p.month >= "2026-08")
@@ -2336,17 +2375,9 @@ function renderMeetings() {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const hasLegacyEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
-        if (hasLegacyEmi) {
-          yr6LiveDeposits += expectedMonthlyDeposit(mem, p.month);
-          yr6LiveInterest += memberLoans(mem.id)
-            .filter(l => l.notes === "emi_entry")
-            .reduce((s, l) => s + loanMonthlyInterest(l), 0);
-        } else {
-          const { dep, interest } = paymentSplit(mem, p.month, paid);
-          yr6LiveDeposits += dep;
-          yr6LiveInterest += interest;
-        }
+        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        yr6LiveDeposits += dep;
+        yr6LiveInterest += interest;
       });
     activeChartDeposits = Math.max(0, yr6HistDeposits + yr6LiveDeposits - currentExpenditure);
     activeChartInterest = yr6HistInterest + yr6LiveInterest;
