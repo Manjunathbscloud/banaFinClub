@@ -2308,20 +2308,17 @@ function renderMeetings() {
   const activeYearDbYear = 2020 + activeYearNum;
   const activeYearStart = activeYearCutoffMonth();
 
-  // Closed years: read principal/interest from DB (finalized at year close)
-  // Year 6 special: DB was cleared — use hardcoded hist totals for Nov-Jun, add live July+ from payments
+  // Closed years: net deposits = principal - exit_payouts - expenditure; interest unchanged
   const closedYearsForChart = (state.deposits.length ? state.deposits : initialState.deposits)
     .filter(d => d.year < activeYearDbYear)
     .sort((a, b) => a.year - b.year)
-    .map((d, i) => {
-      if (d.year === 2026) {
-        // Year 6 DB was cleared; restore correct totals from hardcoded hist values
-        return { label: `Yr${i + 1}`, deposits: 174922, interest: 76717 };
-      }
-      return { label: `Yr${i + 1}`, deposits: d.principal, interest: d.interest };
-    });
+    .map((d, i) => ({
+      label: `Yr${i + 1}`,
+      deposits: Math.max(0, (d.principal || 0) - (d.exit_payouts || 0) - (d.expenditure || 0)),
+      interest: d.interest || 0,
+    }));
 
-  // Active year: calculate deposits and interest from monthly_payments since year start
+  // Active year: live deposits/interest from monthly_payments since year start
   let activeLiveDeposits = 0, activeLiveInterest = 0;
   state.monthlyPayments
     .filter((p) => p.status === "paid" && p.month >= activeYearStart)
@@ -2333,9 +2330,22 @@ function renderMeetings() {
       activeLiveDeposits += dep;
       activeLiveInterest += interest;
     });
-  const activeRenewalFee = activeYearNum === 6 ? 21000 : Number(state.settings.activeYearRenewalFee || 0);
-  const activeChartDeposits = activeRenewalFee + activeLiveDeposits;
-  const activeChartInterest = activeLiveInterest;
+
+  const currentExpenditure = Number(state.deposits.find(d => d.year === activeYearDbYear)?.expenditure || 0);
+
+  let activeChartDeposits, activeChartInterest;
+  if (activeYearNum === 6) {
+    // Year 6: app started May 2026; pre-app base covers Nov 2025 – Apr 2026
+    // Base is net of member exit (₹1,21,834 already deducted) and includes renewal fee
+    const yr6HistDeposits = 32533; // gross pre-app deposits 133367 − exit 121834 = 32533 (renewal fee included)
+    const yr6HistInterest = 51827; // pre-app interest Nov 2025 – Apr 2026
+    activeChartDeposits = Math.max(0, yr6HistDeposits + activeLiveDeposits - currentExpenditure);
+    activeChartInterest = yr6HistInterest + activeLiveInterest;
+  } else {
+    const activeRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
+    activeChartDeposits = Math.max(0, activeRenewalFee + activeLiveDeposits - currentExpenditure);
+    activeChartInterest = activeLiveInterest;
+  }
 
   const chartData = [
     ...closedYearsForChart,
