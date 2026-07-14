@@ -1322,7 +1322,11 @@ function renderDashboard() {
 
   const tiles = [
     { icon: "🐷", title: "DEPOSITS", sub: "Monthly savings & year records", tab: "deposits" },
-    { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" },
+    (() => {
+      const myEmiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, user) && l.loanType === "emi" && l.status === "active");
+      if (myEmiLoan) return { icon: "💳", title: "LOANS", sub: `EMI Loan · ${myEmiLoan.emisPaid}/${myEmiLoan.tenureMonths} paid · ${money(myEmiLoan.emiAmount)}/mo`, action: "show-loans" };
+      return { icon: "💳", title: "LOANS", sub: "View your loan details", action: "show-loans" };
+    })(),
     { icon: "👥", title: "MEMBERS", sub: "Association members", tab: "members" },
     { icon: "📊", title: "DASHBOARD", sub: "Association analytics", tab: "meetings" },
     { icon: "📒", title: "STATEMENT", sub: "Transaction history & balances", tab: "statement" },
@@ -1534,8 +1538,42 @@ function showLoansModal() {
   const loansHtml = myLoans.length === 0 ? noLoans : myLoans.map((loan) => {
     const isActive = loan.status === "active";
     const outstanding = loanOutstanding(loan);
-    const monthlyInt = loanBaseMonthlyInterest(loan);
     const statusColor = isActive ? "#16a34a" : "#6b7280";
+    const isEmi = loan.loanType === "emi";
+
+    if (isEmi) {
+      const paid = loan.emisPaid || 0;
+      const total = loan.tenureMonths || 1;
+      const pct = Math.round(paid / total * 100);
+      const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
+      return `
+        <div class="rules-section-block" style="border-left:3px solid ${statusColor};">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+            <h4 style="margin:0;">💳 EMI Loan</h4>
+            <span class="badge info">EMI ${paid}/${total}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:13px;margin-bottom:14px;">
+            <div><span style="color:var(--muted);">Loan Amount</span><br/><strong>${money(loan.amount)}</strong></div>
+            <div><span style="color:var(--muted);">Monthly EMI</span><br/><strong>${money(loan.emiAmount)}</strong></div>
+            <div><span style="color:var(--muted);">EMIs Paid</span><br/><strong>${paid} of ${total}</strong></div>
+            <div><span style="color:var(--muted);">Amount Left</span><br/><strong>${money(outstanding)}</strong></div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;">
+              <span>Repayment progress</span><span>${pct}%</span>
+            </div>
+            <div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+              <div style="height:100%;background:var(--saffron);border-radius:4px;width:${pct}%;"></div>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">
+            ${nextEmi ? `Next EMI: <strong>${money(nextEmi.amount)}</strong> due ${nextEmi.dueMonth}` : `<span style="color:#16a34a;font-weight:600;">✓ All EMIs paid</span>`}
+          </p>
+          <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
+        </div>`;
+    }
+
+    const monthlyInt = loanBaseMonthlyInterest(loan);
     const dueThisMonth = isActive && isLoanDueThisMonth(loan);
     const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
     let extHtml = "";
@@ -2706,20 +2744,26 @@ function renderAdmin() {
                   const memberName = loanMemberName(loan);
                   const paid = loan.emisPaid;
                   const total = loan.tenureMonths;
+                  const pct = total > 0 ? Math.round(paid / total * 100) : 0;
                   const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
                   return `
-                    <div class="row-item" style="flex-direction:column;align-items:flex-start;gap:6px;">
-                      <div style="display:flex;justify-content:space-between;width:100%;">
+                    <div class="row-item" style="flex-direction:column;align-items:flex-start;gap:8px;">
+                      <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;">
                         <div>
-                          <strong>${escapeHtml(memberName)}</strong> · ${money(loan.amount)}
-                          <span class="badge info" style="font-size:10px;margin-left:4px;">EMI ${paid}/${total}</span>
+                          <strong>${escapeHtml(memberName)}</strong>
+                          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${money(loan.amount)} · ${money(loan.emiAmount)}/mo</div>
                         </div>
-                        <span style="font-size:12px;color:var(--muted);">₹${loan.emiAmount}/mo</span>
+                        <span class="badge info" style="font-size:10px;flex-shrink:0;">EMI ${paid}/${total}</span>
                       </div>
-                      <div style="width:100%;height:4px;background:var(--border);border-radius:2px;">
-                        <div style="height:4px;background:var(--primary);border-radius:2px;width:${Math.round(paid/total*100)}%;"></div>
+                      <div style="width:100%;">
+                        <div style="width:100%;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                          <div style="height:100%;background:var(--saffron);border-radius:3px;width:${pct}%;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:11px;color:var(--muted);">
+                          <span>${paid} paid</span><span>${total - paid} remaining</span>
+                        </div>
                       </div>
-                      ${nextEmi ? `<p style="font-size:12px;color:var(--muted);margin:0;">Next: ${money(nextEmi.amount)} due ${nextEmi.dueMonth} — paid with monthly collection</p>` : `<p style="font-size:12px;color:#16a34a;margin:0;">All EMIs paid — loan closing.</p>`}
+                      ${nextEmi ? `<p style="font-size:12px;color:var(--muted);margin:0;">Next: <strong>${money(nextEmi.amount)}</strong> due ${nextEmi.dueMonth}</p>` : `<p style="font-size:12px;color:#16a34a;margin:0;font-weight:600;">✓ All EMIs paid</p>`}
                     </div>`;
                 }).join("");
               })()}
