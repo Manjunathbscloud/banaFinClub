@@ -865,6 +865,27 @@ function memberMonthlyDue(member) {
   return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id) + memberEmiMonthly(member);
 }
 
+// Splits a member's paid amount into deposit (principal) and interest correctly.
+// Regular deposit + EMI principal → deposit; regular loan interest + EMI interest → interest.
+function paymentSplit(mem, month, paidAmount) {
+  // Legacy Appanna EMI — entire payment is deposit, no interest extracted
+  const hasLegacyEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+  if (hasLegacyEmi) return { dep: paidAmount, interest: 0 };
+
+  const baseDep = expectedMonthlyDeposit(mem, month);
+
+  // New EMI loans — pull principal part from loan_emis for this month
+  const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem));
+  let emiPrincipal = 0;
+  for (const loan of emiLoans) {
+    const emiRow = state.loanEmis.find(e => e.loanId === loan.id && e.dueMonth === month);
+    if (emiRow) emiPrincipal += Number(emiRow.principalPart || 0);
+  }
+
+  const dep = baseDep + emiPrincipal;
+  return { dep, interest: Math.max(0, paidAmount - dep) };
+}
+
 function groupMonthlyDepositDue() {
   return depositMembers().reduce((sum, member) => sum + expectedMonthlyDeposit(member), 0);
 }
@@ -1902,10 +1923,8 @@ function showDepositYearModal(yearKey) {
       livePayments.forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
-        const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
         const paid = Number(p.paidAmount || p.amount || 0);
-        const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
-        const interest = hasEmi ? 0 : Math.max(0, paid - dep);
+        const { dep, interest } = paymentSplit(mem, p.month, paid);
         if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
         liveByMonth[p.month].deposit += dep;
         liveByMonth[p.month].interest += interest;
@@ -1956,10 +1975,8 @@ function showDepositYearModal(yearKey) {
       livePayments.forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
-        const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
         const paid = Number(p.paidAmount || p.amount || 0);
-        const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
-        const interest = hasEmi ? 0 : Math.max(0, paid - dep);
+        const { dep, interest } = paymentSplit(mem, p.month, paid);
         if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
         liveByMonth[p.month].deposit += dep;
         liveByMonth[p.month].interest += interest;
@@ -2311,11 +2328,10 @@ function renderMeetings() {
     .forEach((p) => {
       const mem = memberById(p.memberId);
       if (!mem) return;
-      const hasEmi = state.loans.some((l) => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
       const paid = Number(p.paidAmount || p.amount || 0);
-      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+      const { dep, interest } = paymentSplit(mem, p.month, paid);
       activeLiveDeposits += dep;
-      activeLiveInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+      activeLiveInterest += interest;
     });
   const activeRenewalFee = activeYearNum === 6 ? 21000 : Number(state.settings.activeYearRenewalFee || 0);
   const activeChartDeposits = activeRenewalFee + activeLiveDeposits;
@@ -4012,11 +4028,10 @@ async function closeCurrentYear() {
     .forEach(p => {
       const mem = memberById(p.memberId);
       if (!mem) return;
-      const hasEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
       const paid = Number(p.paidAmount || p.amount || 0);
-      const dep = hasEmi ? paid : expectedMonthlyDeposit(mem, p.month);
+      const { dep, interest } = paymentSplit(mem, p.month, paid);
       allDeposits += dep;
-      allInterest += hasEmi ? 0 : Math.max(0, paid - dep);
+      allInterest += interest;
     });
 
   const renewalFee = Number(state.settings.activeYearRenewalFee || 0);
