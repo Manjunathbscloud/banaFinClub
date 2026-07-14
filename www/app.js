@@ -2322,20 +2322,31 @@ function renderMeetings() {
 
   let activeChartDeposits, activeChartInterest;
   if (activeYearNum === 6) {
-    // Year 6: app started May 2026. Always count live data from 2026-05 (not activeYearStart
-    // which may be unset). Pre-app base (Nov 2025 – Apr 2026) is hardcoded net of exit payout.
-    const yr6HistDeposits = 32533; // gross 133367 − exit 121834, includes renewal fee
-    const yr6HistInterest = 51827;
+    // Year 6 totals through July 2026 are user-verified from manual records.
+    // These are net of member exit (196367 − 121834) and cover Nov 2025 – Jul 2026.
+    const yr6HistDeposits = 74533;
+    const yr6HistInterest = 87967;
+    // Live loop: only add August 2026 onwards (Jul and earlier are in the hist base).
+    // For legacy-EMI members (Appanna): count only base deposit and compute interest
+    // from his loan directly — his full paidAmount must NOT be treated as deposit.
     let yr6LiveDeposits = 0, yr6LiveInterest = 0;
     state.monthlyPayments
-      .filter((p) => p.status === "paid" && p.month >= "2026-05")
+      .filter((p) => p.status === "paid" && p.month >= "2026-08")
       .forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const { dep, interest } = paymentSplit(mem, p.month, paid);
-        yr6LiveDeposits += dep;
-        yr6LiveInterest += interest;
+        const hasLegacyEmi = state.loans.some(l => l.notes === "emi_entry" && loanBelongsToMember(l, mem));
+        if (hasLegacyEmi) {
+          yr6LiveDeposits += expectedMonthlyDeposit(mem, p.month);
+          yr6LiveInterest += memberLoans(mem.id)
+            .filter(l => l.notes === "emi_entry")
+            .reduce((s, l) => s + loanMonthlyInterest(l), 0);
+        } else {
+          const { dep, interest } = paymentSplit(mem, p.month, paid);
+          yr6LiveDeposits += dep;
+          yr6LiveInterest += interest;
+        }
       });
     activeChartDeposits = Math.max(0, yr6HistDeposits + yr6LiveDeposits - currentExpenditure);
     activeChartInterest = yr6HistInterest + yr6LiveInterest;
