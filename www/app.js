@@ -797,7 +797,7 @@ function memberOutstanding(memberId) {
 
 function memberMonthlyInterest(memberId) {
   return memberLoans(memberId)
-    .filter((l) => l.notes !== "emi_entry")
+    .filter((l) => l.notes !== "emi_entry" && l.loanType !== "emi")
     .reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
 }
 
