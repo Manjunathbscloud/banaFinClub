@@ -2318,30 +2318,39 @@ function renderMeetings() {
       interest: d.interest || 0,
     }));
 
-  // Active year: live deposits/interest from monthly_payments since year start
-  let activeLiveDeposits = 0, activeLiveInterest = 0;
-  state.monthlyPayments
-    .filter((p) => p.status === "paid" && p.month >= activeYearStart)
-    .forEach((p) => {
-      const mem = memberById(p.memberId);
-      if (!mem) return;
-      const paid = Number(p.paidAmount || p.amount || 0);
-      const { dep, interest } = paymentSplit(mem, p.month, paid);
-      activeLiveDeposits += dep;
-      activeLiveInterest += interest;
-    });
-
   const currentExpenditure = Number(state.deposits.find(d => d.year === activeYearDbYear)?.expenditure || 0);
 
   let activeChartDeposits, activeChartInterest;
   if (activeYearNum === 6) {
-    // Year 6: app started May 2026; pre-app base covers Nov 2025 – Apr 2026
-    // Base is net of member exit (₹1,21,834 already deducted) and includes renewal fee
-    const yr6HistDeposits = 32533; // gross pre-app deposits 133367 − exit 121834 = 32533 (renewal fee included)
-    const yr6HistInterest = 51827; // pre-app interest Nov 2025 – Apr 2026
-    activeChartDeposits = Math.max(0, yr6HistDeposits + activeLiveDeposits - currentExpenditure);
-    activeChartInterest = yr6HistInterest + activeLiveInterest;
+    // Year 6: app started May 2026. Always count live data from 2026-05 (not activeYearStart
+    // which may be unset). Pre-app base (Nov 2025 – Apr 2026) is hardcoded net of exit payout.
+    const yr6HistDeposits = 32533; // gross 133367 − exit 121834, includes renewal fee
+    const yr6HistInterest = 51827;
+    let yr6LiveDeposits = 0, yr6LiveInterest = 0;
+    state.monthlyPayments
+      .filter((p) => p.status === "paid" && p.month >= "2026-05")
+      .forEach((p) => {
+        const mem = memberById(p.memberId);
+        if (!mem) return;
+        const paid = Number(p.paidAmount || p.amount || 0);
+        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        yr6LiveDeposits += dep;
+        yr6LiveInterest += interest;
+      });
+    activeChartDeposits = Math.max(0, yr6HistDeposits + yr6LiveDeposits - currentExpenditure);
+    activeChartInterest = yr6HistInterest + yr6LiveInterest;
   } else {
+    let activeLiveDeposits = 0, activeLiveInterest = 0;
+    state.monthlyPayments
+      .filter((p) => p.status === "paid" && p.month >= activeYearStart)
+      .forEach((p) => {
+        const mem = memberById(p.memberId);
+        if (!mem) return;
+        const paid = Number(p.paidAmount || p.amount || 0);
+        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        activeLiveDeposits += dep;
+        activeLiveInterest += interest;
+      });
     const activeRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
     activeChartDeposits = Math.max(0, activeRenewalFee + activeLiveDeposits - currentExpenditure);
     activeChartInterest = activeLiveInterest;
