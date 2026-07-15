@@ -4096,6 +4096,13 @@ async function closeCurrentYear() {
       allInterest += interest;
     });
 
+  // Year 6 started Nov 2025, but monthly_payments only has clean data from Jul 2026.
+  // Add the verified pre-Jul hist totals so closeCurrentYear() produces correct final figures.
+  if (activeYearNum === 6) {
+    allDeposits += 153922; // Nov 2025–Jun 2026: monthly deposits (₹1,13,250) + Appanna EMI (₹44,672) — user-verified
+    allInterest += 76717;  // Nov 2025–Jun 2026: loan interest — user-verified (₹87,967 total − ₹11,250 Jul)
+  }
+
   const renewalFee = Number(state.settings.activeYearRenewalFee || 0);
   const activeYearExits = state.settings.activeYearExits || [];
   const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
