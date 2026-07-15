@@ -1962,32 +1962,28 @@ function showDepositYearModal(yearKey) {
     if (activeYearNum === 6) {
       // Year 6 with existing historical base — show the rich Year 6 hardcoded breakdown + live rows
       const livePayments = state.monthlyPayments
-        .filter((p) => p.status === "paid" && p.month >= activeYearStart)
+        .filter((p) => p.status === "paid" && p.month >= "2026-07")
         .sort((a, b) => a.month.localeCompare(b.month));
-      const liveByMonth = {};
+      let liveTotalDeposit = 0, liveTotalInterest = 0;
       livePayments.forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
         const { dep, interest } = paymentSplit(mem, p.month, paid);
-        if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
-        liveByMonth[p.month].deposit += dep;
-        liveByMonth[p.month].interest += interest;
+        liveTotalDeposit += dep;
+        liveTotalInterest += interest;
       });
-      const liveRows = Object.entries(liveByMonth).flatMap(([month, data]) => {
-        const [yr, mo] = month.split("-");
-        const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
-        return [
-          { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
-          ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
-        ];
-      });
+      const latestMonth = livePayments.map(p => p.month).sort().pop();
+      const latestLbl = latestMonth ? (() => { const [yr, mo] = latestMonth.split("-"); return `${MNAMES[Number(mo)-1]} ${yr}`; })() : "Jul 2026";
+      const liveRows = [
+        ...(liveTotalDeposit > 0 ? [{ label: "Monthly Deposits",   detail: `Jul 2026 – ${latestLbl} · collected`, amount: liveTotalDeposit }] : []),
+        ...(liveTotalInterest > 0 ? [{ label: "Interest Collected", detail: `Jul 2026 – ${latestLbl} · loan interest`, amount: liveTotalInterest }] : []),
+      ];
       const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
       // Sum from hardcoded pre-Jul rows: renewal + Nov + Dec + Jan-Jun + EMI + interest + addl interest - member exit
       const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834; // 129805
       const yr6RunningTotal = yr6HistFixed + liveTotal;
-      const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
-      const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : new Date(2026, 5, 30);
+      const endDate = latestMonth ? new Date(latestMonth + "-01") : new Date(2026, 5, 30);
       const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
       title = `Sixth Year (Nov 2025 – ${endLabel})`;
       const points = [
