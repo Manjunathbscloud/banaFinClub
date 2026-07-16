@@ -2519,3 +2519,153 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .stmt-amount { font-size:14px; font-weight:700; }
 .stmt-amount.credit { color:#16a34a; }
 .stmt-amount.debit  { color:#dc2626; }
+
+/* ── Meeting Notes & Photos (in closed-year deposit modal) ──── */
+.meeting-notes-section,
+.meeting-photos-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.meeting-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.meeting-notes-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meeting-link-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--saffron-dark);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.meeting-notes-empty {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  font-style: italic;
+}
+
+.meeting-note-row {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  margin-bottom: 5px;
+  align-items: flex-start;
+}
+
+.meeting-note-row span:first-child { flex-shrink: 0; }
+
+.meeting-note-text {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.55;
+  margin: 6px 0 4px;
+}
+
+.meeting-decisions {
+  margin-top: 8px;
+}
+
+.meeting-decisions > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.meeting-decisions ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.meeting-decisions li {
+  font-size: 13px;
+  color: var(--ink);
+  margin-bottom: 3px;
+  line-height: 1.45;
+}
+
+/* Meeting notes editor form */
+.meeting-notes-editor { margin-top: 10px; }
+
+.meeting-editor-row { margin-bottom: 10px; }
+
+.meeting-editor-row label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.meeting-editor-row input[type="text"],
+.meeting-editor-row input[type="date"],
+.meeting-editor-row textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+}
+
+.meeting-editor-row input:focus,
+.meeting-editor-row textarea:focus {
+  border-color: var(--saffron);
+  box-shadow: 0 0 0 2px var(--saffron-soft);
+}
+
+.meeting-editor-row textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+/* Delete button on photo thumbs */
+.photo-delete-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 3;
+  line-height: 1;
+}
+
+.photo-delete-btn:hover { background: rgba(220,38,38,0.85); }
+
