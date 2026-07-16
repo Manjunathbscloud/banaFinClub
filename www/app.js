@@ -1,4 +1,5 @@
 const STORAGE_KEY = "banakar-finclub-state-v1";
+const VAPID_PUBLIC_KEY = "BNqp-GTE0Toi-cN27YJ49RIiGHISNkh9HFAUZ8GMDFmp3-DaV6Q91NE8yF9gNQsq3asqxFPsWiWzFdVrTz-bQsY";
 const PRESIDENT_PHONE = "9591382942";
 const ASSOCIATION_UPI_ID = "mukkaneshwara@ybl";
 const ASSOCIATION_UPI_NAME = "Sri Mukkaneshwara Associates";
@@ -524,6 +525,37 @@ async function insertStatement(type, amount, description, relatedId = null) {
   state.statementRows.unshift(liveStatementToLocal({ ...row, id: "pending", created_at: new Date().toISOString(), related_id: relatedId }));
 }
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function subscribeToPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (!liveBackendReady || !currentProfileId()) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const sub = subscription.toJSON();
+    await supabaseClient.from("push_subscriptions").upsert(
+      { profile_id: currentProfileId(), endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      { onConflict: "profile_id,endpoint" }
+    );
+  } catch (_) {}
+}
+
 async function loadLiveState() {
   if (!liveBackendReady) return;
   const prefs = loadPrefs();
@@ -625,6 +657,7 @@ async function loadLiveState() {
 
   // Start realtime chat subscription once logged in
   initRealtimeChat();
+  subscribeToPush();
 
   // Persist available loan amount so SQL cron notifications can read it
   const available = Math.max(0, expectedBankBalance() - Number(state.settings.minimumReserve || 5000));
@@ -4276,6 +4309,7 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
 async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
   await liveQuery(supabaseClient.from("notifications").insert({ profile_id: profileId, type, title, body, related_id: relatedId }));
+  supabaseClient.functions.invoke("send-push", { body: { profile_id: profileId, title, body } }).catch(() => {});
 }
 
 async function requestExtension(loanId) {
