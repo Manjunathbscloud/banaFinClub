@@ -4008,6 +4008,10 @@ async function requestLoan(data) {
     for (const admin of admins) {
       await notifyMember(admin.id, "loan_requested", "New loan request", `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the admin panel.`);
     }
+    const allMemberBody = loanType === "emi"
+      ? `${user.name} has applied for an EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months. Pending admin approval.`
+      : `${user.name} has applied for a loan of ${money(Number(data.amount))} (full repayment). Pending admin approval.`;
+    await notifyAllActiveMembers("loan_requested", "New Loan Application", allMemberBody);
     await loadLiveState();
     showToast("Loan request submitted.");
     render();
