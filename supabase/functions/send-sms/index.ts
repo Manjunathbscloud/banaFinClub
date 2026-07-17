@@ -6,6 +6,8 @@ const TEXTBEE_DEVICE_ID = Deno.env.get("TEXTBEE_DEVICE_ID")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+const APP_URL = "https://manjunathbscloud.github.io/banaFinClub/";
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -14,6 +16,10 @@ const CORS = {
 function toE164(phone: string): string {
   const digits = phone.replace(/\D/g, "").slice(-10);
   return `+91${digits}`;
+}
+
+function buildSms(message: string): string {
+  return `🏦 BanakarFinClub | Sri Mukkaneshwara\n${message}\napp: ${APP_URL}`;
 }
 
 serve(async (req) => {
@@ -34,6 +40,7 @@ serve(async (req) => {
     if (!profile?.phone) return new Response("no phone for recipient", { status: 200, headers: CORS });
 
     const phone = toE164(profile.phone);
+    const sms = buildSms(message);
 
     const response = await fetch(
       `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`,
@@ -45,7 +52,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           recipients: [phone],
-          message: message,
+          message: sms,
         }),
       }
     );

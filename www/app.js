@@ -4304,10 +4304,9 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   const active = state.members.filter((m) => m.status === "active");
   const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
   await liveQuery(supabaseClient.from("notifications").insert(rows));
-  const smsMessage = `Banakar FinClub: ${title}. ${body}`;
   for (const m of active) {
     supabaseClient.functions.invoke("send-push", { body: { profile_id: m.id, title, body } }).catch(() => {});
-    supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: smsMessage } }).catch(() => {});
+    supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: body } }).catch(() => {});
   }
 }
 
@@ -4315,7 +4314,7 @@ async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
   await liveQuery(supabaseClient.from("notifications").insert({ profile_id: profileId, type, title, body, related_id: relatedId }));
   supabaseClient.functions.invoke("send-push", { body: { profile_id: profileId, title, body } }).catch(() => {});
-  supabaseClient.functions.invoke("send-sms", { body: { profile_id: profileId, message: `Banakar FinClub: ${title}. ${body}` } }).catch(() => {});
+  supabaseClient.functions.invoke("send-sms", { body: { profile_id: profileId, message: body } }).catch(() => {});
 }
 
 async function requestExtension(loanId) {
