@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const FAST2SMS_API_KEY = Deno.env.get("FAST2SMS_API_KEY")!;
+const TEXTBEE_API_KEY = Deno.env.get("TEXTBEE_API_KEY")!;
+const TEXTBEE_DEVICE_ID = Deno.env.get("TEXTBEE_DEVICE_ID")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -9,6 +10,11 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  return `+91${digits}`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -27,25 +33,25 @@ serve(async (req) => {
 
     if (!profile?.phone) return new Response("no phone for recipient", { status: 200, headers: CORS });
 
-    const phone = profile.phone.replace(/\D/g, "").slice(-10);
+    const phone = toE164(profile.phone);
 
-    const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
-      method: "POST",
-      headers: {
-        "authorization": FAST2SMS_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        route: "q",
-        message: message,
-        language: "english",
-        flash: "0",
-        numbers: phone,
-      }),
-    });
+    const response = await fetch(
+      `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`,
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": TEXTBEE_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          recipients: [phone],
+          message: message,
+        }),
+      }
+    );
 
     const result = await response.json();
-    console.log("Fast2SMS response:", JSON.stringify(result));
+    console.log("TextBee response:", JSON.stringify(result));
 
     return new Response(JSON.stringify(result), { status: 200, headers: CORS });
   } catch (err) {
