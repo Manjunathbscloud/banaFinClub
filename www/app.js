@@ -4310,6 +4310,11 @@ async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
   await liveQuery(supabaseClient.from("notifications").insert({ profile_id: profileId, type, title, body, related_id: relatedId }));
   supabaseClient.functions.invoke("send-push", { body: { profile_id: profileId, title, body } }).catch(() => {});
+  const smsTypes = ["signup_approved", "loan_approved", "loan_rejected", "payment_confirmed"];
+  if (smsTypes.includes(type)) {
+    const smsMessage = `Banakar FinClub: ${title}. ${body}`;
+    supabaseClient.functions.invoke("send-sms", { body: { profile_id: profileId, message: smsMessage } }).catch(() => {});
+  }
 }
 
 async function requestExtension(loanId) {
