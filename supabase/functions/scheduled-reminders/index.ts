@@ -126,5 +126,50 @@ serve(async (req) => {
     return new Response("ok", { status: 200, headers: CORS });
   }
 
+  // ─── Monthly Payment Pending Reminder ────────────────────────────────────
+  if (type === "payment") {
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const currentMonth = `${year}-${month}`;
+    const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+
+    // Get all active members
+    const { data: activeProfiles } = await supabase
+      .from("profiles")
+      .select("id, phone, full_name")
+      .eq("status", "active")
+      .not("phone", "is", null);
+
+    if (!activeProfiles || activeProfiles.length === 0) {
+      return new Response("no active members", { status: 200, headers: CORS });
+    }
+
+    // Get members who have already paid this month
+    const { data: paidRows } = await supabase
+      .from("monthly_payments")
+      .select("profile_id")
+      .eq("month", currentMonth)
+      .eq("status", "paid");
+
+    const paidIds = new Set((paidRows || []).map((r: any) => r.profile_id));
+
+    // Send reminder only to those who have NOT paid
+    const unpaid = activeProfiles.filter((p: any) => !paidIds.has(p.id));
+
+    for (const p of unpaid) {
+      if (!p.phone) continue;
+      const firstName = (p.full_name || "Member").split(" ")[0];
+      const message =
+        `⏰ Payment Reminder\n` +
+        `Hi ${firstName}, your monthly payment for ${monthLabel} is still pending. ` +
+        `Please pay at the earliest to avoid any issues.\n` +
+        `Open the app by clicking the link below:\n${APP_URL}`;
+      await sendSms(p.phone, message).catch(console.error);
+    }
+
+    console.log(`Payment reminder sent to ${unpaid.length} unpaid members out of ${activeProfiles.length}`);
+    return new Response("ok", { status: 200, headers: CORS });
+  }
+
   return new Response("invalid type", { status: 400, headers: CORS });
 });
