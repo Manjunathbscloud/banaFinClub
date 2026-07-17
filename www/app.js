@@ -1795,6 +1795,24 @@ function renderProfile() {
   `;
 }
 
+async function changePhone(profileId, newPhone) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const normalized = newPhone.replace(/\D/g, "").slice(-10);
+  if (!/^[6-9]\d{9}$/.test(normalized)) { showToast("Enter a valid 10-digit Indian phone number."); return; }
+  try {
+    showToast("Updating phone number...");
+    const { error } = await supabaseClient.functions.invoke("update-member-phone", {
+      body: { profile_id: profileId, new_phone: normalized },
+    });
+    if (error) throw error;
+    await loadLiveState();
+    showToast("Phone updated. Member must now log in with the new number.");
+    render();
+  } catch (err) {
+    showToast("Failed to update phone: " + (err.message || err));
+  }
+}
+
 async function saveProfileInfo(data) {
   const userId = state.currentUserId;
   if (!liveBackendReady || !userId) { showToast("Live backend required."); return; }
@@ -2889,7 +2907,10 @@ function renderMembers() {
               ${memberAvatarHtml(member, "md")}
               <div style="min-width:0;">
                 <strong>${escapeHtml(member.name)}</strong>
-                <span>${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}</span>
+                <span>
+                  ${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}
+                  ${isAdmin() ? `<button type="button" data-action="change-phone" data-id="${member.id}" data-name="${escapeHtml(member.name)}" data-phone="${escapeHtml(member.phone)}" style="font-size:11px;padding:2px 7px;margin-left:6px;min-height:0;vertical-align:middle;background:var(--bg2,#F3F4F6);border:1px solid var(--border,#E5E7EB);border-radius:4px;cursor:pointer;color:var(--muted);">✏️</button>` : ""}
+                </span>
                 ${member.id === currentProfileId() && liveBackendReady ? `
                   <label class="change-photo-link" for="member-avatar-input">📷 Change photo</label>
                   <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
@@ -3749,6 +3770,13 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
     if (action.dataset.action === "mark-payment-paid") await markPaymentPaid(action.dataset.memberId);
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
+    if (action.dataset.action === "change-phone") {
+      const newPhone = window.prompt(`Change phone for ${action.dataset.name}\nCurrent: ${action.dataset.phone}\n\nEnter new 10-digit phone number:`);
+      if (newPhone && newPhone.replace(/\D/g, "").slice(-10) !== action.dataset.phone.replace(/\D/g, "").slice(-10)) {
+        await changePhone(action.dataset.id, newPhone);
+      }
+      return;
+    }
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
