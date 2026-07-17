@@ -366,6 +366,9 @@ function liveProfileToMember(profile) {
     authUserId: profile.auth_user_id,
     avatarUrl: profile.avatar_url || "",
     mpinHash: profile.mpin_hash || null,
+    nomineeName: profile.nominee_name || "",
+    nomineeRelationship: profile.nominee_relationship || "",
+    nomineePhone: profile.nominee_phone || "",
   };
 }
 
@@ -577,7 +580,7 @@ async function loadLiveState() {
 
   const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
-    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
     liveQuery(supabaseClient.from("monthly_payments").select("*").gte("month", "2025-11").order("created_at", { ascending: false })),
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
@@ -1099,7 +1102,7 @@ function render() {
     <div class="shell">
       <header class="topbar">
         <div class="topbar-inner">
-          <div class="user-chip">
+          <div class="user-chip" data-action="open-profile" style="cursor:pointer;" title="View Profile">
             ${memberAvatarHtml(user)}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
@@ -1370,6 +1373,7 @@ function renderTab() {
     admin: renderAdmin,
     statement: renderStatement,
     history: renderHistory,
+    profile: renderProfile,
   };
   return (tabs[state.activeTab] || renderDashboard)();
 }
@@ -1512,6 +1516,133 @@ function renderDashboard() {
 
     </section>
   `;
+}
+
+function renderProfile() {
+  const user = currentUser();
+  if (!user) return "";
+  const relationships = ["Spouse", "Son", "Daughter", "Father", "Mother", "Brother", "Sister", "Other"];
+  const hasNominee = !!user.nomineeName;
+  return `
+    <section class="page-title">
+      <p>Account</p>
+      <h2>My Profile</h2>
+    </section>
+
+    <section class="grid">
+      <!-- Photo & Name -->
+      <div class="card">
+        <div class="card-header"><div><h3>Personal Info</h3><p>Update your details</p></div></div>
+        <div class="card-body" style="padding:16px;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:18px;">
+            <div style="position:relative;display:inline-block;">
+              ${user.avatarUrl
+                ? `<img src="${escapeHtml(user.avatarUrl)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" />`
+                : `<div style="width:80px;height:80px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid var(--border);">${user.name?.[0]?.toUpperCase() || "?"}</div>`}
+              ${liveBackendReady ? `<label for="profile-avatar-input" style="position:absolute;bottom:0;right:0;background:var(--accent);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;" title="Change photo">📷</label><input type="file" id="profile-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />` : ""}
+            </div>
+          </div>
+          <form data-form="save-profile-info" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input name="full_name" value="${escapeHtml(user.name || "")}" placeholder="Your full name" required />
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input name="phone" type="tel" value="${escapeHtml(user.phone || "")}" placeholder="+91 XXXXX XXXXX" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input name="email" type="email" value="${escapeHtml(user.email || "")}" placeholder="your@email.com" />
+            </div>
+            <button class="primary" type="submit">Save Changes</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Nominee -->
+      <div class="card">
+        <div class="card-header"><div><h3>Nominee</h3><p>${hasNominee ? `${escapeHtml(user.nomineeName)} · ${escapeHtml(user.nomineeRelationship)}` : "Not set yet"}</p></div></div>
+        <div class="card-body" style="padding:16px;">
+          <form data-form="save-nominee" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="form-group">
+              <label>Nominee Name</label>
+              <input name="nominee_name" value="${escapeHtml(user.nomineeName || "")}" placeholder="Full name of nominee" required />
+            </div>
+            <div class="form-group">
+              <label>Relationship</label>
+              <select name="nominee_relationship">
+                <option value="">Select relationship</option>
+                ${relationships.map(r => `<option value="${r}" ${user.nomineeRelationship === r ? "selected" : ""}>${r}</option>`).join("")}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Nominee Phone</label>
+              <input name="nominee_phone" type="tel" value="${escapeHtml(user.nomineePhone || "")}" placeholder="+91 XXXXX XXXXX" />
+            </div>
+            <button class="primary" type="submit">${hasNominee ? "Update Nominee" : "Add Nominee"}</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Change MPIN -->
+      <div class="card">
+        <div class="card-header"><div><h3>Security</h3><p>Change your MPIN</p></div></div>
+        <div class="card-body" style="padding:16px;">
+          <form data-form="change-mpin" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="form-group">
+              <label>New MPIN (4 digits)</label>
+              <input name="new_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
+            </div>
+            <div class="form-group">
+              <label>Confirm MPIN</label>
+              <input name="confirm_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
+            </div>
+            <button class="primary" type="submit">Update MPIN</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+async function saveProfileInfo(data) {
+  const userId = state.currentUserId;
+  if (!liveBackendReady || !userId) { showToast("Live backend required."); return; }
+  await liveQuery(supabaseClient.from("profiles").update({
+    full_name: data.full_name.trim(),
+    phone: data.phone.trim(),
+    email: data.email.trim(),
+  }).eq("id", userId));
+  const member = state.members.find(m => m.id === userId);
+  if (member) { member.name = data.full_name.trim(); member.phone = data.phone.trim(); member.email = data.email.trim(); }
+  showToast("Profile updated.");
+  render();
+}
+
+async function saveNominee(data) {
+  const userId = state.currentUserId;
+  if (!liveBackendReady || !userId) { showToast("Live backend required."); return; }
+  if (!data.nominee_name.trim()) { showToast("Please enter nominee name."); return; }
+  if (!data.nominee_relationship) { showToast("Please select relationship."); return; }
+  const isNew = !currentUser()?.nomineeName;
+  await liveQuery(supabaseClient.from("profiles").update({
+    nominee_name: data.nominee_name.trim(),
+    nominee_relationship: data.nominee_relationship,
+    nominee_phone: data.nominee_phone.trim(),
+  }).eq("id", userId));
+  const member = state.members.find(m => m.id === userId);
+  if (member) {
+    member.nomineeName = data.nominee_name.trim();
+    member.nomineeRelationship = data.nominee_relationship;
+    member.nomineePhone = data.nominee_phone.trim();
+  }
+  if (isNew) {
+    await notifyMember(userId, "nominee_added", "Nominee added",
+      `Your nominee ${data.nominee_name.trim()} (${data.nominee_relationship}) has been added to your Banakar FinClub membership records.`);
+  }
+  showToast(isNew ? "Nominee added successfully." : "Nominee updated.");
+  render();
 }
 
 function renderHistory() {
@@ -3157,6 +3288,13 @@ document.addEventListener("click", async (event) => {
   const action = event.target.closest("[data-action]");
   if (!action) return;
 
+  if (action.dataset.action === "open-profile") {
+    state.activeTab = "profile";
+    saveState();
+    render();
+    return;
+  }
+
   if (action.dataset.action === "show-rules") {
     showRulesModal();
     return;
@@ -3763,6 +3901,15 @@ document.addEventListener("submit", async (event) => {
     if (type === "set-new-password") await setNewPassword(data);
     if (type === "loan-request") await requestLoan(data);
     if (type === "manual-loan") await addManualLoan(data);
+    if (type === "save-profile-info") await saveProfileInfo(data);
+    if (type === "save-nominee") await saveNominee(data);
+    if (type === "change-mpin") {
+      if (data.new_mpin !== data.confirm_mpin) throw new Error("MPINs do not match.");
+      if (!/^\d{4}$/.test(data.new_mpin)) throw new Error("MPIN must be exactly 4 digits.");
+      await saveMpin(data.new_mpin);
+      showToast("MPIN updated successfully.");
+      form.reset();
+    }
     if (type === "start-new-year") await startNewYear(data);
     if (type === "add-rule") {
       const section = (data.section || "").trim();
