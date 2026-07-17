@@ -27,7 +27,7 @@ function istNow(): Date {
 }
 
 async function sendSms(phone: string, message: string) {
-  const sms = `🏦 BanakarFinClub | Sri Mukkaneshwara\n${message}`;
+  const sms = `🏦 BanakarFinClub | Sri Mukkaneshwara Associates\n${message}`;
   const res = await fetch(
     `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`,
     {

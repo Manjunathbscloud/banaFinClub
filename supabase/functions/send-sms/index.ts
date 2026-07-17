@@ -19,7 +19,7 @@ function toE164(phone: string): string {
 }
 
 function buildSms(message: string): string {
-  return `🏦 BanakarFinClub | Sri Mukkaneshwara\n${message}\napp: ${APP_URL}`;
+  return `🏦 BanakarFinClub | Sri Mukkaneshwara Associates\n${message}\napp: ${APP_URL}`;
 }
 
 serve(async (req) => {
