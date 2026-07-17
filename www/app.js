@@ -1102,11 +1102,12 @@ function render() {
     <div class="shell">
       <header class="topbar">
         <div class="topbar-inner">
-          <div class="user-chip" data-action="open-profile" style="cursor:pointer;" title="View Profile">
+          <div class="user-chip" data-action="open-profile" style="cursor:pointer;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:5px 10px 5px 5px;" title="View Profile">
             ${memberAvatarHtml(user)}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
               <span>${escapeHtml(roleLabel(user.role))}</span>
+              <span style="font-size:10px;color:#F59E0B;letter-spacing:0.2px;">Edit Profile ›</span>
             </div>
           </div>
           <div class="top-actions">
@@ -1434,11 +1435,6 @@ function renderDashboard() {
       <div class="dash-greeting">
         <p>${greeting}</p>
         <h2>${escapeHtml(user.name || "Member")}</h2>
-      </div>
-      <div class="dash-avatar-wrap" data-action="open-profile" style="cursor:pointer;" title="View Profile">
-        ${user.avatarUrl
-          ? `<img src="${escapeHtml(user.avatarUrl)}" class="dash-avatar dash-avatar-photo" alt="${escapeHtml(user.name)}" />`
-          : `<div class="dash-avatar">${escapeHtml(initials)}</div>`}
       </div>
     </section>
 
