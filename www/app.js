@@ -1174,7 +1174,7 @@ function initials(name) {
 function memberAvatarHtml(member, size = "") {
   const cls = `avatar${size ? " avatar-" + size : ""}`;
   if (member?.avatarUrl) {
-    return `<img src="${escapeHtml(member.avatarUrl)}" class="${cls} avatar-photo" alt="${escapeHtml(member?.name || "")}" data-action="open-photo" data-src="${escapeHtml(member.avatarUrl)}" style="cursor:zoom-in;" />`;
+    return `<img src="${escapeHtml(member.avatarUrl)}" class="${cls} avatar-photo" alt="${escapeHtml(member?.name || "")}" />`;
   }
   return `<div class="${cls}">${initials(member?.name || "?")}</div>`;
 }
@@ -1435,11 +1435,10 @@ function renderDashboard() {
         <p>${greeting}</p>
         <h2>${escapeHtml(user.name || "Member")}</h2>
       </div>
-      <div class="dash-avatar-wrap">
+      <div class="dash-avatar-wrap" data-action="open-profile" style="cursor:pointer;" title="View Profile">
         ${user.avatarUrl
-          ? `<img src="${escapeHtml(user.avatarUrl)}" class="dash-avatar dash-avatar-photo" alt="${escapeHtml(user.name)}" data-action="open-photo" data-src="${escapeHtml(user.avatarUrl)}" style="cursor:zoom-in;" />`
+          ? `<img src="${escapeHtml(user.avatarUrl)}" class="dash-avatar dash-avatar-photo" alt="${escapeHtml(user.name)}" />`
           : `<div class="dash-avatar">${escapeHtml(initials)}</div>`}
-        ${liveBackendReady ? `<label class="dash-avatar-cam" for="home-avatar-input" title="Change photo">📷</label><input type="file" id="home-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />` : ""}
       </div>
     </section>
 
