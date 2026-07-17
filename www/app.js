@@ -1731,7 +1731,8 @@ function renderProfile() {
           </div>
           <div class="prof-field">
             <label>Phone</label>
-            <input name="phone" type="tel" value="${escapeHtml(user.phone || "")}" placeholder="+91 XXXXX XXXXX" />
+            <input name="phone" type="tel" value="${escapeHtml(user.phone || "")}" readonly style="background:#F3F4F6;color:var(--muted);cursor:not-allowed;" />
+            <p style="margin:4px 0 0;font-size:11px;color:var(--muted);">To change your login phone, contact the admin.</p>
           </div>
           <div class="prof-field">
             <label>Email</label>
@@ -1799,11 +1800,10 @@ async function saveProfileInfo(data) {
   if (!liveBackendReady || !userId) { showToast("Live backend required."); return; }
   await liveQuery(supabaseClient.from("profiles").update({
     full_name: data.full_name.trim(),
-    phone: data.phone.trim(),
     email: data.email.trim(),
   }).eq("id", userId));
   const member = state.members.find(m => m.id === userId);
-  if (member) { member.name = data.full_name.trim(); member.phone = data.phone.trim(); member.email = data.email.trim(); }
+  if (member) { member.name = data.full_name.trim(); member.email = data.email.trim(); }
   showToast("Profile updated.");
   render();
 }
