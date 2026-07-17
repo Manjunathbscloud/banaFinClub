@@ -1523,85 +1523,274 @@ function renderProfile() {
   const relationships = ["Spouse", "Son", "Daughter", "Father", "Mother", "Brother", "Sister", "Other"];
   const hasNominee = !!user.nomineeName;
   return `
-    <section class="page-title">
-      <p>Account</p>
-      <h2>My Profile</h2>
-    </section>
+    <style>
+      .prof-hero {
+        margin: -14px -12px 20px;
+        padding: 36px 24px 52px;
+        background: linear-gradient(150deg, #0F172A 0%, #1E3A8A 55%, #1D4ED8 100%);
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .prof-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse at 70% 0%, rgba(96,165,250,0.18) 0%, transparent 60%);
+        pointer-events: none;
+      }
+      .prof-av-ring {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 104px;
+        height: 104px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #F59E0B, #D97706);
+        padding: 3px;
+        margin-bottom: 14px;
+        position: relative;
+      }
+      .prof-av-inner {
+        width: 98px;
+        height: 98px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        font-weight: 900;
+        color: white;
+        flex-shrink: 0;
+      }
+      .prof-av-inner img { width: 100%; height: 100%; object-fit: cover; }
+      .prof-cam-lbl {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 30px;
+        height: 30px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        cursor: pointer;
+        border: 2px solid #EFF6FF;
+      }
+      .prof-hero-name {
+        margin: 0 0 8px;
+        font-size: 22px;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: -0.2px;
+      }
+      .prof-hero-badge {
+        display: inline-block;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.22);
+        color: rgba(255,255,255,0.88);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        padding: 4px 12px;
+        border-radius: 999px;
+      }
+      .prof-cards { display: grid; gap: 14px; }
+      .prof-card {
+        background: var(--panel);
+        border: 1px solid rgba(229,231,235,0.9);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        animation: fadeInUp 0.28s ease-out both;
+      }
+      .prof-card:nth-child(1) { animation-delay: 40ms; }
+      .prof-card:nth-child(2) { animation-delay: 90ms; }
+      .prof-card:nth-child(3) { animation-delay: 140ms; }
+      .prof-card-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(229,231,235,0.7);
+        border-left: 3px solid var(--prof-accent, #2563EB);
+      }
+      .prof-card-head h3 { margin: 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+      .prof-card-head p  { margin: 3px 0 0; font-size: 11px; color: var(--muted); font-weight: 500; }
+      .prof-card-body { padding: 16px; display: flex; flex-direction: column; gap: 13px; }
+      .prof-field label {
+        display: block;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: var(--muted);
+        margin-bottom: 5px;
+      }
+      .prof-field input,
+      .prof-field select {
+        width: 100%;
+        min-height: 46px;
+        border: 1.5px solid #E5E7EB;
+        border-radius: 10px;
+        background: #F9FAFB;
+        color: var(--ink);
+        padding: 11px 13px;
+        font-size: 14px;
+        transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+      }
+      .prof-field input:focus,
+      .prof-field select:focus {
+        outline: none;
+        border-color: #2563EB;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+      }
+      .prof-btn {
+        width: 100%;
+        min-height: 48px;
+        border: none;
+        border-radius: 12px;
+        font-weight: 800;
+        font-size: 15px;
+        letter-spacing: 0.2px;
+        cursor: pointer;
+        transition: transform 0.14s, box-shadow 0.14s;
+        margin-top: 2px;
+      }
+      .prof-btn:hover  { transform: translateY(-1px); }
+      .prof-btn:active { transform: scale(0.97); }
+      .prof-btn-blue {
+        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(37,99,235,0.32);
+      }
+      .prof-btn-blue:hover  { box-shadow: 0 6px 22px rgba(37,99,235,0.42); }
+      .prof-btn-gold {
+        background: linear-gradient(135deg, #D97706, #B45309);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(180,83,9,0.28);
+      }
+      .prof-btn-gold:hover  { box-shadow: 0 6px 22px rgba(180,83,9,0.38); }
+      .prof-btn-dark {
+        background: linear-gradient(135deg, #374151, #1C1C2E);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(28,28,46,0.22);
+      }
+      .prof-btn-dark:hover  { box-shadow: 0 6px 22px rgba(28,28,46,0.32); }
+      .prof-nominee-card { background: linear-gradient(160deg, #FFFBEB 0%, #FEF3C7 100%); border-color: #FDE68A; }
+      .prof-nominee-status {
+        padding: 9px 13px;
+        border-radius: 9px;
+        font-size: 12px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .prof-nominee-status.set   { background: rgba(5,150,105,0.1); color: #065F46; }
+      .prof-nominee-status.unset { background: rgba(217,119,6,0.12); color: #92400E; }
+      .prof-mpin-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .prof-mpin-input {
+        letter-spacing: 8px;
+        font-size: 20px;
+        text-align: center;
+        font-weight: 700;
+      }
+    </style>
 
-    <section class="grid">
-      <!-- Photo & Name -->
-      <div class="card">
-        <div class="card-header"><div><h3>Personal Info</h3><p>Update your details</p></div></div>
-        <div class="card-body" style="padding:16px;">
-          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:18px;">
-            <div style="position:relative;display:inline-block;">
-              ${user.avatarUrl
-                ? `<img src="${escapeHtml(user.avatarUrl)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" />`
-                : `<div style="width:80px;height:80px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid var(--border);">${user.name?.[0]?.toUpperCase() || "?"}</div>`}
-              ${liveBackendReady ? `<label for="profile-avatar-input" style="position:absolute;bottom:0;right:0;background:var(--accent);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;" title="Change photo">📷</label><input type="file" id="profile-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />` : ""}
-            </div>
-          </div>
-          <form data-form="save-profile-info" style="display:flex;flex-direction:column;gap:12px;">
-            <div class="form-group">
-              <label>Full Name</label>
-              <input name="full_name" value="${escapeHtml(user.name || "")}" placeholder="Your full name" required />
-            </div>
-            <div class="form-group">
-              <label>Phone</label>
-              <input name="phone" type="tel" value="${escapeHtml(user.phone || "")}" placeholder="+91 XXXXX XXXXX" />
-            </div>
-            <div class="form-group">
-              <label>Email</label>
-              <input name="email" type="email" value="${escapeHtml(user.email || "")}" placeholder="your@email.com" />
-            </div>
-            <button class="primary" type="submit">Save Changes</button>
-          </form>
+    <!-- Hero -->
+    <div class="prof-hero">
+      <div class="prof-av-ring">
+        <div class="prof-av-inner">
+          ${user.avatarUrl ? `<img src="${escapeHtml(user.avatarUrl)}" alt="${escapeHtml(user.name)}" />` : initials(user.name || "?")}
         </div>
+        ${liveBackendReady ? `
+          <label for="profile-avatar-input" class="prof-cam-lbl" title="Change photo">📷</label>
+          <input type="file" id="profile-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
+        ` : ""}
+      </div>
+      <h2 class="prof-hero-name">${escapeHtml(user.name || "Member")}</h2>
+      <span class="prof-hero-badge">${escapeHtml(roleLabel(user.role))}</span>
+    </div>
+
+    <div class="prof-cards">
+      <!-- Personal Info -->
+      <div class="prof-card">
+        <div class="prof-card-head" style="--prof-accent:#2563EB;">
+          <h3>Personal Info</h3>
+          <p>Name, phone and email on record</p>
+        </div>
+        <form data-form="save-profile-info" class="prof-card-body">
+          <div class="prof-field">
+            <label>Full Name</label>
+            <input name="full_name" value="${escapeHtml(user.name || "")}" placeholder="Your full name" required />
+          </div>
+          <div class="prof-field">
+            <label>Phone</label>
+            <input name="phone" type="tel" value="${escapeHtml(user.phone || "")}" placeholder="+91 XXXXX XXXXX" />
+          </div>
+          <div class="prof-field">
+            <label>Email</label>
+            <input name="email" type="email" value="${escapeHtml(user.email || "")}" placeholder="your@email.com" />
+          </div>
+          <button class="prof-btn prof-btn-blue" type="submit">Save Changes</button>
+        </form>
       </div>
 
       <!-- Nominee -->
-      <div class="card">
-        <div class="card-header"><div><h3>Nominee</h3><p>${hasNominee ? `${escapeHtml(user.nomineeName)} · ${escapeHtml(user.nomineeRelationship)}` : "Not set yet"}</p></div></div>
-        <div class="card-body" style="padding:16px;">
-          <form data-form="save-nominee" style="display:flex;flex-direction:column;gap:12px;">
-            <div class="form-group">
-              <label>Nominee Name</label>
-              <input name="nominee_name" value="${escapeHtml(user.nomineeName || "")}" placeholder="Full name of nominee" required />
-            </div>
-            <div class="form-group">
-              <label>Relationship</label>
-              <select name="nominee_relationship">
-                <option value="">Select relationship</option>
-                ${relationships.map(r => `<option value="${r}" ${user.nomineeRelationship === r ? "selected" : ""}>${r}</option>`).join("")}
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Nominee Phone</label>
-              <input name="nominee_phone" type="tel" value="${escapeHtml(user.nomineePhone || "")}" placeholder="+91 XXXXX XXXXX" />
-            </div>
-            <button class="primary" type="submit">${hasNominee ? "Update Nominee" : "Add Nominee"}</button>
-          </form>
+      <div class="prof-card prof-nominee-card">
+        <div class="prof-card-head" style="--prof-accent:#D97706;border-bottom-color:rgba(253,230,138,0.8);">
+          <h3>Nominee</h3>
+          <p>Your designated beneficiary</p>
         </div>
+        <form data-form="save-nominee" class="prof-card-body">
+          <div class="prof-nominee-status ${hasNominee ? "set" : "unset"}">
+            ${hasNominee ? `✓ ${escapeHtml(user.nomineeName)} · ${escapeHtml(user.nomineeRelationship)}` : "⚠ No nominee added yet"}
+          </div>
+          <div class="prof-field">
+            <label>Nominee Name</label>
+            <input name="nominee_name" value="${escapeHtml(user.nomineeName || "")}" placeholder="Full name" required style="background:#FFFBEB;" />
+          </div>
+          <div class="prof-field">
+            <label>Relationship</label>
+            <select name="nominee_relationship" style="background:#FFFBEB;">
+              <option value="">Select relationship</option>
+              ${relationships.map(r => `<option value="${r}" ${user.nomineeRelationship === r ? "selected" : ""}>${r}</option>`).join("")}
+            </select>
+          </div>
+          <div class="prof-field">
+            <label>Nominee Phone</label>
+            <input name="nominee_phone" type="tel" value="${escapeHtml(user.nomineePhone || "")}" placeholder="+91 XXXXX XXXXX" style="background:#FFFBEB;" />
+          </div>
+          <button class="prof-btn prof-btn-gold" type="submit">${hasNominee ? "Update Nominee" : "Add Nominee"}</button>
+        </form>
       </div>
 
-      <!-- Change MPIN -->
-      <div class="card">
-        <div class="card-header"><div><h3>Security</h3><p>Change your MPIN</p></div></div>
-        <div class="card-body" style="padding:16px;">
-          <form data-form="change-mpin" style="display:flex;flex-direction:column;gap:12px;">
-            <div class="form-group">
-              <label>New MPIN (4 digits)</label>
-              <input name="new_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
-            </div>
-            <div class="form-group">
-              <label>Confirm MPIN</label>
-              <input name="confirm_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
-            </div>
-            <button class="primary" type="submit">Update MPIN</button>
-          </form>
+      <!-- Security -->
+      <div class="prof-card">
+        <div class="prof-card-head" style="--prof-accent:#374151;">
+          <h3>Security</h3>
+          <p>Change your 4-digit MPIN</p>
         </div>
+        <form data-form="change-mpin" class="prof-card-body">
+          <div class="prof-mpin-row">
+            <div class="prof-field">
+              <label>New MPIN</label>
+              <input class="prof-mpin-input" name="new_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
+            </div>
+            <div class="prof-field">
+              <label>Confirm</label>
+              <input class="prof-mpin-input" name="confirm_mpin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="····" required />
+            </div>
+          </div>
+          <button class="prof-btn prof-btn-dark" type="submit">Update MPIN</button>
+        </form>
       </div>
-    </section>
+    </div>
   `;
 }
 
