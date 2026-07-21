@@ -2840,34 +2840,6 @@ function showLoanYearModal(yearKey) {
     }).join("") || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
 
     bodyHtml = `
-      <style>
-        .lm-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:2px;}
-        .lm-stat{background:var(--panel,#fff);border:1px solid var(--line,#E5E7EB);border-radius:10px;padding:10px 12px;}
-        .lm-stat .lbl{font-size:9px;font-weight:700;color:var(--muted,#6B7280);text-transform:uppercase;letter-spacing:0.4px;}
-        .lm-stat .val{font-size:16px;font-weight:800;color:#2563EB;margin-top:3px;font-variant-numeric:tabular-nums;}
-        .lm-stat .sub{font-size:9px;color:var(--muted,#6B7280);margin-top:1px;}
-        .lm-filter{display:flex;gap:8px;align-items:center;}
-        .lm-search-wrap{flex:1;position:relative;}
-        .lm-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted,#6B7280);pointer-events:none;}
-        .lm-search{width:100%;padding:8px 10px 8px 30px;border:1.5px solid var(--line,#E5E7EB);border-radius:10px;background:var(--panel,#fff);color:var(--ink,#1C1C2E);font-size:13px;outline:none;}
-        .lm-search:focus{border-color:#2563EB;}
-        .lm-chip{padding:7px 11px;border:1.5px solid var(--line,#E5E7EB);border-radius:10px;background:var(--panel,#fff);color:var(--muted,#6B7280);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
-        .lm-chip-active{background:#EFF6FF;border-color:#2563EB;color:#2563EB;}
-        .lm-table-card{background:var(--panel,#fff);border:1px solid var(--line,#E5E7EB);border-radius:12px;overflow:hidden;}
-        .lm-table-head{padding:11px 14px;border-bottom:1px solid var(--line,#E5E7EB);display:flex;justify-content:space-between;align-items:center;}
-        .lm-table-head h4{font-size:13px;font-weight:700;}
-        .lm-table-head span{font-size:11px;color:var(--muted,#6B7280);}
-        .lm-tbl{width:100%;border-collapse:collapse;display:table !important;}
-        .lm-tbl thead{display:table-header-group !important;}
-        .lm-tbl thead th{font-size:10px;font-weight:700;color:var(--muted,#6B7280);text-transform:uppercase;letter-spacing:0.4px;padding:7px 10px;text-align:left;background:var(--page,#F8F9FF);border-bottom:1px solid var(--line,#E5E7EB);}
-        .lm-tbl tbody{display:table-row-group !important;}
-        .lm-tbl tbody tr,.lm-tbl tfoot tr{display:table-row !important;margin:0 !important;border:none !important;border-radius:0 !important;background:none !important;overflow:visible !important;border-bottom:1px solid var(--line,#E5E7EB) !important;}
-        .lm-tbl tbody tr:last-child{border-bottom:none !important;}
-        .lm-tbl td,.lm-tbl th{display:table-cell !important;padding:9px 10px;font-size:12px;vertical-align:middle;border-bottom:none;}
-        .lm-tbl td::before{display:none !important;content:none !important;}
-        .lm-tbl tfoot{display:table-footer-group !important;}
-        .lm-tbl tfoot td{font-weight:700;background:var(--page,#F8F9FF);border-top:1.5px solid var(--line,#E5E7EB) !important;border-bottom:none !important;}
-      </style>
       <div class="lm-stats">
         <div class="lm-stat">
           <div class="lbl">Loans</div>
