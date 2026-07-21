@@ -2752,38 +2752,10 @@ function showLoanYearModal(yearKey) {
     title = `${_activeLabel} · Current`;
     const loans = currentLoanBookRows();
     const user = currentUser();
-    const tableRows = loans.map(loan => {
-      const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
-      const myLoan = loanBelongsToMember(loan, user);
-      const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
-      let extCell = "-";
-      if (isAdmin()) {
-        extCell = `${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Clear</button> ` : ""}<button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Del</button>`;
-      } else if (dueThisMonth && myLoan) {
-        if (!extInfo || extInfo.status === "rejected") {
-          extCell = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:11px;padding:3px 7px;min-height:0;">Extend</button>`;
-        } else if (extInfo.status === "pending") {
-          extCell = `<span style="font-size:11px;color:#b45309;">⏳ Awaiting</span>`;
-        } else if (extInfo.status === "approved") {
-          extCell = `<span style="font-size:11px;color:#16a34a;">✓ Extended</span>`;
-        }
-      }
-      const _activeNum2 = state.settings.activeYearNumber || 6;
-      const _yrStart2 = _activeNum2 === 6 ? "2025-11-01" : (activeYearCutoffMonth() + "-01");
-      const _yr6Int = loan.notes === "emi_entry" ? 0 : yearBoundedInterest(loan, _yrStart2, today());
-      return `<tr>
-        <td data-label="Member"><strong>${escapeHtml(loanMemberName(loan))}</strong><br><small style="color:#9ca3af;">${fmtMonthYear(loan.from)}</small></td>
-        <td data-label="Amount">${money(loan.amount)}</td>
-        <td data-label="Interest/mo">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td>
-        <td data-label="Yr Interest">${loan.notes === "emi_entry" ? "—" : `<strong style="color:#16a34a;">${money(_yr6Int)}</strong>`}</td>
-        <td data-label="Renewal">${fmtMonthYear(loanRenewalDate(loan))}</td>
-        <td data-label="Status">${statusBadge(loan.status)}</td>
-        <td data-label="Action">${extCell}</td>
-      </tr>`;
-    }).join("") || `<tr><td colspan="6" class="empty">No loans entered yet.</td></tr>`;
     const _activeNumT = Number(state.settings.activeYearNumber) || 6;
-    // Tfoot total matches deposits screen: for Year 6 use hardcoded hist (65546) + live payments;
-    // for Year 7+ use actual monthly_payments interest portions (paymentSplit).
+    const _yrStart2 = _activeNumT === 6 ? "2025-11-01" : (activeYearCutoffMonth() + "-01");
+
+    // Total year interest
     let _totalYrInt = 0;
     if (_activeNumT === 6) {
       const _yr6LiveInt = state.monthlyPayments
@@ -2806,9 +2778,137 @@ function showLoanYearModal(yearKey) {
           return s + interest;
         }, 0);
     }
-    const thead = `<thead><tr><th>Member</th><th>Amount</th><th>Interest/mo</th><th>Yr Interest</th><th>Renewal</th><th>Status</th><th>Action</th></tr></thead>`;
-    const tfoot = `<tfoot><tr><td colspan="3" style="font-weight:600;">Total Year ${_activeNumT} Interest</td><td style="font-weight:700;color:#16a34a;">${money(_totalYrInt)}</td><td colspan="3"></td></tr></tfoot>`;
-    bodyHtml = `<div class="table-wrap" style="overflow-x:auto;"><table style="min-width:0;width:100%;">${thead}<tbody>${tableRows}</tbody>${tfoot}</table></div>`;
+
+    const totalPrincipal = loans.reduce((s, l) => s + Number(l.amount || 0), 0);
+    const activeCount = loans.filter(l => l.status === "active").length;
+    const dueCount = loans.filter(l => isLoanDueThisMonth(l)).length;
+
+    // Register filter helpers globally (inline oninput/onclick call these)
+    window.bfcLoanFilter = "all";
+    window.bfcFilterLoanTable = function() {
+      const term = (document.getElementById("lm-search")?.value || "").toLowerCase().trim();
+      const filter = window.bfcLoanFilter;
+      document.querySelectorAll("#loan-year-modal .lm-row").forEach(row => {
+        const matchSearch = !term || (row.dataset.member || "").includes(term);
+        const matchFilter = filter === "all" || (filter === "due" && row.dataset.status === "due");
+        row.style.display = matchSearch && matchFilter ? "" : "none";
+      });
+    };
+    window.bfcSetLoanChip = function(chip, filter) {
+      document.querySelectorAll("#loan-year-modal .lm-chip").forEach(c => c.classList.remove("lm-chip-active"));
+      chip.classList.add("lm-chip-active");
+      window.bfcLoanFilter = filter;
+      window.bfcFilterLoanTable();
+    };
+
+    const tableRows = loans.map(loan => {
+      const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
+      const myLoan = loanBelongsToMember(loan, user);
+      const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
+      const rowStatus = dueThisMonth ? "due" : loan.status;
+      const memberName = loanMemberName(loan);
+
+      let actionCell = "";
+      if (isAdmin()) {
+        actionCell = `<div style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Clear</button>` : ""}
+          <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Del</button>
+        </div>`;
+      } else if (dueThisMonth && myLoan) {
+        if (!extInfo || extInfo.status === "rejected") {
+          actionCell = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Extend</button>`;
+        } else if (extInfo.status === "pending") {
+          actionCell = `<span style="font-size:10px;color:#b45309;">⏳ Awaiting</span>`;
+        } else if (extInfo.status === "approved") {
+          actionCell = `<span style="font-size:10px;color:#16a34a;">✓ Extended</span>`;
+        }
+      }
+
+      const statusDisplay = dueThisMonth
+        ? `<span class="badge warn" style="font-size:10px;">Due</span>`
+        : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
+
+      const showAction = isAdmin() || (dueThisMonth && myLoan);
+      return `<tr class="lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
+        <td><strong style="font-size:13px;">${escapeHtml(memberName)}</strong><br><small style="color:#9ca3af;font-size:10px;">${fmtMonthYear(loan.from)}</small></td>
+        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">${money(loan.amount)}</td>
+        <td style="font-variant-numeric:tabular-nums;">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td>
+        <td style="font-size:11px;white-space:nowrap;">${fmtMonthYear(loanRenewalDate(loan))}</td>
+        <td>${statusDisplay}</td>
+        ${showAction ? `<td>${actionCell}</td>` : ""}
+      </tr>`;
+    }).join("") || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
+
+    bodyHtml = `
+      <style>
+        .lm-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:2px;}
+        .lm-stat{background:var(--panel,#fff);border:1px solid var(--line,#E5E7EB);border-radius:10px;padding:10px 12px;}
+        .lm-stat .lbl{font-size:9px;font-weight:700;color:var(--muted,#6B7280);text-transform:uppercase;letter-spacing:0.4px;}
+        .lm-stat .val{font-size:16px;font-weight:800;color:#2563EB;margin-top:3px;font-variant-numeric:tabular-nums;}
+        .lm-stat .sub{font-size:9px;color:var(--muted,#6B7280);margin-top:1px;}
+        .lm-filter{display:flex;gap:8px;align-items:center;}
+        .lm-search-wrap{flex:1;position:relative;}
+        .lm-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted,#6B7280);pointer-events:none;}
+        .lm-search{width:100%;padding:8px 10px 8px 30px;border:1.5px solid var(--line,#E5E7EB);border-radius:10px;background:var(--panel,#fff);color:var(--ink,#1C1C2E);font-size:13px;outline:none;}
+        .lm-search:focus{border-color:#2563EB;}
+        .lm-chip{padding:7px 11px;border:1.5px solid var(--line,#E5E7EB);border-radius:10px;background:var(--panel,#fff);color:var(--muted,#6B7280);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+        .lm-chip-active{background:#EFF6FF;border-color:#2563EB;color:#2563EB;}
+        .lm-table-card{background:var(--panel,#fff);border:1px solid var(--line,#E5E7EB);border-radius:12px;overflow:hidden;}
+        .lm-table-head{padding:11px 14px;border-bottom:1px solid var(--line,#E5E7EB);display:flex;justify-content:space-between;align-items:center;}
+        .lm-table-head h4{font-size:13px;font-weight:700;}
+        .lm-table-head span{font-size:11px;color:var(--muted,#6B7280);}
+        .lm-tbl{width:100%;border-collapse:collapse;}
+        .lm-tbl thead th{font-size:10px;font-weight:700;color:var(--muted,#6B7280);text-transform:uppercase;letter-spacing:0.4px;padding:7px 10px;text-align:left;background:var(--page,#F8F9FF);border-bottom:1px solid var(--line,#E5E7EB);}
+        .lm-tbl tbody tr{border-bottom:1px solid var(--line,#E5E7EB);}
+        .lm-tbl tbody tr:last-child{border-bottom:none;}
+        .lm-tbl td{padding:9px 10px;font-size:12px;vertical-align:middle;}
+        .lm-tbl tfoot td{padding:9px 10px;font-size:12px;font-weight:700;background:var(--page,#F8F9FF);border-top:1.5px solid var(--line,#E5E7EB);}
+      </style>
+      <div class="lm-stats">
+        <div class="lm-stat">
+          <div class="lbl">Loans</div>
+          <div class="val">${loans.length}</div>
+          <div class="sub">${activeCount} active</div>
+        </div>
+        <div class="lm-stat">
+          <div class="lbl">Principal</div>
+          <div class="val" style="font-size:13px;">${money(totalPrincipal)}</div>
+          <div class="sub">Outstanding</div>
+        </div>
+        <div class="lm-stat">
+          <div class="lbl">Yr Interest</div>
+          <div class="val" style="font-size:13px;color:#059669;">${money(_totalYrInt)}</div>
+          <div class="sub">Earned</div>
+        </div>
+      </div>
+      <div class="lm-filter">
+        <div class="lm-search-wrap">
+          <span class="lm-search-icon">🔍</span>
+          <input id="lm-search" class="lm-search" placeholder="Search member…" oninput="bfcFilterLoanTable()" />
+        </div>
+        <button class="lm-chip lm-chip-active" onclick="bfcSetLoanChip(this,'all')">All</button>
+        ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
+      </div>
+      <div class="lm-table-card">
+        <div class="lm-table-head">
+          <h4>Loan Book</h4>
+          <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="lm-tbl">
+            <thead><tr>
+              <th>Member</th><th>Amount</th><th>Int/mo</th><th>Due</th><th>Status</th>
+              ${isAdmin() ? "<th>Action</th>" : ""}
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+            <tfoot><tr>
+              <td colspan="2" style="font-weight:600;">Total Yr ${_activeNumT} Interest</td>
+              <td style="color:#059669;">${money(_totalYrInt)}</td>
+              <td colspan="${isAdmin() ? 3 : 2}"></td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>`;
   } else if (yearKey.startsWith("lh_")) {
     const yearLabel = yearKey.slice(3).replace(/_/g, " ");
     const loans = state.loanHistory.filter(h => h.year === yearLabel);
