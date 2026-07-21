@@ -1077,6 +1077,20 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function bfcToggleBal() {
+  const nowVisible = localStorage.getItem("bfc_bal_vis") === "1";
+  const next = !nowVisible;
+  localStorage.setItem("bfc_bal_vis", next ? "1" : "0");
+  document.querySelectorAll(".bal-val").forEach(el => {
+    el.textContent = next ? money(Number(el.dataset.bal)) : "₹ ••••";
+  });
+  const btn = document.getElementById("bal-eye-btn");
+  if (btn) {
+    btn.textContent = next ? "👁" : "🙈";
+    btn.title = next ? "Hide balances" : "Show balances";
+  }
+}
+
 function render() {
   document.body.classList.toggle("kannada", state.lang === "kn");
   const user = currentUser();
@@ -1463,22 +1477,27 @@ function renderDashboard() {
             <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
           </div>
         </div>
-        <span class="badge warn">Active</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="bal-eye-btn" id="bal-eye-btn" onclick="bfcToggleBal()" title="${localStorage.getItem('bfc_bal_vis')==='1' ? 'Hide balances' : 'Show balances'}">
+            ${localStorage.getItem('bfc_bal_vis')==='1' ? '👁' : '🙈'}
+          </button>
+          <span class="badge warn">Active</span>
+        </div>
       </div>
       <div class="dash-summary-grid">
         <div class="dash-summary-col">
           <p>Pool Balance</p>
-          <strong data-count-up="${poolBal}">${money(poolBal)}</strong>
+          <strong class="bal-val" data-bal="${poolBal}" data-count-up="${poolBal}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(poolBal) : '₹ ••••'}</strong>
           <small>Total association pool</small>
         </div>
         <div class="dash-summary-col">
           <p>Bank Balance</p>
-          <strong data-count-up="${bankBal}">${money(bankBal)}</strong>
+          <strong class="bal-val" data-bal="${bankBal}" data-count-up="${bankBal}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(bankBal) : '₹ ••••'}</strong>
           <small>Estimated</small>
         </div>
         <div class="dash-summary-col">
           <p>Available Loan</p>
-          <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
+          <strong class="bal-val" data-bal="${availLoan}" data-count-up="${availLoan}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(availLoan) : '₹ ••••'}</strong>
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col">
