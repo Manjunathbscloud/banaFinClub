@@ -998,19 +998,35 @@ button:focus-visible {
 
 .dash-summary-brand { display: flex; align-items: center; gap: 10px; }
 
-.bal-eye-btn {
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.25);
-  border-radius: 8px;
-  padding: 5px 9px;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  color: #fff;
-  min-height: 0;
-  transition: background 0.15s;
+.bal-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
 }
-.bal-eye-btn:active { background: rgba(255,255,255,0.28); }
+.bal-row strong {
+  display: block;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  flex: 1;
+  min-width: 0;
+}
+.bal-eye {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  min-height: 0;
+  min-width: 0;
+  line-height: 0;
+  opacity: 0.9;
+  border-radius: 4px;
+  transition: opacity 0.15s;
+}
+.bal-eye:active { opacity: 0.6; }
 
 .dash-summary-dot { font-size: 22px; color: var(--saffron-mid); line-height: 1; }
 
@@ -1052,6 +1068,7 @@ button:focus-visible {
   color: #fff;
   margin: 4px 0 2px;
 }
+/* Monthly Due strong still needs its own margin since it has no .bal-row wrapper */
 
 .dash-summary-col small { font-size: 11px; font-weight: 600; }
 

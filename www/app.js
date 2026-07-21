@@ -1077,18 +1077,17 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function bfcToggleBal() {
-  const nowVisible = localStorage.getItem("bfc_bal_vis") === "1";
-  const next = !nowVisible;
-  localStorage.setItem("bfc_bal_vis", next ? "1" : "0");
-  document.querySelectorAll(".bal-val").forEach(el => {
-    el.textContent = next ? money(Number(el.dataset.bal)) : "₹ ••••";
-  });
-  const btn = document.getElementById("bal-eye-btn");
-  if (btn) {
-    btn.textContent = next ? "👁" : "🙈";
-    btn.title = next ? "Hide balances" : "Show balances";
-  }
+const _EYE_OPEN  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const _EYE_SLASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+function bfcToggleBal(key) {
+  const isVis = sessionStorage.getItem("bfc_bal_" + key) === "1";
+  const next = !isVis;
+  sessionStorage.setItem("bfc_bal_" + key, next ? "1" : "0");
+  const valEl = document.querySelector(`.bal-val[data-bal-key="${key}"]`);
+  const btnEl = document.querySelector(`.bal-eye[data-bal-key="${key}"]`);
+  if (valEl) valEl.textContent = next ? money(Number(valEl.dataset.bal)) : "₹ ••••";
+  if (btnEl) btnEl.innerHTML = next ? _EYE_OPEN : _EYE_SLASH;
 }
 
 function render() {
@@ -1477,27 +1476,31 @@ function renderDashboard() {
             <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button class="bal-eye-btn" id="bal-eye-btn" onclick="bfcToggleBal()" title="${localStorage.getItem('bfc_bal_vis')==='1' ? 'Hide balances' : 'Show balances'}">
-            ${localStorage.getItem('bfc_bal_vis')==='1' ? '👁' : '🙈'}
-          </button>
-          <span class="badge warn">Active</span>
-        </div>
+        <span class="badge warn">Active</span>
       </div>
       <div class="dash-summary-grid">
         <div class="dash-summary-col">
           <p>Pool Balance</p>
-          <strong class="bal-val" data-bal="${poolBal}" data-count-up="${poolBal}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(poolBal) : '₹ ••••'}</strong>
+          <div class="bal-row">
+            <strong class="bal-val" data-bal-key="pool" data-bal="${poolBal}">₹ ••••</strong>
+            <button class="bal-eye" data-bal-key="pool" onclick="bfcToggleBal('pool')" aria-label="Toggle pool balance">${_EYE_SLASH}</button>
+          </div>
           <small>Total association pool</small>
         </div>
         <div class="dash-summary-col">
           <p>Bank Balance</p>
-          <strong class="bal-val" data-bal="${bankBal}" data-count-up="${bankBal}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(bankBal) : '₹ ••••'}</strong>
+          <div class="bal-row">
+            <strong class="bal-val" data-bal-key="bank" data-bal="${bankBal}">₹ ••••</strong>
+            <button class="bal-eye" data-bal-key="bank" onclick="bfcToggleBal('bank')" aria-label="Toggle bank balance">${_EYE_SLASH}</button>
+          </div>
           <small>Estimated</small>
         </div>
         <div class="dash-summary-col">
           <p>Available Loan</p>
-          <strong class="bal-val" data-bal="${availLoan}" data-count-up="${availLoan}">${localStorage.getItem('bfc_bal_vis')==='1' ? money(availLoan) : '₹ ••••'}</strong>
+          <div class="bal-row">
+            <strong class="bal-val" data-bal-key="loan" data-bal="${availLoan}">₹ ••••</strong>
+            <button class="bal-eye" data-bal-key="loan" onclick="bfcToggleBal('loan')" aria-label="Toggle available loan">${_EYE_SLASH}</button>
+          </div>
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col">
