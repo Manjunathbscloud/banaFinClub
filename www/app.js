@@ -2829,15 +2829,21 @@ function showLoanYearModal(yearKey) {
         : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
 
       const showAction = isAdmin() || (dueThisMonth && myLoan);
+      const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
+      const colCount = showAction ? 4 : 3;
       return `<tr class="lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
-        <td><strong style="font-size:13px;">${escapeHtml(memberName)}</strong><br><small style="color:#9ca3af;font-size:10px;">${fmtMonthYear(loan.from)}</small></td>
-        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">${money(loan.amount)}</td>
-        <td style="font-variant-numeric:tabular-nums;">${money(loan.status === "active" ? loanMonthlyInterest(loan) : 0)}</td>
-        <td style="font-size:11px;white-space:nowrap;">${fmtMonthYear(loanRenewalDate(loan))}</td>
+        <td>
+          <strong style="font-size:13px;">${escapeHtml(memberName)}</strong>
+          <br><small style="color:#9ca3af;font-size:10px;">Due: ${fmtMonthYear(loanRenewalDate(loan))}</small>
+        </td>
+        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">
+          ${money(loan.amount)}
+          ${intPerMo > 0 ? `<br><small style="color:#9ca3af;font-size:10px;font-weight:400;">${money(intPerMo)}/mo</small>` : ""}
+        </td>
         <td>${statusDisplay}</td>
         ${showAction ? `<td>${actionCell}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
+    }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
 
     bodyHtml = `
       <div class="lm-stats">
@@ -2870,17 +2876,17 @@ function showLoanYearModal(yearKey) {
           <h4>Loan Book</h4>
           <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
         </div>
-        <div style="overflow-x:auto;">
+        <div>
           <table class="lm-tbl">
             <thead><tr>
-              <th>Member</th><th>Amount</th><th>Int/mo</th><th>Due</th><th>Status</th>
+              <th>Member · Due</th><th>Amount · /mo</th><th>Status</th>
               ${isAdmin() ? "<th>Action</th>" : ""}
             </tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot><tr>
-              <td colspan="2" style="font-weight:600;">Total Yr ${_activeNumT} Interest</td>
-              <td style="color:#059669;">${money(_totalYrInt)}</td>
-              <td colspan="${isAdmin() ? 3 : 2}"></td>
+              <td style="font-weight:600;">Yr ${_activeNumT} Interest</td>
+              <td style="color:#059669;font-weight:700;">${money(_totalYrInt)}</td>
+              <td colspan="${isAdmin() ? 2 : 1}"></td>
             </tr></tfoot>
           </table>
         </div>
