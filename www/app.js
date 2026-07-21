@@ -2857,12 +2857,16 @@ function showLoanYearModal(yearKey) {
         .lm-table-head{padding:11px 14px;border-bottom:1px solid var(--line,#E5E7EB);display:flex;justify-content:space-between;align-items:center;}
         .lm-table-head h4{font-size:13px;font-weight:700;}
         .lm-table-head span{font-size:11px;color:var(--muted,#6B7280);}
-        .lm-tbl{width:100%;border-collapse:collapse;}
+        .lm-tbl{width:100%;border-collapse:collapse;display:table !important;}
+        .lm-tbl thead{display:table-header-group !important;}
         .lm-tbl thead th{font-size:10px;font-weight:700;color:var(--muted,#6B7280);text-transform:uppercase;letter-spacing:0.4px;padding:7px 10px;text-align:left;background:var(--page,#F8F9FF);border-bottom:1px solid var(--line,#E5E7EB);}
-        .lm-tbl tbody tr{border-bottom:1px solid var(--line,#E5E7EB);}
-        .lm-tbl tbody tr:last-child{border-bottom:none;}
-        .lm-tbl td{padding:9px 10px;font-size:12px;vertical-align:middle;}
-        .lm-tbl tfoot td{padding:9px 10px;font-size:12px;font-weight:700;background:var(--page,#F8F9FF);border-top:1.5px solid var(--line,#E5E7EB);}
+        .lm-tbl tbody{display:table-row-group !important;}
+        .lm-tbl tbody tr,.lm-tbl tfoot tr{display:table-row !important;margin:0 !important;border:none !important;border-radius:0 !important;background:none !important;overflow:visible !important;border-bottom:1px solid var(--line,#E5E7EB) !important;}
+        .lm-tbl tbody tr:last-child{border-bottom:none !important;}
+        .lm-tbl td,.lm-tbl th{display:table-cell !important;padding:9px 10px;font-size:12px;vertical-align:middle;border-bottom:none;}
+        .lm-tbl td::before{display:none !important;content:none !important;}
+        .lm-tbl tfoot{display:table-footer-group !important;}
+        .lm-tbl tfoot td{font-weight:700;background:var(--page,#F8F9FF);border-top:1.5px solid var(--line,#E5E7EB) !important;border-bottom:none !important;}
       </style>
       <div class="lm-stats">
         <div class="lm-stat">
