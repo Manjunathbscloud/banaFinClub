@@ -325,6 +325,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 html {
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
@@ -332,6 +333,7 @@ html {
 
 body {
   margin: 0;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   background: var(--page);
@@ -345,7 +347,7 @@ body {
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
-.app { min-height: 100vh; }
+.app { height: 100%; }
 
 /* ── Auth page ──────────────────────────────── */
 .auth-page {
@@ -616,6 +618,7 @@ button:focus-visible {
 
 /* ── Shell & Topbar ─────────────────────────── */
 .shell {
+  height: 100vh;
   height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
