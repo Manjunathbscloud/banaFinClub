@@ -3581,6 +3581,7 @@ document.addEventListener("click", async (event) => {
   if (tabButton) {
     state.activeTab = tabButton.dataset.tab;
     saveState();
+    history.pushState({ bfc: true, tab: state.activeTab }, "");
     render();
     return;
   }
@@ -3597,6 +3598,7 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "open-profile") {
     state.activeTab = "profile";
     saveState();
+    history.pushState({ bfc: true, tab: "profile" }, "");
     render();
     return;
   }
@@ -6038,4 +6040,31 @@ async function sendAiMessage() {
   }
 }
 
-initApp().then(() => { initPullToRefresh(); initRealtimeChat(); });
+initApp().then(() => {
+  initPullToRefresh();
+  initRealtimeChat();
+  // Stamp the initial history entry so the back button has a base state to land on
+  history.replaceState({ bfc: true, tab: state.activeTab }, "");
+});
+
+// Handle Android/browser back button
+window.addEventListener("popstate", (e) => {
+  // If any modal/panel is open, close it and re-push the current tab state
+  // so the back stack stays intact for the next press
+  const modal = document.querySelector(
+    "#rules-modal, #loans-modal, #photos-modal, #photo-lightbox, " +
+    "#deposit-year-modal, #loan-year-modal, #post-close-modal, .notif-panel-wrap"
+  );
+  if (modal) {
+    modal.remove();
+    document.body.style.overflow = "";
+    history.pushState({ bfc: true, tab: state.activeTab }, "");
+    return;
+  }
+  // No modal — navigate to the tab stored in the popped state
+  if (e.state?.bfc && e.state.tab) {
+    state.activeTab = e.state.tab;
+    saveState();
+    render();
+  }
+});
