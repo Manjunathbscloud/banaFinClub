@@ -2898,7 +2898,7 @@ function showLoanYearModal(yearKey) {
           <h4>Loan Book</h4>
           <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
         </div>
-        <div>
+        <div style="overflow-x:auto;">
           <table class="lm-tbl">
             <thead><tr>
               <th>Member · Due</th><th>Amount · /mo</th><th>Status</th>
@@ -3597,6 +3597,15 @@ document.addEventListener("click", async (event) => {
 
   const action = event.target.closest("[data-action]");
   if (!action) return;
+
+  // If the resolved action element is a modal overlay, only fire when the user
+  // clicked the dark background itself or an explicit ✕ close button —
+  // not when clicking search inputs, chips, or other content inside the sheet.
+  if (action.classList.contains("rules-modal-overlay")) {
+    const onBackground = action === event.target;
+    const onCloseBtn   = !!event.target.closest(".rules-modal-close");
+    if (!onBackground && !onCloseBtn) return;
+  }
 
   if (action.dataset.action === "open-profile") {
     state.activeTab = "profile";
