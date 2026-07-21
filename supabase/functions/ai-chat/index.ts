@@ -212,10 +212,10 @@ Deno.serve(async (req) => {
               .eq("profile_id", profileId)
               .eq("month", month)
               .maybeSingle();
-            if (error) { console.error("get_my_payment_status error:", error); result = { message: "Could not fetch payment status. Please try again." }; break; }
+            if (error) { console.error("get_my_payment_status error:", error); result = { error: "db_error", note: "Could not fetch payment status. Please try again." }; break; }
             result = data
               ? { month: data.month, paid: data.status === "paid", expectedAmount: data.expected_amount, paidAmount: data.paid_amount, recordedAt: data.created_at }
-              : { month, paid: false, message: `No payment record found for ${month}. You may not have paid yet.` };
+              : { month, paid: false, note: `No payment record found for ${month}. Payment has not been marked yet for this month.` };
             break;
           }
           case "get_my_loans": {
@@ -224,8 +224,8 @@ Deno.serve(async (req) => {
               .select("id, principal, loan_type, monthly_interest, interest_rate_monthly, tenure_months, emi_amount, emis_paid")
               .eq("member_name", profile.full_name)
               .eq("status", "active");
-            if (error) { console.error("get_my_loans error:", error); result = { message: "Could not fetch loan data. Please try again." }; break; }
-            if (!data || data.length === 0) { result = { message: "You have no active loans." }; break; }
+            if (error) { console.error("get_my_loans error:", error); result = { error: "db_error", note: "Could not fetch loan data. Please try again." }; break; }
+            if (!data || data.length === 0) { result = { loans: [], note: "You have no active loans." }; break; }
             result = data.map((l: any) => ({
               amount: l.principal,
               loanType: l.loan_type || "full",
@@ -247,8 +247,8 @@ Deno.serve(async (req) => {
               .eq("member_name", profile.full_name)
               .eq("status", "active")
               .eq("loan_type", "emi");
-            if (lErr) { console.error("get_my_emis loans error:", lErr); result = { message: "Could not fetch EMI data. Please try again." }; break; }
-            if (!loans?.length) { result = { message: "You have no active EMI loans." }; break; }
+            if (lErr) { console.error("get_my_emis loans error:", lErr); result = { error: "db_error", note: "Could not fetch EMI data. Please try again." }; break; }
+            if (!loans?.length) { result = { emis: [], note: "You have no active EMI loans." }; break; }
             result = loans.map((l: any) => {
               const paid = Number(l.emis_paid || 0);
               const total = Number(l.tenure_months || 0);
@@ -273,8 +273,8 @@ Deno.serve(async (req) => {
               .eq("profile_id", profileId)
               .order("month", { ascending: false })
               .limit(limit);
-            if (error) { console.error("get_my_statement error:", error); result = { message: "Could not fetch payment history. Please try again." }; break; }
-            result = data && data.length > 0 ? data : { message: "No payment history found." };
+            if (error) { console.error("get_my_statement error:", error); result = { error: "db_error", note: "Could not fetch payment history. Please try again." }; break; }
+            result = data && data.length > 0 ? data : { payments: [], note: "No payment history found." };
             break;
           }
           case "get_my_deposit_summary": {
@@ -282,10 +282,10 @@ Deno.serve(async (req) => {
               .from("deposit_summaries")
               .select("year, label, principal, interest, expenditure, balance")
               .order("year", { ascending: false });
-            if (error) { console.error("get_my_deposit_summary error:", error); result = { message: "Could not fetch deposit summary. Please try again." }; break; }
+            if (error) { console.error("get_my_deposit_summary error:", error); result = { error: "db_error", note: "Could not fetch deposit summary. Please try again." }; break; }
             result = data && data.length > 0
               ? { note: "Club-wide yearly financial summary", years: data }
-              : { message: "No deposit summary found." };
+              : { years: [], note: "No deposit summary found." };
             break;
           }
           case "get_club_settings": {
@@ -309,7 +309,7 @@ Deno.serve(async (req) => {
               .select("principal, loan_type, monthly_interest, interest_rate_monthly, tenure_months, emi_amount, emis_paid")
               .eq("member_name", profile.full_name)
               .eq("status", "active");
-            if (lErr) { console.error("get_my_total_monthly_due error:", lErr); result = { message: "Could not calculate monthly due. Please try again." }; break; }
+            if (lErr) { console.error("get_my_total_monthly_due error:", lErr); result = { error: "db_error", note: "Could not calculate monthly due. Please try again." }; break; }
 
             let totalLoanDue = 0;
             const loanBreakdown: any[] = [];
@@ -345,7 +345,7 @@ Deno.serve(async (req) => {
               db.from("profiles").select("id, full_name").eq("status", "active").neq("role", "admin"),
               db.from("monthly_payments").select("profile_id").eq("month", month).eq("status", "paid"),
             ]);
-            if (mErr) { console.error("get_unpaid_members error:", mErr); result = { message: "Could not fetch unpaid members. Please try again." }; break; }
+            if (mErr) { console.error("get_unpaid_members error:", mErr); result = { error: "db_error", note: "Could not fetch unpaid members. Please try again." }; break; }
             const paidIds = new Set((paid || []).map((p: any) => p.profile_id));
             const unpaid = (members || []).filter((m: any) => !paidIds.has(m.id));
             result = {
@@ -363,8 +363,8 @@ Deno.serve(async (req) => {
               .from("current_loans")
               .select("member_name, principal, loan_type, tenure_months, emi_amount, emis_paid")
               .eq("status", "active");
-            if (lErr) { console.error("get_all_loans error:", lErr); result = { message: "Could not fetch loan data. Please try again." }; break; }
-            if (!loans || loans.length === 0) { result = { message: "No active loans." }; break; }
+            if (lErr) { console.error("get_all_loans error:", lErr); result = { error: "db_error", note: "Could not fetch loan data. Please try again." }; break; }
+            if (!loans || loans.length === 0) { result = { loans: [], note: "No active loans." }; break; }
             result = loans.map((l: any) => ({
               member: l.member_name || "Unknown",
               amount: l.principal,
@@ -386,12 +386,12 @@ Deno.serve(async (req) => {
               .maybeSingle();
             if (stmtErr) {
               console.error("get_bank_balance error:", stmtErr);
-              result = { message: "Bank balance is not available right now." };
+              result = { error: "db_error", note: "Bank balance is not available right now." };
               break;
             }
             result = stmtRow
               ? { currentBalance: Number(stmtRow.balance), asOf: stmtRow.created_at }
-              : { message: "No statement entries found. The bank balance has not been recorded yet." };
+              : { currentBalance: null, note: "No statement entries found. The bank balance has not been recorded yet." };
             break;
           }
           case "get_member_summary": {
@@ -401,8 +401,8 @@ Deno.serve(async (req) => {
               .select("id, full_name")
               .ilike("full_name", `%${args.member_name}%`)
               .maybeSingle();
-            if (mErr) { console.error("get_member_summary error:", mErr); result = { message: "Could not fetch member data. Please try again." }; break; }
-            if (!member) { result = { message: `Member "${args.member_name}" not found.` }; break; }
+            if (mErr) { console.error("get_member_summary error:", mErr); result = { error: "db_error", note: "Could not fetch member data. Please try again." }; break; }
+            if (!member) { result = { found: false, note: `Member "${args.member_name}" not found.` }; break; }
             const [{ data: payment }, { data: loans }] = await Promise.all([
               db.from("monthly_payments").select("status, paid_amount").eq("profile_id", member.id).eq("month", currentMonth).maybeSingle(),
               db.from("current_loans").select("principal, loan_type, tenure_months, emis_paid").eq("member_name", member.full_name).eq("status", "active"),
@@ -449,7 +449,7 @@ Deno.serve(async (req) => {
               .select("full_name, phone, role, status")
               .eq("status", "active")
               .order("full_name");
-            if (error) { console.error("get_members_list error:", error); result = { message: "Could not fetch members list. Please try again." }; break; }
+            if (error) { console.error("get_members_list error:", error); result = { error: "db_error", note: "Could not fetch members list. Please try again." }; break; }
             result = (data || []).map((m: any) => ({
               name: m.full_name,
               phone: m.phone,
@@ -494,10 +494,10 @@ ${isAdmin ? `- Who hasn't paid? Defaulters? → get_unpaid_members
 RULES:
 1. Call a tool FIRST for every club question. Never skip this.
 2. Use ONLY the numbers the tool returns. Never add, modify, or guess.
-3. If a tool returns a "message" field, relay that message to the user — do NOT retry the tool.
-4. For general knowledge questions (finance, time zones, currencies, banking concepts, anything not specific to this club) → answer from your own knowledge. Do NOT say you cannot answer general questions.
+3. Tool results are data objects — NOT error responses. A "note" field is an informational comment; relay it naturally. An "error" field means the DB had trouble; tell the user to try again. A result with paid:false means the payment was not found — say so clearly.
+4. For general knowledge questions (finance, time zones, currencies, banking concepts) → answer from your own knowledge.
 5. NEVER output raw function/tool syntax like <function>...</function> or JSON tool calls as text.
-6. If data is unavailable, say so in plain English and stop — do NOT attempt to retry inline.
+6. If data is unavailable, say so plainly and stop — do NOT retry.
 
 FORMAT:
 - Amounts in Indian Rupees: ₹2,000 or ₹1,00,000
