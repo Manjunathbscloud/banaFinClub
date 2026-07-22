@@ -3800,6 +3800,37 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "send-meeting-email") {
+    const yr = Number(action.dataset.year);
+    const closedYearNum = yr - 2020;
+    const modal = document.getElementById("post-close-modal");
+    const dateVal = document.getElementById("pc-date")?.value || "";
+    const venueVal = (document.getElementById("pc-venue")?.value || "").trim();
+    const expVal = Number(document.getElementById("pc-expenditure")?.value || 0);
+    const notesVal = (document.getElementById("pc-notes")?.value || "").trim();
+    const decisionsRaw = document.getElementById("pc-decisions")?.value || "";
+    const decisions = decisionsRaw.split("\n").map(d => d.trim()).filter(Boolean);
+    const finPrincipal = Number(modal?.dataset.finPrincipal || 0);
+    const finInterest  = Number(modal?.dataset.finInterest  || 0);
+    const finBalance   = Number(modal?.dataset.finBalance   || 0);
+    const finExit      = Number(modal?.dataset.finExit      || 0);
+    const finExp       = Number(modal?.dataset.finExp       || 0);
+    const yearLabel    = modal?.dataset.yearLabel || `Year ${closedYearNum}`;
+    action.disabled = true;
+    action.textContent = "Saving & Sending…";
+    modal?.remove();
+    document.body.style.overflow = "";
+    await savePostCloseData(closedYearNum, { date: dateVal, venue: venueVal, expenditure: expVal, notes: notesVal, decisions });
+    await sendMeetingSummaryEmail({
+      yearNum: closedYearNum, yearLabel,
+      date: dateVal, venue: venueVal, notes: notesVal, decisions,
+      principal: finPrincipal, interest: finInterest,
+      expenditure: finExp + expVal, exitPayouts: finExit,
+      balance: finBalance - expVal,
+    });
+    return;
+  }
+
   if (action.dataset.action === "open-photo") {
     if (action.dataset.gallery) {
       openPhotoLightbox(JSON.parse(action.dataset.gallery), Number(action.dataset.index || 0));
@@ -4971,19 +5002,56 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
   showToast("Photo removed.");
 }
 
-function showPostCloseDialog(closedYearNum) {
+async function sendMeetingSummaryEmail(data) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  try {
+    showToast("Sending meeting summary to all members…");
+    const { error } = await supabaseClient.functions.invoke("send-meeting-summary", { body: data });
+    if (error) throw error;
+    showToast("✓ Meeting summary sent to all members.");
+  } catch (e) {
+    console.error("send-meeting-summary error:", e);
+    showToast("Email send failed — check edge function logs.");
+  }
+}
+
+function showPostCloseDialog(closedYearNum, fin = {}) {
   const existing = document.getElementById("post-close-modal");
   if (existing) existing.remove();
   const yearDbYear = 2020 + closedYearNum;
   const existingPhotos = state.meetingRecords.find(r => r.year === yearDbYear)?.photos || [];
+  const finPrincipal = Math.round(fin.principal || 0);
+  const finInterest  = Math.round(fin.interest  || 0);
+  const finBalance   = Math.round(fin.balance   || 0);
+  const finExit      = Math.round(fin.exitPayouts || 0);
+  const finExp       = Math.round(fin.expenditure || 0);
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const yearLabel = ORDINALS[closedYearNum - 1] || `Year ${closedYearNum}`;
   const html = `
-    <div id="post-close-modal" class="rules-modal-overlay" data-action="close-post-close">
+    <div id="post-close-modal" class="rules-modal-overlay" data-action="close-post-close"
+         data-fin-principal="${finPrincipal}" data-fin-interest="${finInterest}"
+         data-fin-balance="${finBalance}" data-fin-exit="${finExit}" data-fin-exp="${finExp}"
+         data-year-num="${closedYearNum}" data-year-label="${yearLabel}">
       <div class="rules-modal-sheet">
         <div class="rules-modal-header">
-          <div><h3>🎉 Year ${closedYearNum} Closed</h3><p>Record your annual meeting details</p></div>
+          <div><h3>🎉 Year ${closedYearNum} Closed!</h3><p>Record annual meeting details &amp; notify members</p></div>
           <button class="rules-modal-close" data-action="close-post-close">✕</button>
         </div>
         <div class="rules-modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+            <div style="background:#EFF6FF;border-radius:10px;padding:10px 8px;text-align:center;">
+              <div style="font-size:9px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Principal</div>
+              <div style="font-size:12px;font-weight:800;color:#1d4ed8;">${money(finPrincipal)}</div>
+            </div>
+            <div style="background:#F0FDF4;border-radius:10px;padding:10px 8px;text-align:center;">
+              <div style="font-size:9px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Interest</div>
+              <div style="font-size:12px;font-weight:800;color:#15803d;">${money(finInterest)}</div>
+            </div>
+            <div style="background:#FFF7ED;border-radius:10px;padding:10px 8px;text-align:center;">
+              <div style="font-size:9px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Balance</div>
+              <div style="font-size:12px;font-weight:800;color:#c2410c;">${money(finBalance)}</div>
+            </div>
+          </div>
           <div class="meeting-editor-row" style="margin-bottom:12px;">
             <label>Meeting Date</label>
             <input type="date" id="pc-date" />
@@ -5013,9 +5081,12 @@ function showPostCloseDialog(closedYearNum) {
               ${existingPhotos.length > 0 ? `${existingPhotos.length} photo${existingPhotos.length !== 1 ? "s" : ""} uploaded` : ""}
             </div>
           </div>
-          <div style="display:flex;gap:10px;">
-            <button class="primary" style="flex:1;" data-action="save-post-close" data-year="${yearDbYear}">Save &amp; Finish</button>
-            <button class="secondary" data-action="skip-post-close">Skip</button>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="primary" style="width:100%;" data-action="send-meeting-email" data-year="${yearDbYear}">📧 Save &amp; Send Summary to All Members</button>
+            <div style="display:flex;gap:8px;">
+              <button class="secondary" style="flex:1;" data-action="save-post-close" data-year="${yearDbYear}">Save Only</button>
+              <button class="secondary" data-action="skip-post-close" style="padding:10px 14px;">Skip</button>
+            </div>
           </div>
         </div>
       </div>
@@ -5210,8 +5281,15 @@ async function closeCurrentYear() {
 
   await addLiveAudit(`Year ${activeYearNum} closed. Final balance: ${money(Math.round(finalBalance))}. ${activeLoans.length} loans carried forward.`, "year_closed");
   await loadLiveState();
-  showToast(`Year ${activeYearNum} closed successfully. Go to Meetings tab to add meeting details.`);
+  showToast(`Year ${activeYearNum} closed. Add meeting details below.`);
   render();
+  showPostCloseDialog(activeYearNum, {
+    principal: finalPrincipal,
+    interest: finalInterest,
+    expenditure: finalExpenditure,
+    exitPayouts: finalExitPayouts,
+    balance: finalBalance,
+  });
 }
 
 async function startNewYear(data) {
