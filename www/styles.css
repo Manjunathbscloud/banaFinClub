@@ -2761,3 +2761,27 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 
 .photo-delete-btn:hover { background: rgba(220,38,38,0.85); }
 
+/* Sign-off banner on member home */
+.signoff-banner {
+  margin: 0 16px 12px;
+  background: #fef3c7;
+  border: 1.5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  gap: 10px;
+}
+.signoff-banner.signoff-done {
+  background: #f0fdf4;
+  border-color: #86efac;
+  cursor: default;
+}
+.signoff-banner-body { display: flex; align-items: center; gap: 10px; }
+.signoff-banner-icon { font-size: 20px; flex-shrink: 0; }
+.signoff-banner-body strong { font-size: 13px; color: var(--ink); display: block; margin-bottom: 2px; }
+.signoff-banner-body p { font-size: 12px; color: var(--muted); margin: 0; }
+.signoff-banner-chevron { font-size: 20px; color: var(--muted); flex-shrink: 0; }
+
