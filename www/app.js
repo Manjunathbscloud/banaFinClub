@@ -2854,8 +2854,8 @@ function showLoanYearModal(yearKey) {
         ? `<span class="badge warn" style="font-size:10px;">Due</span>`
         : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
 
-      // Non-admin member action (extend) shown inline under status badge to keep 3-col layout
-      const memberActionInline = !isAdmin() && actionCell
+      // Always 3 columns — action goes inline below the status badge for everyone
+      const actionInline = actionCell
         ? `<div style="margin-top:4px;">${actionCell}</div>` : "";
 
       const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
@@ -2864,12 +2864,11 @@ function showLoanYearModal(yearKey) {
           <strong style="font-size:13px;">${escapeHtml(memberName)}</strong>
           <br><small style="color:#9ca3af;font-size:10px;">Due: ${fmtMonthYear(loanRenewalDate(loan))}</small>
         </td>
-        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">
+        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;white-space:nowrap;">
           ${money(loan.amount)}
           ${intPerMo > 0 ? `<br><small style="color:#9ca3af;font-size:10px;font-weight:400;">${money(intPerMo)}/mo</small>` : ""}
         </td>
-        <td>${statusDisplay}${memberActionInline}</td>
-        ${isAdmin() ? `<td>${actionCell}</td>` : ""}
+        <td>${statusDisplay}${actionInline}</td>
       </tr>`;
     }).join("") || `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
 
@@ -2907,14 +2906,13 @@ function showLoanYearModal(yearKey) {
         <div style="overflow-x:auto;">
           <table class="lm-tbl">
             <thead><tr>
-              <th>Member · Due</th><th>Amount · /mo</th><th>Status</th>
-              ${isAdmin() ? "<th>Action</th>" : ""}
+              <th>Member · Due</th><th style="white-space:nowrap;">Amount · /mo</th><th>Status</th>
             </tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot><tr>
               <td style="font-weight:600;">Yr ${_activeNumT} Interest</td>
               <td style="color:#059669;font-weight:700;">${money(_totalYrInt)}</td>
-              <td colspan="${isAdmin() ? 2 : 1}"></td>
+              <td></td>
             </tr></tfoot>
           </table>
         </div>
