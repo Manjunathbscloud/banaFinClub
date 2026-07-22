@@ -3495,12 +3495,15 @@ function renderAdmin() {
             ${!allReady ? `<p style="font-size:12px;color:#b45309;margin-top:6px;">⚠️ Resolve the above items before closing the year.</p>` : `<p style="font-size:12px;color:#16a34a;margin-top:6px;">✓ All checks passed — ready to close Year ${activeYearNum}.</p>`}
           </div>
           <div style="margin-bottom:12px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${signoffEnabled ? "10px" : "0"};">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${signoffEnabled ? "10px" : "0"};">
               <div>
-                <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Member Sign-off</p>
-                <p style="font-size:12px;color:var(--muted);margin:0;">${signoffEnabled ? `${ackedCount} of ${totalMembers} members confirmed` : "Enable to request confirmation from all members"}</p>
+                <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Request Member Sign-off</p>
+                <p style="font-size:12px;color:var(--muted);margin:0;">${signoffEnabled ? `${ackedCount} of ${totalMembers} members confirmed` : "Ask all members to confirm their records"}</p>
               </div>
-              <button class="${signoffEnabled ? "danger" : "primary"}" data-action="toggle-signoff-request" data-enable="${signoffEnabled ? "false" : "true"}" style="font-size:12px;padding:6px 12px;min-height:0;white-space:nowrap;">${signoffEnabled ? "Disable" : "Enable Request"}</button>
+              <label class="toggle-switch" style="margin-left:12px;">
+                <input type="checkbox" ${signoffEnabled ? "checked" : ""} data-action="toggle-signoff-request" data-enable="${signoffEnabled ? "false" : "true"}">
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+              </label>
             </div>
             ${signoffEnabled ? `<div style="background:var(--panel-alt,#f8fafc);border-radius:8px;padding:8px 12px;max-height:150px;overflow-y:auto;">
               ${activeMembers().map(m => {
@@ -3881,7 +3884,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "toggle-signoff-request") {
-    const enable = action.dataset.enable === "true";
+    const enable = action.checked !== undefined ? action.checked : action.dataset.enable === "true";
     action.disabled = true;
     await toggleSignoffRequest(enable);
     return;
