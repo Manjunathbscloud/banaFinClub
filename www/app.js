@@ -239,6 +239,7 @@ const initialState = {
   statementRows: [],
   rules: [],
   meetingRecords: [],
+  meetingAcknowledgements: [],
   meetings: [
     {
       id: "meet5", year: 5, label: "5th Annual Meeting (2025)",
@@ -578,7 +579,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -594,6 +595,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("statements").select("*").order("created_at", { ascending: false }).limit(200)),
     liveOptionalList(supabaseClient.from("loan_emis").select("*").order("loan_id").order("emi_number")),
     liveOptionalList(supabaseClient.from("meeting_records").select("*").order("year", { ascending: true })),
+    liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,acknowledged_at")),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -635,6 +637,9 @@ async function loadLiveState() {
       date: r.date || "", venue: r.venue || "", notes: r.notes || "",
       decisions: Array.isArray(r.decisions) ? r.decisions : [],
       photos: Array.isArray(r.photos) ? r.photos : [],
+    })),
+    meetingAcknowledgements: acknowledgementsData.map(a => ({
+      id: a.id, profileId: a.profile_id, year: a.year, acknowledgedAt: a.acknowledged_at,
     })),
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
@@ -1465,6 +1470,13 @@ function renderDashboard() {
       : { icon: "👤", title: "MY ACCOUNT", sub: "Deposits & loan status", tab: "members" },
   ].filter(Boolean);
 
+  const _signoffEnabled = state.settings.signoffEnabled === true;
+  const _activeYearNum = state.settings.activeYearNumber || 6;
+  const _activeYearDbYear = 2020 + _activeYearNum;
+  const _yearClosed = state.settings.yearClosed === true;
+  const _hasAcked = state.meetingAcknowledgements.some(a => a.profileId === currentProfileId() && a.year === _activeYearDbYear);
+  const _showBanner = !isAdmin() && _signoffEnabled && !_yearClosed;
+
   return `
     <section class="dash-hero">
       <div class="dash-greeting">
@@ -1472,6 +1484,17 @@ function renderDashboard() {
         <h2>${escapeHtml(user.name || "Member")}</h2>
       </div>
     </section>
+
+    ${_showBanner ? `<div class="signoff-banner${_hasAcked ? " signoff-done" : ""}" ${!_hasAcked ? 'data-action="show-signoff-modal"' : ""}>
+      <div class="signoff-banner-body">
+        <span class="signoff-banner-icon">${_hasAcked ? "✅" : "⚠️"}</span>
+        <div>
+          <strong>${_hasAcked ? "Records confirmed" : "Action required"}</strong>
+          <p>${_hasAcked ? `You confirmed your Year ${_activeYearNum} records` : `Please confirm your Year ${_activeYearNum} records are correct`}</p>
+        </div>
+      </div>
+      ${!_hasAcked ? '<span class="signoff-banner-chevron">›</span>' : ""}
+    </div>` : ""}
 
     <section class="dash-tiles">
       ${tiles.map(tile => `
@@ -3417,6 +3440,13 @@ function renderAdmin() {
 
         const activeYearDbYear = 2020 + activeYearNum;
         const currentExpenditure = Number(state.deposits.find(d => d.year === activeYearDbYear)?.expenditure || 0);
+        const signoffEnabled = state.settings.signoffEnabled === true;
+        const ackedSet = new Set(
+          state.meetingAcknowledgements.filter(a => a.year === activeYearDbYear).map(a => a.profileId)
+        );
+        const ackedCount = ackedSet.size;
+        const totalMembers = activeMembers().length;
+        const allAcknowledged = !signoffEnabled || activeMembers().every(m => ackedSet.has(m.id));
 
         // --- Year close readiness checks ---
         const activeYearStart = activeYearCutoffMonth();
@@ -3465,6 +3495,24 @@ function renderAdmin() {
             ${!allReady ? `<p style="font-size:12px;color:#b45309;margin-top:6px;">⚠️ Resolve the above items before closing the year.</p>` : `<p style="font-size:12px;color:#16a34a;margin-top:6px;">✓ All checks passed — ready to close Year ${activeYearNum}.</p>`}
           </div>
           <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${signoffEnabled ? "10px" : "0"};">
+              <div>
+                <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Member Sign-off</p>
+                <p style="font-size:12px;color:var(--muted);margin:0;">${signoffEnabled ? `${ackedCount} of ${totalMembers} members confirmed` : "Enable to request confirmation from all members"}</p>
+              </div>
+              <button class="${signoffEnabled ? "danger" : "primary"}" data-action="toggle-signoff-request" data-enable="${signoffEnabled ? "false" : "true"}" style="font-size:12px;padding:6px 12px;min-height:0;white-space:nowrap;">${signoffEnabled ? "Disable" : "Enable Request"}</button>
+            </div>
+            ${signoffEnabled ? `<div style="background:var(--panel-alt,#f8fafc);border-radius:8px;padding:8px 12px;max-height:150px;overflow-y:auto;">
+              ${activeMembers().map(m => {
+                const acked = ackedSet.has(m.id);
+                return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line);">
+                  <span>${escapeHtml(m.name)}</span>
+                  <span style="color:${acked ? "#16a34a" : "#b45309"};font-weight:600;">${acked ? "✓ Confirmed" : "⏳ Pending"}</span>
+                </div>`;
+              }).join("")}
+            </div>` : ""}
+          </div>
+          <div style="margin-bottom:12px;">
             <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Annual Meeting Expense</p>
             <div style="display:flex;gap:8px;align-items:center;">
               <input type="number" id="meeting-expense-input" placeholder="e.g. 20000" min="0"
@@ -3474,9 +3522,10 @@ function renderAdmin() {
             </div>
             ${currentExpenditure > 0 ? `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Saved: ${money(currentExpenditure)}</p>` : `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Add after the annual meeting is done.</p>`}
           </div>
-          <button class="danger" data-action="close-current-year" type="button" style="width:100%;">
+          <button class="danger" data-action="close-current-year" type="button" style="width:100%;" ${!allReady || !allAcknowledged ? "disabled" : ""}>
             Close Year ${activeYearNum} &amp; Finalize Records
-          </button>`;
+          </button>
+          ${signoffEnabled && !allAcknowledged ? `<p style="font-size:12px;color:#b45309;margin-top:6px;text-align:center;">⏳ Waiting for ${totalMembers - ackedCount} more member${totalMembers - ackedCount !== 1 ? "s" : ""} to confirm.</p>` : ""}`;
 
         const closedBody = `
           <div class="alert" style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#15803d;">
@@ -3828,6 +3877,32 @@ document.addEventListener("click", async (event) => {
       expenditure: finExp + expVal, exitPayouts: finExit,
       balance: finBalance - expVal,
     });
+    return;
+  }
+
+  if (action.dataset.action === "toggle-signoff-request") {
+    const enable = action.dataset.enable === "true";
+    action.disabled = true;
+    await toggleSignoffRequest(enable);
+    return;
+  }
+
+  if (action.dataset.action === "show-signoff-modal") {
+    showSignoffModal();
+    return;
+  }
+
+  if (action.dataset.action === "close-signoff-modal") {
+    if (action.classList.contains("rules-modal-overlay") && event.target !== action) return;
+    document.getElementById("signoff-modal")?.remove();
+    document.body.style.overflow = "";
+    return;
+  }
+
+  if (action.dataset.action === "acknowledge-records") {
+    action.disabled = true;
+    action.textContent = "Confirming…";
+    await acknowledgeMeetingRecords();
     return;
   }
 
@@ -4619,6 +4694,7 @@ async function clearCurrentLoan(id) {
       closed_at: closedAt,
     }).eq("id", id));
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
+    await _silentResetAcks();
     await loadLiveState();
     await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, id);
     showToast("Loan marked clear.");
@@ -4644,6 +4720,7 @@ async function deleteCurrentLoan(id) {
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("current_loans").delete().eq("id", id));
     await addLiveAudit(`Deleted current loan for ${loanMemberName(loan)}.`, "current_loan_deleted");
+    await _silentResetAcks();
     await loadLiveState();
     showToast("Current loan deleted.");
     render();
@@ -4796,6 +4873,7 @@ async function approveLoan(id) {
         : `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`,
       id
     );
+    await _silentResetAcks();
     await loadLiveState();
     await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, id);
     showToast("Loan approved.");
@@ -5000,6 +5078,94 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
     .eq("year", yearDbYear));
   await loadLiveState();
   showToast("Photo removed.");
+}
+
+async function toggleSignoffRequest(enable) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const currentInfo = {
+    activeYearNumber: state.settings.activeYearNumber,
+    activeYearStart: state.settings.activeYearStart,
+    activeYearLabel: state.settings.activeYearLabel,
+    activeYearExits: state.settings.activeYearExits,
+    yearClosed: state.settings.yearClosed,
+    signoffEnabled: enable,
+  };
+  const { error } = await liveQuery(supabaseClient.from("settings")
+    .update({ value: currentInfo })
+    .eq("id", "active_year_info"));
+  if (error) { showToast("Failed to update sign-off setting."); return; }
+  if (!enable) {
+    await _silentResetAcks();
+  } else {
+    await notifyAllActiveMembers(
+      "Record Sign-off Requested",
+      `Admin has requested you to confirm your Year ${state.settings.activeYearNumber || ""} records are correct. Please open the app.`,
+      "signoff_request"
+    );
+    showToast("Sign-off request enabled — members notified.");
+  }
+  await loadLiveState();
+  render();
+}
+
+async function acknowledgeMeetingRecords() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+  const { error } = await liveQuery(supabaseClient.from("meeting_acknowledgements")
+    .upsert({ profile_id: currentProfileId(), year: yearDbYear, acknowledged_at: new Date().toISOString() },
+      { onConflict: "profile_id,year" }));
+  if (error) { showToast("Could not save confirmation. Try again."); return; }
+  document.getElementById("signoff-modal")?.remove();
+  document.body.style.overflow = "";
+  await loadLiveState();
+  render();
+  showToast("✓ Records confirmed.");
+}
+
+async function _silentResetAcks() {
+  const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+  const hasAcks = state.meetingAcknowledgements.some(a => a.year === yearDbYear);
+  if (!hasAcks) return;
+  await liveQuery(supabaseClient.from("meeting_acknowledgements").delete().eq("year", yearDbYear));
+}
+
+function showSignoffModal() {
+  if (document.getElementById("signoff-modal")) return;
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+  const alreadyAcked = state.meetingAcknowledgements.some(a => a.profileId === currentProfileId() && a.year === yearDbYear);
+  const modal = document.createElement("div");
+  modal.id = "signoff-modal";
+  modal.className = "rules-modal-overlay";
+  modal.dataset.action = "close-signoff-modal";
+  modal.innerHTML = `
+    <div class="rules-modal" style="max-width:340px;" onclick="event.stopPropagation()">
+      <div class="rules-modal-header">
+        <span style="font-size:22px;">📋</span>
+        <div>
+          <div class="rules-modal-title">Year ${yearNum} Record Confirmation</div>
+          <div class="rules-modal-subtitle">Review and confirm your records</div>
+        </div>
+      </div>
+      <div style="padding:0 20px 20px;">
+        ${alreadyAcked ? `
+          <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px;">✅</div>
+            <div style="font-size:14px;font-weight:600;color:#15803d;">Records already confirmed</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:4px;">You have confirmed your Year ${yearNum} records are correct.</div>
+          </div>
+          <button class="btn-secondary" style="width:100%;margin-top:16px;" data-action="close-signoff-modal">Close</button>
+        ` : `
+          <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 20px;">
+            Please review your loan details, payment history, and current balance in the app before confirming. By tapping the button below, you confirm that your Year ${yearNum} records shown in the app are correct.
+          </p>
+          <button class="btn-primary" style="width:100%;" data-action="acknowledge-records">I confirm my records are correct</button>
+          <button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="close-signoff-modal">Review first</button>
+        `}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
 }
 
 async function sendMeetingSummaryEmail(data) {
@@ -5463,6 +5629,7 @@ async function markPaymentPaid(memberId) {
       status: "paid",
       source: "manual",
     }, { onConflict: "profile_id,month" }));
+    await _silentResetAcks();
     await loadLiveState();
     // Auto-mark the current pending EMI for all EMI loans of this member
     const emiLoans = state.loans.filter(l =>

@@ -92,7 +92,9 @@ function buildLoanSection(loans: LoanRow[]): string {
 function buildEmailHtml(
   member: { full_name: string },
   loans: LoanRow[],
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  ackedCount: number,
+  totalCount: number
 ): string {
   const yearNum    = Number(data.yearNum   || 0);
   const yearLabel  = String(data.yearLabel || `Year ${yearNum}`);
@@ -196,6 +198,14 @@ function buildEmailHtml(
       </div>
 
       ${notesHtml}
+
+      ${ackedCount > 0 ? `
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px 18px;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">✅ Member Acknowledgement</div>
+        <div style="font-size:13px;color:#166534;line-height:1.6;">
+          All <strong>${ackedCount} of ${totalCount} members</strong> confirmed their records are correct before the year was officially closed.
+        </div>
+      </div>` : ""}
     </div>
 
     <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 32px;">
@@ -238,6 +248,14 @@ serve(async (req) => {
       loansByMember[loan.profile_id].push(loan);
     }
 
+    const yearDbYear = 2020 + Number(data.yearNum || 0);
+    const { data: acks } = await supabase
+      .from("meeting_acknowledgements")
+      .select("profile_id")
+      .eq("year", yearDbYear);
+    const ackedCount = acks?.length || 0;
+    const totalCount = members?.length || 0;
+
     const client = new SMTPClient({
       connection: {
         hostname: "smtp.gmail.com",
@@ -262,7 +280,7 @@ serve(async (req) => {
           to: member.email,
           subject,
           content: "auto",
-          html: buildEmailHtml(member, memberLoans, data),
+          html: buildEmailHtml(member, memberLoans, data, ackedCount, totalCount),
         });
         sent++;
       } catch (mailErr) {
