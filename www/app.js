@@ -2813,7 +2813,11 @@ function showLoanYearModal(yearKey) {
       document.querySelectorAll("#loan-year-modal .lm-row").forEach(row => {
         const matchSearch = !term || (row.dataset.member || "").includes(term);
         const matchFilter = filter === "all" || (filter === "due" && row.dataset.status === "due");
-        row.style.display = matchSearch && matchFilter ? "" : "none";
+        if (matchSearch && matchFilter) {
+          row.style.removeProperty("display");
+        } else {
+          row.style.setProperty("display", "none", "important");
+        }
       });
     };
     window.bfcSetLoanChip = function(chip, filter) {
@@ -2850,9 +2854,11 @@ function showLoanYearModal(yearKey) {
         ? `<span class="badge warn" style="font-size:10px;">Due</span>`
         : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
 
-      const showAction = isAdmin() || (dueThisMonth && myLoan);
+      // Non-admin member action (extend) shown inline under status badge to keep 3-col layout
+      const memberActionInline = !isAdmin() && actionCell
+        ? `<div style="margin-top:4px;">${actionCell}</div>` : "";
+
       const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
-      const colCount = showAction ? 4 : 3;
       return `<tr class="lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
         <td>
           <strong style="font-size:13px;">${escapeHtml(memberName)}</strong>
@@ -2862,10 +2868,10 @@ function showLoanYearModal(yearKey) {
           ${money(loan.amount)}
           ${intPerMo > 0 ? `<br><small style="color:#9ca3af;font-size:10px;font-weight:400;">${money(intPerMo)}/mo</small>` : ""}
         </td>
-        <td>${statusDisplay}</td>
-        ${showAction ? `<td>${actionCell}</td>` : ""}
+        <td>${statusDisplay}${memberActionInline}</td>
+        ${isAdmin() ? `<td>${actionCell}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
+    }).join("") || `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
 
     bodyHtml = `
       <div class="lm-stats">
