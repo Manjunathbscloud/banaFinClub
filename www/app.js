@@ -2899,10 +2899,6 @@ function showLoanYearModal(yearKey) {
         ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
       </div>
       <div class="lm-table-card">
-        <div class="lm-table-head">
-          <h4>Loan Book</h4>
-          <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
-        </div>
         <div class="loan-grid ${gridClass}">
           <div class="loan-grid-head">
             <span>Member</span>
@@ -3561,7 +3557,8 @@ function statusBadge(status) {
   const type = normalized.includes("paid") || normalized.includes("active") || normalized.includes("approved") || normalized.includes("clear") ? "good" :
     normalized.includes("pending") || normalized.includes("interest_free") || normalized.includes("onboarding") ? "warn" :
     normalized.includes("reject") ? "bad" : "info";
-  return `<span class="badge ${type}">${escapeHtml(status || "-")}</span>`;
+  const label = String(status || "-").replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return `<span class="badge ${type}">${escapeHtml(label)}</span>`;
 }
 
 function statusText(status) {

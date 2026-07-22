@@ -1498,6 +1498,9 @@ tr:hover td { background: rgba(249,115,22,0.025); }
   display: grid;
   background: var(--page, #F8F9FF);
   border-bottom: 1px solid var(--line, #E5E7EB);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .loan-grid-head > span {
   padding: 7px 10px;
