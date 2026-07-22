@@ -673,6 +673,28 @@ function money(value) {
   return prefix + Math.abs(number).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
+function moneyCompact(value) {
+  const n = Math.abs(Number(value || 0));
+  const sign = Number(value || 0) < 0 ? "-" : "";
+  if (n >= 100000) {
+    const l = n / 100000;
+    return sign + "₹" + (Number.isInteger(l) ? l : parseFloat(l.toFixed(1))) + "L";
+  }
+  if (n >= 1000) {
+    const k = n / 1000;
+    return sign + "₹" + (Number.isInteger(k) ? k : parseFloat(k.toFixed(1))) + "K";
+  }
+  return sign + "₹" + n;
+}
+
+function fmtMonthYearShort(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return String(dateStr).slice(0, 7);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return months[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+}
+
 function parseRupeeAmount(value) {
   const normalized = String(value || "").replace(/,/g, "").trim();
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return NaN;
@@ -2813,7 +2835,11 @@ function showLoanYearModal(yearKey) {
       document.querySelectorAll("#loan-year-modal .lm-row").forEach(row => {
         const matchSearch = !term || (row.dataset.member || "").includes(term);
         const matchFilter = filter === "all" || (filter === "due" && row.dataset.status === "due");
-        row.style.display = matchSearch && matchFilter ? "" : "none";
+        if (matchSearch && matchFilter) {
+          row.style.removeProperty("display");
+        } else {
+          row.style.setProperty("display", "none", "important");
+        }
       });
     };
     window.bfcSetLoanChip = function(chip, filter) {
@@ -2823,49 +2849,51 @@ function showLoanYearModal(yearKey) {
       window.bfcFilterLoanTable();
     };
 
-    const tableRows = loans.map(loan => {
+    const gridClass = isAdmin() ? "lg-admin" : "lg-member";
+    const gridRows = loans.map(loan => {
       const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
       const myLoan = loanBelongsToMember(loan, user);
       const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
       const rowStatus = dueThisMonth ? "due" : loan.status;
       const memberName = loanMemberName(loan);
+      const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
 
-      let actionCell = "";
+      const statusBadgeHtml = dueThisMonth
+        ? `<span class="badge warn" style="font-size:9px;">Due</span>`
+        : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
+
+      let adminAction = "";
       if (isAdmin()) {
-        actionCell = `<div style="display:flex;gap:4px;flex-wrap:wrap;">
+        adminAction = `<div class="loan-grid-cell" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
           ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Clear</button>` : ""}
           <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Del</button>
         </div>`;
       } else if (dueThisMonth && myLoan) {
+        let extHtml = "";
         if (!extInfo || extInfo.status === "rejected") {
-          actionCell = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Extend</button>`;
+          extHtml = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Extend</button>`;
         } else if (extInfo.status === "pending") {
-          actionCell = `<span style="font-size:10px;color:#b45309;">⏳ Awaiting</span>`;
+          extHtml = `<span style="font-size:10px;color:#b45309;">⏳ Awaiting</span>`;
         } else if (extInfo.status === "approved") {
-          actionCell = `<span style="font-size:10px;color:#16a34a;">✓ Extended</span>`;
+          extHtml = `<span style="font-size:10px;color:#16a34a;">✓ Extended</span>`;
         }
+        if (extHtml) adminAction = `<div class="loan-grid-cell">${extHtml}</div>`;
       }
 
-      const statusDisplay = dueThisMonth
-        ? `<span class="badge warn" style="font-size:10px;">Due</span>`
-        : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
-
-      const showAction = isAdmin() || (dueThisMonth && myLoan);
-      const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
-      const colCount = showAction ? 4 : 3;
-      return `<tr class="lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
-        <td>
-          <strong style="font-size:13px;">${escapeHtml(memberName)}</strong>
-          <br><small style="color:#9ca3af;font-size:10px;">Due: ${fmtMonthYear(loanRenewalDate(loan))}</small>
-        </td>
-        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">
-          ${money(loan.amount)}
-          ${intPerMo > 0 ? `<br><small style="color:#9ca3af;font-size:10px;font-weight:400;">${money(intPerMo)}/mo</small>` : ""}
-        </td>
-        <td>${statusDisplay}</td>
-        ${showAction ? `<td>${actionCell}</td>` : ""}
-      </tr>`;
-    }).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">No active loans.</td></tr>`;
+      return `<div class="loan-grid-row lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
+        <div class="loan-grid-cell">
+          <strong style="font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(memberName)}</strong>
+          <span style="margin-top:2px;display:block;">${statusBadgeHtml}</span>
+        </div>
+        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loan.from)}</div>
+        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loanRenewalDate(loan))}</div>
+        <div class="loan-grid-cell">
+          <span style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;font-size:13px;">${moneyCompact(loan.amount)}</span>
+          ${intPerMo > 0 ? `<small style="display:block;color:var(--muted);font-size:10px;opacity:0.65;font-variant-numeric:tabular-nums;margin-top:1px;">${moneyCompact(intPerMo)}/mo</small>` : ""}
+        </div>
+        ${adminAction}
+      </div>`;
+    }).join("") || `<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No active loans.</div>`;
 
     bodyHtml = `
       <div class="lm-stats">
@@ -2894,23 +2922,19 @@ function showLoanYearModal(yearKey) {
         ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
       </div>
       <div class="lm-table-card">
-        <div class="lm-table-head">
-          <h4>Loan Book</h4>
-          <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
+        <div class="loan-grid ${gridClass}">
+          <div class="loan-grid-head">
+            <span>Member</span>
+            <span>From</span>
+            <span>Due</span>
+            <span>Amount</span>
+            ${isAdmin() ? "<span>Action</span>" : ""}
+          </div>
+          ${gridRows}
         </div>
-        <div style="overflow-x:auto;">
-          <table class="lm-tbl">
-            <thead><tr>
-              <th>Member · Due</th><th>Amount · /mo</th><th>Status</th>
-              ${isAdmin() ? "<th>Action</th>" : ""}
-            </tr></thead>
-            <tbody>${tableRows}</tbody>
-            <tfoot><tr>
-              <td style="font-weight:600;">Yr ${_activeNumT} Interest</td>
-              <td style="color:#059669;font-weight:700;">${money(_totalYrInt)}</td>
-              <td colspan="${isAdmin() ? 2 : 1}"></td>
-            </tr></tfoot>
-          </table>
+        <div class="loan-grid-footer">
+          <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Interest</span>
+          <span style="font-weight:700;color:#059669;">${money(_totalYrInt)}</span>
         </div>
       </div>`;
   } else if (yearKey.startsWith("lh_")) {
@@ -3557,7 +3581,8 @@ function statusBadge(status) {
   const type = normalized.includes("paid") || normalized.includes("active") || normalized.includes("approved") || normalized.includes("clear") ? "good" :
     normalized.includes("pending") || normalized.includes("interest_free") || normalized.includes("onboarding") ? "warn" :
     normalized.includes("reject") ? "bad" : "info";
-  return `<span class="badge ${type}">${escapeHtml(status || "-")}</span>`;
+  const label = String(status || "-").replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return `<span class="badge ${type}">${escapeHtml(label)}</span>`;
 }
 
 function statusText(status) {
