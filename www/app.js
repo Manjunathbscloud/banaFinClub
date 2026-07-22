@@ -673,6 +673,28 @@ function money(value) {
   return prefix + Math.abs(number).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
+function moneyCompact(value) {
+  const n = Math.abs(Number(value || 0));
+  const sign = Number(value || 0) < 0 ? "-" : "";
+  if (n >= 100000) {
+    const l = n / 100000;
+    return sign + "₹" + (Number.isInteger(l) ? l : parseFloat(l.toFixed(1))) + "L";
+  }
+  if (n >= 1000) {
+    const k = n / 1000;
+    return sign + "₹" + (Number.isInteger(k) ? k : parseFloat(k.toFixed(1))) + "K";
+  }
+  return sign + "₹" + n;
+}
+
+function fmtMonthYearShort(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return String(dateStr).slice(0, 7);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return months[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+}
+
 function parseRupeeAmount(value) {
   const normalized = String(value || "").replace(/,/g, "").trim();
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return NaN;
@@ -2863,10 +2885,11 @@ function showLoanYearModal(yearKey) {
           <strong style="font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(memberName)}</strong>
           <span style="margin-top:2px;display:block;">${statusBadgeHtml}</span>
         </div>
-        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYear(loanRenewalDate(loan))}</div>
+        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loan.from)}</div>
+        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loanRenewalDate(loan))}</div>
         <div class="loan-grid-cell">
-          <span style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;font-size:13px;">${money(loan.amount)}</span>
-          ${intPerMo > 0 ? `<small style="display:block;color:var(--muted);font-size:10px;opacity:0.65;font-variant-numeric:tabular-nums;margin-top:1px;">${money(intPerMo)}/mo</small>` : ""}
+          <span style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;font-size:13px;">${moneyCompact(loan.amount)}</span>
+          ${intPerMo > 0 ? `<small style="display:block;color:var(--muted);font-size:10px;opacity:0.65;font-variant-numeric:tabular-nums;margin-top:1px;">${moneyCompact(intPerMo)}/mo</small>` : ""}
         </div>
         ${adminAction}
       </div>`;
@@ -2902,6 +2925,7 @@ function showLoanYearModal(yearKey) {
         <div class="loan-grid ${gridClass}">
           <div class="loan-grid-head">
             <span>Member</span>
+            <span>From</span>
             <span>Due</span>
             <span>Amount</span>
             ${isAdmin() ? "<span>Action</span>" : ""}

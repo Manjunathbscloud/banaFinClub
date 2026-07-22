@@ -1517,10 +1517,10 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .loan-grid-cell { padding: 9px 10px; font-size: 12px; overflow: hidden; min-width: 0; }
 /* 3-col for members */
 .loan-grid.lg-member .loan-grid-head,
-.loan-grid.lg-member .loan-grid-row { grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1.3fr); }
-/* 4-col for admin */
+.loan-grid.lg-member .loan-grid-row { grid-template-columns: minmax(0,2fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.9fr); }
+/* 5-col for admin */
 .loan-grid.lg-admin .loan-grid-head,
-.loan-grid.lg-admin .loan-grid-row { grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1.3fr) 76px; }
+.loan-grid.lg-admin .loan-grid-row { grid-template-columns: minmax(0,2fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,0.9fr) 70px; }
 /* Footer total row */
 .loan-grid-footer {
   display: flex; justify-content: space-between; align-items: center;
