@@ -2864,7 +2864,7 @@ function showLoanYearModal(yearKey) {
           <strong style="font-size:13px;">${escapeHtml(memberName)}</strong>
           <br><small style="color:#9ca3af;font-size:10px;">Due: ${fmtMonthYear(loanRenewalDate(loan))}</small>
         </td>
-        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;white-space:nowrap;">
+        <td style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">
           ${money(loan.amount)}
           ${intPerMo > 0 ? `<br><small style="color:#9ca3af;font-size:10px;font-weight:400;">${money(intPerMo)}/mo</small>` : ""}
         </td>
@@ -2903,10 +2903,15 @@ function showLoanYearModal(yearKey) {
           <h4>Loan Book</h4>
           <span>${loans.length} record${loans.length !== 1 ? "s" : ""}</span>
         </div>
-        <div style="overflow-x:auto;">
+        <div>
           <table class="lm-tbl">
+            <colgroup>
+              <col style="width:44%">
+              <col style="width:27%">
+              <col style="width:29%">
+            </colgroup>
             <thead><tr>
-              <th>Member · Due</th><th style="white-space:nowrap;">Amount · /mo</th><th>Status</th>
+              <th>Member · Due</th><th>Amount · /mo</th><th>Status</th>
             </tr></thead>
             <tbody>${tableRows}</tbody>
             <tfoot><tr>

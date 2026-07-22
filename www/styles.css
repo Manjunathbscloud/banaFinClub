@@ -1493,7 +1493,7 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .lm-table-head span { font-size: 11px; color: var(--muted, #6B7280); }
 
 /* ── Loan modal table — override global mobile card layout ─── */
-.lm-tbl { width: 100%; border-collapse: collapse; display: table !important; }
+.lm-tbl { width: 100%; border-collapse: collapse; display: table !important; table-layout: fixed !important; }
 .lm-tbl thead { display: table-header-group !important; }
 .lm-tbl thead th {
   font-size: 10px; font-weight: 700; color: var(--muted, #6B7280);
@@ -1515,7 +1515,11 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .lm-tbl td, .lm-tbl th {
   display: table-cell !important;
   padding: 9px 10px; font-size: 12px; vertical-align: middle;
-  border-bottom: none; word-break: normal;
+  border-bottom: none; word-break: break-word;
+  overflow: hidden;
+}
+.lm-tbl td:nth-child(2), .lm-tbl th:nth-child(2) {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lm-tbl td::before { display: none !important; content: none !important; }
 .lm-tbl tfoot td {
