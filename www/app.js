@@ -1485,15 +1485,15 @@ function renderDashboard() {
       </div>
     </section>
 
-    ${_showBanner ? `<div class="signoff-banner${_hasAcked ? " signoff-done" : ""}" ${!_hasAcked ? 'data-action="show-signoff-modal"' : ""}>
-      <div class="signoff-banner-body">
-        <span class="signoff-banner-icon">${_hasAcked ? "✅" : "⚠️"}</span>
+    ${_showBanner ? `<div style="margin:0 16px 12px;background:${_hasAcked ? "#f0fdf4" : "#fef3c7"};border:1.5px solid ${_hasAcked ? "#86efac" : "#f59e0b"};border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;${!_hasAcked ? "cursor:pointer;" : ""}" ${!_hasAcked ? 'data-action="show-signoff-modal"' : ""}>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;flex-shrink:0;">${_hasAcked ? "✅" : "⚠️"}</span>
         <div>
-          <strong>${_hasAcked ? "Records confirmed" : "Action required"}</strong>
-          <p>${_hasAcked ? `You confirmed your Year ${_activeYearNum} records` : `Please confirm your Year ${_activeYearNum} records are correct`}</p>
+          <strong style="font-size:13px;font-weight:700;color:#1C1C2E;display:block;margin-bottom:2px;">${_hasAcked ? "Records confirmed" : "Action required"}</strong>
+          <p style="font-size:12px;color:#6B7280;margin:0;">${_hasAcked ? "You confirmed your Year " + _activeYearNum + " records" : "Please confirm your Year " + _activeYearNum + " records are correct"}</p>
         </div>
       </div>
-      ${!_hasAcked ? '<span class="signoff-banner-chevron">›</span>' : ""}
+      ${!_hasAcked ? '<span style="font-size:20px;color:#6B7280;flex-shrink:0;">›</span>' : ""}
     </div>` : ""}
 
     <section class="dash-tiles">
