@@ -1475,7 +1475,7 @@ function renderDashboard() {
   const _activeYearDbYear = 2020 + _activeYearNum;
   const _yearClosed = state.settings.yearClosed === true;
   const _hasAcked = state.meetingAcknowledgements.some(a => a.profileId === currentProfileId() && a.year === _activeYearDbYear);
-  const _showBanner = !isAdmin() && _signoffEnabled && !_yearClosed;
+  const _showBanner = _signoffEnabled && !_yearClosed;
 
   return `
     <section class="dash-hero">
