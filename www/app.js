@@ -3525,10 +3525,10 @@ function renderAdmin() {
             </div>
             ${currentExpenditure > 0 ? `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Saved: ${money(currentExpenditure)}</p>` : `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Add after the annual meeting is done.</p>`}
           </div>
-          <button class="danger" data-action="close-current-year" type="button" style="width:100%;" ${!allReady || !allAcknowledged ? "disabled" : ""}>
+          <button class="danger" data-action="close-current-year" type="button" style="width:100%;" ${!allReady ? "disabled" : ""}>
             Close Year ${activeYearNum} &amp; Finalize Records
           </button>
-          ${signoffEnabled && !allAcknowledged ? `<p style="font-size:12px;color:#b45309;margin-top:6px;text-align:center;">⏳ Waiting for ${totalMembers - ackedCount} more member${totalMembers - ackedCount !== 1 ? "s" : ""} to confirm.</p>` : ""}`;
+          ${signoffEnabled && !allAcknowledged ? `<p style="font-size:12px;color:#b45309;margin-top:6px;text-align:center;">⚠️ ${totalMembers - ackedCount} member${totalMembers - ackedCount !== 1 ? "s have" : " has"} not confirmed yet</p>` : ""}`;
 
         const closedBody = `
           <div class="alert" style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#15803d;">
@@ -4026,7 +4026,18 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
-    if (action.dataset.action === "close-current-year") await closeCurrentYear();
+    if (action.dataset.action === "close-current-year") {
+      const _signoffOn = state.settings.signoffEnabled === true;
+      const _yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+      const _ackedSet = new Set(state.meetingAcknowledgements.filter(a => a.year === _yearDbYear).map(a => a.profileId));
+      const _pending = activeMembers().filter(m => !_ackedSet.has(m.id));
+      if (_signoffOn && _pending.length > 0) {
+        const names = _pending.map(m => m.name).join(", ");
+        const ok = confirm(`⚠️ ${_pending.length} member${_pending.length !== 1 ? "s have" : " has"} not confirmed their records yet:\n\n${names}\n\nClose year anyway?`);
+        if (!ok) return;
+      }
+      await closeCurrentYear();
+    }
     if (action.dataset.action === "save-meeting-expense") {
       const input = document.getElementById("meeting-expense-input");
       const amount = Number(input?.value || 0);
@@ -5136,6 +5147,35 @@ function showSignoffModal() {
   const yearNum = state.settings.activeYearNumber || 6;
   const yearDbYear = 2020 + yearNum;
   const alreadyAcked = state.meetingAcknowledgements.some(a => a.profileId === currentProfileId() && a.year === yearDbYear);
+
+  // Consolidated association figures
+  const poolBal = expectedBankBalance();
+  const activeYearStart = activeYearCutoffMonth();
+  let yearDeposits = 0, yearInterest = 0;
+  state.monthlyPayments
+    .filter(p => p.status === "paid" && p.month >= activeYearStart)
+    .forEach(p => {
+      const mem = memberById(p.memberId);
+      if (!mem) return;
+      const paid = Number(p.paidAmount || p.amount || 0);
+      const split = paymentSplit(mem, p.month, paid);
+      yearDeposits += split.dep;
+      yearInterest += split.interest;
+    });
+  const totalLoans = currentLoans()
+    .filter(l => l.notes !== "emi_entry")
+    .reduce((s, l) => s + loanOutstanding(l), 0);
+
+  // Member's own loan
+  const myLoanAmt = memberOutstanding(currentProfileId());
+  const myLoanText = myLoanAmt > 0 ? money(myLoanAmt) : "No active loan";
+
+  const summaryRow = (icon, label, value, valueColor) =>
+    `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f3f4f6;">
+      <span style="font-size:13px;color:#6b7280;">${icon} ${label}</span>
+      <span style="font-size:13px;font-weight:700;color:${valueColor || "#1C1C2E"};">${value}</span>
+    </div>`;
+
   const modal = document.createElement("div");
   modal.id = "signoff-modal";
   modal.className = "rules-modal-overlay";
@@ -5146,7 +5186,7 @@ function showSignoffModal() {
           <span style="font-size:22px;">📋</span>
           <div>
             <h3 style="margin:0;">Year ${yearNum} Record Confirmation</h3>
-            <p style="margin:4px 0 0;">Review and confirm your records</p>
+            <p style="margin:4px 0 0;">Review the association summary below</p>
           </div>
         </div>
         <button class="rules-modal-close" data-action="close-signoff-modal" style="margin-left:8px;">✕</button>
@@ -5155,16 +5195,24 @@ function showSignoffModal() {
         ${alreadyAcked ? `
           <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
             <div style="font-size:24px;margin-bottom:8px;">✅</div>
-            <div style="font-size:15px;font-weight:700;color:#15803d;">Records already confirmed</div>
-            <div style="font-size:13px;color:#6b7280;margin-top:6px;">You have confirmed your Year ${yearNum} records are correct.</div>
+            <div style="font-size:15px;font-weight:700;color:#15803d;">Records confirmed</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:6px;">You have confirmed the Year ${yearNum} association records are correct.</div>
           </div>
           <button class="secondary" style="width:100%;" data-action="close-signoff-modal">Close</button>
         ` : `
-          <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 20px;">
-            Please review your loan details, payment history, and current balance in the app before confirming. By tapping the button below, you confirm that your Year ${yearNum} records shown in the app are correct.
-          </p>
-          <button class="primary" style="width:100%;margin-bottom:10px;" data-action="acknowledge-records">I confirm my records are correct</button>
-          <button class="secondary" style="width:100%;" data-action="close-signoff-modal">Review first</button>
+          <div style="background:#f8fafc;border-radius:12px;padding:4px 14px;margin-bottom:16px;">
+            ${summaryRow("🏦", "Pool Balance", money(poolBal), "#0369a1")}
+            ${summaryRow("💰", "Total Deposits this Year", money(yearDeposits))}
+            ${summaryRow("📈", "Interest Earned this Year", money(yearInterest), "#15803d")}
+            ${summaryRow("📋", "Active Loans (all members)", money(totalLoans), "#b45309")}
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;">
+              <span style="font-size:13px;color:#6b7280;">💳 Your Active Loan</span>
+              <span style="font-size:13px;font-weight:700;color:${myLoanAmt > 0 ? "#9d174d" : "#6b7280"};">${myLoanText}</span>
+            </div>
+          </div>
+          <p style="font-size:12px;color:#6b7280;margin:0 0 16px;line-height:1.5;">If any of the above figures look incorrect, tap <strong>Not yet</strong> and contact the admin.</p>
+          <button class="primary" style="width:100%;margin-bottom:10px;" data-action="acknowledge-records">✓ Records look correct</button>
+          <button class="secondary" style="width:100%;" data-action="close-signoff-modal">Not yet</button>
         `}
       </div>
     </div>`;
