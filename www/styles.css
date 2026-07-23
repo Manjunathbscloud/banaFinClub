@@ -1599,14 +1599,20 @@ tr:hover td { background: rgba(249,115,22,0.025); }
   }
 
   .nav {
-    width: 560px;
+    position: fixed;
     left: 50%;
     right: auto;
-    transform: translateX(-50%);
     bottom: 16px;
+    transform: translateX(-50%);
+    width: 560px;
     border: 1px solid rgba(249,115,22,0.16);
     border-radius: 22px;
     box-shadow: 0 8px 28px rgba(28,28,46,0.12);
+    z-index: 30;
+  }
+
+  .content {
+    padding-bottom: 88px;
   }
 
   .mode-badge { display: inline-flex; }
