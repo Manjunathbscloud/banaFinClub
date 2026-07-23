@@ -118,6 +118,7 @@ const initialState = {
     yearClosed: false,
     emiEnabled: false,
     emiLoanInterestRateMonthly: 1.5,
+    partialRepaymentEnabled: false,
   },
   members: [
     { id: "m1", name: "Manjunath Banakar", phone: "9591382942", role: "president", status: "active", password: "123456" },
@@ -240,6 +241,7 @@ const initialState = {
   rules: [],
   meetingRecords: [],
   meetingAcknowledgements: [],
+  loanPartialPayments: [],
   meetings: [
     {
       id: "meet5", year: 5, label: "5th Annual Meeting (2025)",
@@ -579,7 +581,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -596,6 +598,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("loan_emis").select("*").order("loan_id").order("emi_number")),
     liveOptionalList(supabaseClient.from("meeting_records").select("*").order("year", { ascending: true })),
     liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,acknowledged_at")),
+    liveOptionalList(supabaseClient.from("loan_partial_payments").select("*").order("paid_on", { ascending: false })),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -618,6 +621,7 @@ async function loadLiveState() {
       bankName: "ICICI Bank",
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
+      partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
     },
     currentUserId: current?.status === "active" ? current.id : null,
     members,
@@ -645,6 +649,10 @@ async function loadLiveState() {
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
     loans: loans.map(liveLoanToLocal),
     loanEmis: loanEmisData.map(liveLoanEmiToLocal),
+    loanPartialPayments: loanPartialPaymentsData.map(r => ({
+      id: r.id, loanId: r.loan_id, amount: Number(r.amount || 0),
+      paidOn: r.paid_on, recordedBy: r.recorded_by,
+    })),
     extensionRequests: extensionRequests.map(liveExtensionToLocal),
     messages: messages.map(liveMessageToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
@@ -2162,7 +2170,7 @@ function showLoansModal() {
         </div>`;
     }
 
-    const monthlyInt = loanBaseMonthlyInterest(loan);
+    const monthlyInt = loanMonthlyInterest(loan);
     const dueThisMonth = isActive && isLoanDueThisMonth(loan);
     const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
     let extHtml = "";
@@ -2175,6 +2183,19 @@ function showLoansModal() {
         extHtml = `<div style="margin-top:10px;text-align:center;font-size:13px;color:#16a34a;">✓ Extension approved</div>`;
       }
     }
+    const partials = state.loanPartialPayments.filter(p => p.loanId === loan.id);
+    const partialsHtml = partials.length > 0 ? `
+      <div style="margin-top:14px;border-top:1px solid #f3f4f6;padding-top:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Partial Repayments</div>
+        ${partials.map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:13px;">
+            <span style="color:var(--muted);">${escapeHtml(p.paidOn || "")}</span>
+            <span style="font-weight:700;color:#15803d;">−${money(p.amount)}</span>
+          </div>`).join("")}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--muted);">
+          <span>Total repaid</span><span style="font-weight:700;color:#15803d;">${money(partials.reduce((s, p) => s + p.amount, 0))}</span>
+        </div>
+      </div>` : "";
     return `
       <div class="rules-section-block" style="border-left:3px solid ${statusColor};">
         <h4 style="margin-bottom:12px;">💳 ${isActive ? "Active Loan" : "Cleared Loan"}</h4>
@@ -2186,6 +2207,7 @@ function showLoansModal() {
           <div><span style="color:var(--muted);">Loan Taken</span><br/><strong>${escapeHtml(loan.from || "-")}</strong></div>
           <div><span style="color:var(--muted);">Renewal Date</span><br/><strong>${escapeHtml(loanRenewalDate(loan) || "-")}</strong></div>
         </div>
+        ${partialsHtml}
         <div style="margin-top:12px;">
           <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
         </div>
@@ -2887,8 +2909,13 @@ function showLoanYearModal(yearKey) {
 
       let adminAction = "";
       if (isAdmin()) {
+        const isFullLoan = loan.loanType !== "emi" && loan.notes !== "emi_entry";
+        const partialBtn = loan.status === "active" && isFullLoan && state.settings.partialRepaymentEnabled
+          ? `<button class="secondary" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Partial</button>`
+          : "";
         adminAction = `<div class="loan-grid-cell" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
           ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Clear</button>` : ""}
+          ${partialBtn}
           <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Del</button>
         </div>`;
       } else if (dueThisMonth && myLoan) {
@@ -3613,6 +3640,46 @@ function renderAdmin() {
         </div>
       </details>
 
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>Partial Repayment</h3><p>Enable after members vote to allow mid-loan principal payments</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0;">
+            <div>
+              <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, admin can record partial principal repayments on active full loans.</p>
+              <p style="font-size:13px;color:var(--muted);margin:0;">Monthly interest automatically reduces based on the remaining balance.</p>
+            </div>
+            <label class="toggle-switch" aria-label="Enable partial repayment">
+              <input type="checkbox" data-action="toggle-partial-repayment" ${state.settings.partialRepaymentEnabled ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
+          </div>
+          ${state.settings.partialRepaymentEnabled ? (() => {
+            const fullLoans = state.loans.filter(l => l.status === "active" && l.loanType !== "emi" && l.notes !== "emi_entry");
+            if (fullLoans.length === 0) return `<div class="empty" style="margin-top:12px;">No active full-repayment loans.</div>`;
+            return `<div style="margin-top:12px;">` + fullLoans.map(loan => {
+              const partials = state.loanPartialPayments.filter(p => p.loanId === loan.id);
+              const totalRepaid = partials.reduce((s, p) => s + p.amount, 0);
+              const outstanding = loanOutstanding(loan);
+              return `
+                <div class="row-item" style="flex-direction:column;align-items:flex-start;gap:6px;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;">
+                    <div>
+                      <strong>${escapeHtml(loanMemberName(loan))}</strong>
+                      <div style="font-size:12px;color:var(--muted);margin-top:2px;">Original: ${money(loan.amount)} · Outstanding: ${money(outstanding)}</div>
+                      ${totalRepaid > 0 ? `<div style="font-size:12px;color:#15803d;margin-top:1px;">Repaid so far: ${money(totalRepaid)}</div>` : ""}
+                    </div>
+                    <button class="secondary" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button" style="font-size:11px;padding:4px 10px;min-height:0;flex-shrink:0;">+ Record</button>
+                  </div>
+                  ${partials.length > 0 ? `
+                    <div style="width:100%;font-size:11px;color:var(--muted);">
+                      ${partials.map(p => `<span style="margin-right:10px;">${escapeHtml(p.paidOn || "")} · ${money(p.amount)}</span>`).join("")}
+                    </div>` : ""}
+                </div>`;
+            }).join("") + `</div>`;
+          })() : ""}
+        </div>
+      </details>
+
           <details class="card collapsible">
             <summary class="card-header">
               <div><h3>Year Management</h3><p>${yearClosed ? `Year ${activeYearNum} closed · Start Year ${newYearNum}` : `Year ${activeYearNum} active · Close after meeting`}</p></div>
@@ -4045,6 +4112,29 @@ document.addEventListener("click", async (event) => {
       await saveMeetingExpense(amount);
     }
     if (action.dataset.action === "toggle-emi") { event.preventDefault(); await toggleEmiEnabled(); }
+
+    if (action.dataset.action === "toggle-partial-repayment") { event.preventDefault(); await togglePartialRepaymentEnabled(); }
+
+    if (action.dataset.action === "record-partial-payment") {
+      const loanId = action.dataset.loanId;
+      if (loanId) showPartialPaymentModal(loanId);
+    }
+
+    if (action.dataset.action === "submit-partial-payment") {
+      const loanId = action.dataset.loanId;
+      const amountInput = document.getElementById("partial-payment-amount");
+      const dateInput = document.getElementById("partial-payment-date");
+      const amount = Number(amountInput?.value || 0);
+      const date = (dateInput?.value || "").trim() || today();
+      if (amount <= 0) { showToast("Enter a valid amount."); return; }
+      action.disabled = true;
+      await recordPartialPayment(loanId, amount, date);
+    }
+
+    if (action.dataset.action === "close-partial-payment-modal") {
+      document.getElementById("partial-payment-modal")?.remove();
+      document.body.style.overflow = "";
+    }
 
     if (action.dataset.action === "save-rule") {
       const id = action.dataset.id;
@@ -4605,6 +4695,88 @@ async function toggleEmiEnabled() {
   }));
   await loadLiveState();
   showToast(`EMI loans ${newVal ? "enabled" : "disabled"}.`);
+  render();
+}
+
+async function togglePartialRepaymentEnabled() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const newVal = !state.settings.partialRepaymentEnabled;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "partial_repayment_settings",
+    value: { enabled: newVal },
+  }));
+  await loadLiveState();
+  showToast(`Partial repayment ${newVal ? "enabled" : "disabled"}.`);
+  render();
+}
+
+function showPartialPaymentModal(loanId) {
+  const existing = document.getElementById("partial-payment-modal");
+  if (existing) existing.remove();
+
+  const loan = state.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  const outstanding = loanOutstanding(loan);
+  const memberName = loanMemberName(loan);
+
+  const modal = document.createElement("div");
+  modal.id = "partial-payment-modal";
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:400px;border-radius:24px 24px 0 0;">
+      <div class="rules-modal-header">
+        <div>
+          <h3 style="margin:0;">Record Partial Repayment</h3>
+          <p style="margin:4px 0 0;">${escapeHtml(memberName)} · Outstanding ${money(outstanding)}</p>
+        </div>
+        <button class="rules-modal-close" data-action="close-partial-payment-modal">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <div style="margin-bottom:14px;">
+          <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px;">Amount Repaid (₹)</label>
+          <input id="partial-payment-amount" type="number" min="1" max="${outstanding}" step="1"
+            placeholder="e.g. 50000"
+            style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;background:var(--panel);color:var(--text);box-sizing:border-box;" />
+          <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">Must be less than outstanding balance (${money(outstanding)})</p>
+        </div>
+        <div style="margin-bottom:20px;">
+          <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px;">Date of Payment</label>
+          <input id="partial-payment-date" type="date" value="${today()}"
+            style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;background:var(--panel);color:var(--text);box-sizing:border-box;" />
+        </div>
+        <button class="primary" data-action="submit-partial-payment" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;">✓ Record Payment</button>
+        <button class="secondary" data-action="close-partial-payment-modal" type="button" style="width:100%;">Cancel</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) { modal.remove(); document.body.style.overflow = ""; }
+  });
+}
+
+async function recordPartialPayment(loanId, amount, date) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const loan = state.loans.find(l => l.id === loanId);
+  if (!loan) { showToast("Loan not found."); return; }
+  const outstanding = loanOutstanding(loan);
+  if (amount >= outstanding) {
+    showToast(`Amount must be less than outstanding balance (${money(outstanding)}). Use Clear Loan to fully repay.`);
+    const btn = document.querySelector("[data-action='submit-partial-payment']");
+    if (btn) btn.disabled = false;
+    return;
+  }
+  const newPrincipalPaid = Number(loan.principalPaid || 0) + amount;
+  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid }).eq("id", loanId));
+  await liveQuery(supabaseClient.from("loan_partial_payments").insert({
+    loan_id: loanId, amount, paid_on: date, recorded_by: currentProfileId(),
+  }));
+  await addLiveAudit(`Partial repayment ${money(amount)} recorded for ${loanMemberName(loan)}.`, "partial_repayment_recorded");
+  document.getElementById("partial-payment-modal")?.remove();
+  document.body.style.overflow = "";
+  await loadLiveState();
+  showToast(`✓ Partial repayment of ${money(amount)} recorded.`);
   render();
 }
 
