@@ -3896,7 +3896,6 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "close-signoff-modal") {
-    if (action.classList.contains("rules-modal-overlay") && event.target !== action) return;
     document.getElementById("signoff-modal")?.remove();
     document.body.style.overflow = "";
     return;
@@ -5142,28 +5141,31 @@ function showSignoffModal() {
   modal.className = "rules-modal-overlay";
   modal.dataset.action = "close-signoff-modal";
   modal.innerHTML = `
-    <div class="rules-modal" style="max-width:340px;" onclick="event.stopPropagation()">
+    <div class="rules-modal-sheet" style="max-width:420px;border-radius:24px 24px 0 0;" onclick="event.stopPropagation()">
       <div class="rules-modal-header">
-        <span style="font-size:22px;">📋</span>
-        <div>
-          <div class="rules-modal-title">Year ${yearNum} Record Confirmation</div>
-          <div class="rules-modal-subtitle">Review and confirm your records</div>
-        </div>
-      </div>
-      <div style="padding:0 20px 20px;">
-        ${alreadyAcked ? `
-          <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;text-align:center;">
-            <div style="font-size:20px;margin-bottom:6px;">✅</div>
-            <div style="font-size:14px;font-weight:600;color:#15803d;">Records already confirmed</div>
-            <div style="font-size:12px;color:#6b7280;margin-top:4px;">You have confirmed your Year ${yearNum} records are correct.</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">📋</span>
+          <div>
+            <h3 style="margin:0;">Year ${yearNum} Record Confirmation</h3>
+            <p style="margin:4px 0 0;">Review and confirm your records</p>
           </div>
-          <button class="btn-secondary" style="width:100%;margin-top:16px;" data-action="close-signoff-modal">Close</button>
+        </div>
+        <button class="rules-modal-close" data-action="close-signoff-modal" style="margin-left:8px;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        ${alreadyAcked ? `
+          <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
+            <div style="font-size:24px;margin-bottom:8px;">✅</div>
+            <div style="font-size:15px;font-weight:700;color:#15803d;">Records already confirmed</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:6px;">You have confirmed your Year ${yearNum} records are correct.</div>
+          </div>
+          <button class="secondary" style="width:100%;" data-action="close-signoff-modal">Close</button>
         ` : `
           <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 20px;">
             Please review your loan details, payment history, and current balance in the app before confirming. By tapping the button below, you confirm that your Year ${yearNum} records shown in the app are correct.
           </p>
-          <button class="btn-primary" style="width:100%;" data-action="acknowledge-records">I confirm my records are correct</button>
-          <button class="btn-secondary" style="width:100%;margin-top:10px;" data-action="close-signoff-modal">Review first</button>
+          <button class="primary" style="width:100%;margin-bottom:10px;" data-action="acknowledge-records">I confirm my records are correct</button>
+          <button class="secondary" style="width:100%;" data-action="close-signoff-modal">Review first</button>
         `}
       </div>
     </div>`;
