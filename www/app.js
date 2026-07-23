@@ -5139,9 +5139,8 @@ function showSignoffModal() {
   const modal = document.createElement("div");
   modal.id = "signoff-modal";
   modal.className = "rules-modal-overlay";
-  modal.dataset.action = "close-signoff-modal";
   modal.innerHTML = `
-    <div class="rules-modal-sheet" style="max-width:420px;border-radius:24px 24px 0 0;" onclick="event.stopPropagation()">
+    <div class="rules-modal-sheet" style="max-width:420px;border-radius:24px 24px 0 0;">
       <div class="rules-modal-header">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:22px;">📋</span>
@@ -5171,6 +5170,9 @@ function showSignoffModal() {
     </div>`;
   document.body.appendChild(modal);
   document.body.style.overflow = "hidden";
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) { modal.remove(); document.body.style.overflow = ""; }
+  });
 }
 
 async function sendMeetingSummaryEmail(data) {
