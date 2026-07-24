@@ -878,7 +878,12 @@ function loanRenewalDate(loan) {
 }
 
 function loanMemberName(loan) {
-  return memberById(loan.memberId)?.name || loan.memberName || "-";
+  const byId = memberById(loan.memberId);
+  if (byId) return byId.name;
+  const pool = state.allMembers?.length ? state.allMembers : state.members;
+  const loanPhone = normalizePhone(loan.memberPhone);
+  const byPhone = loanPhone ? pool.find(m => normalizePhone(m.phone) === loanPhone) : null;
+  return byPhone?.name || loan.memberName || "-";
 }
 
 function loanBelongsToMember(loan, member) {
