@@ -603,6 +603,15 @@ async function loadLiveState() {
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
   const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
+  // Notifications were fetched with a stale null currentUserId; re-fetch with the resolved id
+  if (current?.id && current.status === "active") {
+    const freshNotifs = await liveOptionalList(
+      supabaseClient.from("notifications").select("*")
+        .eq("profile_id", current.id)
+        .order("created_at", { ascending: false }).limit(50)
+    );
+    notifications.splice(0, notifications.length, ...freshNotifs);
+  }
   const visibleProfiles = profiles.filter((profile) => {
     if (profile.id === current?.id) return true;
     return profile.auth_user_id && !["rejected", "disabled", "exited"].includes(profile.status);
@@ -826,7 +835,26 @@ function monthDiff(startDate, endDate) {
 }
 
 function calculatedInterestPaid(loan, clearDate = today()) {
-  return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
+  // Declining-balance calculation: each partial repayment lowers the interest base
+  const partials = (state.loanPartialPayments || [])
+    .filter(p => p.loanId === loan.id)
+    .sort((a, b) => (a.paidOn > b.paidOn ? 1 : -1));
+  if (!partials.length) {
+    return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
+  }
+  const rate = (loan.interestRateMonthly || state.settings.interestRateMonthly || 1.5) / 100;
+  let outstanding = loan.amount;
+  let from = loan.from;
+  let total = 0;
+  for (const p of partials) {
+    const m = monthDiff(from, p.paidOn);
+    if (m > 0) total += Math.round(m * outstanding * rate);
+    outstanding -= p.amount;
+    from = p.paidOn;
+  }
+  const mFinal = monthDiff(from, clearDate);
+  if (mFinal > 0) total += Math.round(mFinal * outstanding * rate);
+  return total;
 }
 
 // Interest earned on a loan during a specific year, bounded by yearStart.
@@ -842,7 +870,7 @@ function yearBoundedInterest(loan, yearStart, atDate) {
   if (effectiveTo <= effectiveFrom) return 0;
   const months = (effectiveTo.getFullYear() - effectiveFrom.getFullYear()) * 12
     + (effectiveTo.getMonth() - effectiveFrom.getMonth()) + 1;
-  return Math.max(0, Math.round(months * loanBaseMonthlyInterest(loan)));
+  return Math.max(0, Math.round(months * loanMonthlyInterest(loan)));
 }
 
 function loanRenewalDate(loan) {
@@ -3654,7 +3682,7 @@ function renderAdmin() {
             </label>
           </div>
           ${state.settings.partialRepaymentEnabled ? (() => {
-            const fullLoans = state.loans.filter(l => l.status === "active" && l.loanType !== "emi" && l.notes !== "emi_entry");
+            const fullLoans = currentLoans().filter(l => l.loanType !== "emi" && l.notes !== "emi_entry");
             if (fullLoans.length === 0) return `<div class="empty" style="margin-top:12px;">No active full-repayment loans.</div>`;
             return `<div style="margin-top:12px;">` + fullLoans.map(loan => {
               const partials = state.loanPartialPayments.filter(p => p.loanId === loan.id);
@@ -3723,6 +3751,7 @@ document.addEventListener("pointerdown", (e) => {
   ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
 });
 
+let _actionBusy = false;
 document.addEventListener("click", async (event) => {
   const tabButton = event.target.closest("[data-tab]");
   if (tabButton) {
@@ -3953,7 +3982,7 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "toggle-signoff-request") {
     const enable = action.checked !== undefined ? action.checked : action.dataset.enable === "true";
     action.disabled = true;
-    await toggleSignoffRequest(enable);
+    try { await toggleSignoffRequest(enable); } catch(e) { showToast(e.message || "Something went wrong."); } finally { action.disabled = false; }
     return;
   }
 
@@ -4074,12 +4103,14 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (_actionBusy) return;
+  _actionBusy = true;
   try {
     if (action.dataset.action === "approve-signup") await approveSignup(action.dataset.id);
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
-    if (action.dataset.action === "mark-payment-paid") await markPaymentPaid(action.dataset.memberId);
+    if (action.dataset.action === "mark-payment-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId); }
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "change-phone") {
       const newPhone = window.prompt(`Change phone for ${action.dataset.name}\nCurrent: ${action.dataset.phone}\n\nEnter new 10-digit phone number:`);
@@ -4128,7 +4159,7 @@ document.addEventListener("click", async (event) => {
       const date = (dateInput?.value || "").trim() || today();
       if (amount <= 0) { showToast("Enter a valid amount."); return; }
       action.disabled = true;
-      await recordPartialPayment(loanId, amount, date);
+      try { await recordPartialPayment(loanId, amount, date); } finally { action.disabled = false; }
     }
 
     if (action.dataset.action === "close-partial-payment-modal") {
@@ -4137,6 +4168,7 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action.dataset.action === "save-rule") {
+      if (!isAdmin()) { showToast("Admin access required."); return; }
       const id = action.dataset.id;
       const input = document.getElementById(`rule-edit-input-${id}`);
       const newItem = (input?.value || "").trim();
@@ -4150,6 +4182,7 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action.dataset.action === "delete-rule") {
+      if (!isAdmin()) { showToast("Admin access required."); return; }
       const id = action.dataset.id;
       if (!liveBackendReady) { showToast("Live backend required."); return; }
       action.disabled = true;
@@ -4160,6 +4193,8 @@ document.addEventListener("click", async (event) => {
     }
   } catch (error) {
     showToast(error.message || "Something went wrong.");
+  } finally {
+    _actionBusy = false;
   }
 });
 
@@ -4767,7 +4802,9 @@ async function recordPartialPayment(loanId, amount, date) {
     if (btn) btn.disabled = false;
     return;
   }
-  const newPrincipalPaid = Number(loan.principalPaid || 0) + amount;
+  // Fetch the live principal_paid from DB to avoid TOCTOU with concurrent sessions
+  const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", loanId).single();
+  const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + amount;
   await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid }).eq("id", loanId));
   await liveQuery(supabaseClient.from("loan_partial_payments").insert({
     loan_id: loanId, amount, paid_on: date, recorded_by: currentProfileId(),
@@ -5143,6 +5180,7 @@ async function requestExtension(loanId) {
 }
 
 async function approveExtension(id, loanId) {
+  if (!isAdmin()) { showToast("Admin access required."); return; }
   const loan = state.loans.find((l) => l.id === loanId);
   if (!loan || !liveBackendReady) { showToast("Cannot approve extension."); return; }
 
@@ -5274,6 +5312,8 @@ async function toggleSignoffRequest(enable) {
     activeYearExits: state.settings.activeYearExits,
     yearClosed: state.settings.yearClosed,
     signoffEnabled: enable,
+    activeYearRenewalFee: state.settings.activeYearRenewalFee,
+    activeYearRenewalFeePerMember: state.settings.activeYearRenewalFeePerMember,
   };
   const { error } = await liveQuery(supabaseClient.from("settings")
     .update({ value: currentInfo })
@@ -5633,6 +5673,8 @@ async function closeCurrentYear() {
 
   const closingDate = today();
   const _yearStartStr = activeYearNum === 6 ? "2025-11-01" : (activeYearStart + "-01");
+  // Delete any prior (partial) history rows for this year before inserting — makes retries safe
+  await liveQuery(supabaseClient.from("loan_history").delete().eq("year", `Year ${activeYearNum}`));
   for (const loan of activeLoans) {
     const interestPaid = yearBoundedInterest(loan, _yearStartStr, closingDate);
     await liveQuery(supabaseClient.from("loan_history").insert({
@@ -5697,8 +5739,6 @@ async function startNewYear(data) {
   const newYearNum = currentYearNum + 1;
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const newYearLabel = `${ORDINALS[newYearNum - 1] || "Year " + newYearNum} Year`;
-  const renewalFeePerMember = Number(data.renewalFee || 0);
-  const renewalFee = renewalFeePerMember * activeMembers().length;
   const newMonthlyDeposit = Number(data.monthlyDeposit || state.settings.monthlyDeposit);
   // Start next year from next month if all members paid this month, else from this month
   const _allPaid = activeMembers().every(m =>
@@ -5709,13 +5749,18 @@ async function startNewYear(data) {
     ? `${_ndm.getFullYear()}-${String(_ndm.getMonth() + 1).padStart(2, "0")}`
     : currentMonth();
 
-  // Collect exits from DOM (checkboxes)
+  // Collect exits from DOM (checkboxes) BEFORE computing renewalFee so exiting members are excluded
   const exitChecks = document.querySelectorAll(".exit-member-check:checked");
   const exits = Array.from(exitChecks).map(cb => ({
     memberId: cb.dataset.memberId,
     name: cb.dataset.memberName,
     payout: Number(document.getElementById(`exit-payout-${cb.dataset.memberId}`)?.value || 0),
   })).filter(e => e.payout > 0 || e.memberId);
+
+  const renewalFeePerMember = Number(data.renewalFee || 0);
+  const exitMemberIds = new Set(exits.map(e => e.memberId).filter(Boolean));
+  const nonExitingCount = activeMembers().filter(m => !exitMemberIds.has(m.id)).length;
+  const renewalFee = renewalFeePerMember * nonExitingCount;
 
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
@@ -5752,7 +5797,7 @@ async function startNewYear(data) {
       date: today(),
       type: "credit",
       amount: renewalFee,
-      description: `Year ${newYearNum} renewal fee (₹${renewalFeePerMember.toLocaleString("en-IN")} × ${activeMembers().length} members)`,
+      description: `Year ${newYearNum} renewal fee (₹${renewalFeePerMember.toLocaleString("en-IN")} × ${nonExitingCount} members)`,
       balance: _lastBal + renewalFee,
     }));
   }
@@ -6568,7 +6613,8 @@ window.addEventListener("popstate", (e) => {
   // so the back stack stays intact for the next press
   const modal = document.querySelector(
     "#rules-modal, #loans-modal, #photos-modal, #photo-lightbox, " +
-    "#deposit-year-modal, #loan-year-modal, #post-close-modal, .notif-panel-wrap"
+    "#deposit-year-modal, #loan-year-modal, #post-close-modal, .notif-panel-wrap, " +
+    "#signoff-modal, #partial-payment-modal, #chat-panel, #ai-panel"
   );
   if (modal) {
     modal.remove();

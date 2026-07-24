@@ -86,7 +86,9 @@ serve(async (req) => {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const monthStart = `${year}-${month}-01`;
-    const monthEnd = `${year}-${month}-31`;
+    // Last day of the month — avoids invalid dates like 2026-02-31
+    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+    const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
 
     const { data: loans } = await supabase
       .from("current_loans")
