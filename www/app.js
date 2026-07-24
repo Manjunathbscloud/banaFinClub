@@ -878,7 +878,7 @@ function loanRenewalDate(loan) {
 }
 
 function loanMemberName(loan) {
-  return loan.memberName || memberById(loan.memberId)?.name || "-";
+  return memberById(loan.memberId)?.name || loan.memberName || "-";
 }
 
 function loanBelongsToMember(loan, member) {
