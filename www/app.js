@@ -5334,6 +5334,12 @@ function showSignoffModal() {
       yearDeposits += split.dep;
       yearInterest += split.interest;
     });
+  // Year 6: monthly_payments only has clean live data from Jul 2026.
+  // Add verified pre-Jul totals (same figures used in closeCurrentYear).
+  if (yearNum === 6) {
+    yearDeposits += 153922;
+    yearInterest += 76717;
+  }
   const totalLoans = currentLoans()
     .filter(l => l.notes !== "emi_entry")
     .reduce((s, l) => s + loanOutstanding(l), 0);
