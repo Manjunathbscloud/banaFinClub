@@ -5321,7 +5321,7 @@ function showSignoffModal() {
   const alreadyAcked = state.meetingAcknowledgements.some(a => a.profileId === currentProfileId() && a.year === yearDbYear);
 
   // Consolidated association figures
-  const poolBal = expectedBankBalance();
+  const poolBal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0) + expectedBankBalance();
   const activeYearStart = activeYearCutoffMonth();
   let yearDeposits = 0, yearInterest = 0;
   state.monthlyPayments
