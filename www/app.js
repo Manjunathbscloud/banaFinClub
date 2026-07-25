@@ -2282,30 +2282,42 @@ function showMeetingPhotosModal(year) {
     5: "Year 5 · 2025 · Sandur Wonder Valley Resort",
   };
 
-  let gallery = [];
+  const dbYear = 2020 + year;
+  const mr = state.meetingRecords.find(r => r.year === dbYear);
+  const dbPhotos = mr?.photos || [];
+
+  let staticPhotos = [];
   let label = "";
 
   if (year <= 5) {
     const count = STATIC_COUNTS[year] || 0;
+    staticPhotos = Array.from({ length: count }, (_, i) => `./images/meetings/yr${year}/meeting${i + 1}.jpg`);
     label = STATIC_LABELS[year] || `Year ${year}`;
-    gallery = Array.from({ length: count }, (_, i) => `./images/meetings/yr${year}/meeting${i + 1}.jpg`);
   } else {
-    const mr = state.meetingRecords.find(r => r.year === 2020 + year);
-    gallery = mr?.photos || [];
     label = `Year ${year}${mr?.venue ? " · " + mr.venue : ""}`;
   }
 
-  if (gallery.length === 0) {
-    showToast("No photos available for this year yet.");
-    return;
-  }
-
+  const gallery = [...staticPhotos, ...dbPhotos];
   const galleryJson = escapeHtml(JSON.stringify(gallery));
-  const photosHtml = gallery.map((src, i) => `
-    <div class="photo-thumb-wrap" data-action="open-photo" data-gallery="${galleryJson}" data-index="${i}">
-      <img src="${escapeHtml(src)}" class="photo-thumb" loading="lazy" alt="Meeting photo ${i + 1}" />
-    </div>
-  `).join("");
+
+  const photosHtml = gallery.length > 0
+    ? gallery.map((src, i) => {
+        const isDeletable = isAdmin() && i >= staticPhotos.length;
+        return `
+          <div class="photo-thumb-wrap" style="position:relative;">
+            <div data-action="open-photo" data-gallery="${galleryJson}" data-index="${i}" style="cursor:pointer;">
+              <img src="${escapeHtml(src)}" class="photo-thumb" loading="lazy" alt="Meeting photo ${i + 1}" />
+            </div>
+            ${isDeletable ? `<button class="photo-delete-btn" data-action="delete-meeting-photo" data-year="${dbYear}" data-url="${escapeHtml(src)}">✕</button>` : ""}
+          </div>`;
+      }).join("")
+    : `<div style="text-align:center;padding:40px 20px;color:var(--muted);">
+        <div style="font-size:36px;margin-bottom:10px;">📷</div>
+        <div style="font-size:14px;font-weight:600;">No photos yet</div>
+        <div style="font-size:13px;margin-top:4px;">Be the first to add photos from this year's meeting!</div>
+      </div>`;
+
+  const canUpload = liveBackendReady && year >= 1;
 
   const html = `
     <div id="photos-modal" class="rules-modal-overlay" data-action="close-photos">
@@ -2313,9 +2325,16 @@ function showMeetingPhotosModal(year) {
         <div class="rules-modal-header">
           <div>
             <h3>📸 Meeting Photos</h3>
-            <p>${escapeHtml(label)}</p>
+            <p>${escapeHtml(label)}${gallery.length > 0 ? ` · ${gallery.length} photo${gallery.length !== 1 ? "s" : ""}` : ""}</p>
           </div>
-          <button class="rules-modal-close" data-action="close-photos">✕</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${canUpload ? `
+              <label style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:var(--accent,#2563eb);color:#fff;border-radius:8px;font-size:13px;font-weight:600;" title="Add your photos">
+                <input type="file" accept="image/*" multiple data-action="upload-meeting-photo" data-year="${dbYear}" style="display:none;" />
+                + Add Photos
+              </label>` : ""}
+            <button class="rules-modal-close" data-action="close-photos">✕</button>
+          </div>
         </div>
         <div class="rules-modal-body">
           <div class="photo-grid">${photosHtml}</div>
@@ -3919,7 +3938,7 @@ document.addEventListener("click", async (event) => {
     if (!confirm("Remove this photo?")) return;
     action.disabled = true;
     await deleteMeetingPhoto(yr, url);
-    render();
+    showMeetingPhotosModal(yr - 2020);
     return;
   }
 
@@ -4248,9 +4267,9 @@ document.addEventListener("change", (event) => {
         catch(e) { failed++; }
       }
       await loadLiveState();
-      render();
+      showMeetingPhotosModal(yr - 2020);
       if (failed > 0) showToast(`${files.length - failed} uploaded, ${failed} failed.`);
-      else showToast("Photos uploaded.");
+      else showToast(`${files.length - failed} photo${files.length - failed !== 1 ? "s" : ""} uploaded.`);
     })();
     return;
   }
@@ -5278,7 +5297,7 @@ async function saveMeetingNotes(yearDbYear, data) {
 }
 
 async function uploadMeetingPhoto(yearDbYear, file) {
-  if (!liveBackendReady || !isAdmin()) throw new Error("Admin access required.");
+  if (!liveBackendReady) throw new Error("Live backend required.");
   const blob = await compressImage(file, 1200, 0.85);
   const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const path = `year-${yearDbYear}/${suffix}.jpg`;
