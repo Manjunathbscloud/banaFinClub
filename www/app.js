@@ -2020,10 +2020,14 @@ function renderHistory() {
         ${meeting.venue ? `<div class="meeting-note-row"><span>📍</span><span>${escapeHtml(meeting.venue)}</span></div>` : ""}
         ${meeting.notes ? `<p class="meeting-note-text">${escapeHtml(meeting.notes)}</p>` : ""}
         ${meeting.decisions.length > 0 ? `
-          <div class="meeting-decisions" style="margin-top:8px;">
-            <span>Key Decisions</span>
-            <ul>${meeting.decisions.map(d => `<li>${escapeHtml(d)}</li>`).join("")}</ul>
-          </div>` : ""}` : (yearNum >= 6 && canEdit ? `<p class="meeting-notes-empty">No notes yet — tap Edit to add.</p>` : "");
+          <details style="margin-top:8px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--accent,#2563eb);list-style:none;display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;">▶</span> Key Decisions (${meeting.decisions.length})
+            </summary>
+            <div class="meeting-decisions" style="margin-top:8px;">
+              <ul>${meeting.decisions.map(d => `<li>${escapeHtml(d)}</li>`).join("")}</ul>
+            </div>
+          </details>` : ""}` : (yearNum >= 6 && canEdit ? `<p class="meeting-notes-empty">No notes yet — tap Edit to add.</p>` : "");
 
       // Editor form (admin, year 6+ only)
       const editorHtml = canEdit ? `
