@@ -2059,7 +2059,7 @@ function renderHistory() {
             <p>Closing Balance: ${money(dep.balance)}</p>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
-            ${canAddPhotos ? `<button class="secondary" data-action="show-meeting-photos" data-year="${yearNum}" style="font-size:12px;padding:5px 10px;">📷 Photos</button>` : ""}
+            ${canAddPhotos ? `<button class="secondary" data-action="show-meeting-photos" data-year="${yearNum}" style="font-size:12px;padding:5px 10px;">📷 Add Photos</button>` : ""}
             ${canEdit ? `<button class="meeting-link-btn" data-action="toggle-meeting-editor" data-year="${dbYear}">Edit</button>` : ""}
           </div>
         </div>
@@ -2335,7 +2335,7 @@ function showMeetingPhotosModal(year) {
             ${canUpload ? `
               <label style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:var(--accent,#2563eb);color:#fff;border-radius:8px;font-size:13px;font-weight:600;" title="Add your photos">
                 <input type="file" accept="image/*" multiple data-action="upload-meeting-photo" data-year="${dbYear}" style="display:none;" />
-                + Add Photos
+                + Upload
               </label>` : ""}
             <button class="rules-modal-close" data-action="close-photos">✕</button>
           </div>
