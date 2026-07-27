@@ -1991,6 +1991,7 @@ function renderHistory() {
     <section class="page-title"><p>Banakar FinClub</p><h2>Meetings</h2></section>
     ${closedYears.map(({ yearNum, dbYear, dep, meeting }) => {
       const canEdit = isAdmin() && yearNum >= 6;
+      const canAddPhotos = liveBackendReady;
 
       // Build the photos array — local files for years 1-5, DB URLs for 6+
       const photos = yearNum <= 5
@@ -2057,7 +2058,10 @@ function renderHistory() {
             <h3>${escapeHtml(dep.label || `Year ${yearNum}`)}</h3>
             <p>Closing Balance: ${money(dep.balance)}</p>
           </div>
-          ${canEdit ? `<button class="meeting-link-btn" data-action="toggle-meeting-editor" data-year="${dbYear}" style="flex-shrink:0;">Edit</button>` : ""}
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            ${canAddPhotos ? `<button class="secondary" data-action="show-meeting-photos" data-year="${yearNum}" style="font-size:12px;padding:5px 10px;">📷 Photos</button>` : ""}
+            ${canEdit ? `<button class="meeting-link-btn" data-action="toggle-meeting-editor" data-year="${dbYear}">Edit</button>` : ""}
+          </div>
         </div>
         <div class="card-body">
           ${photoStripHtml}
