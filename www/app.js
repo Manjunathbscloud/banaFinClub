@@ -4863,7 +4863,7 @@ async function requestLoan(data) {
       tenure_months: tenureMonths,
     }));
     await addLiveAudit(`${user.name} requested loan ${money(data.amount)}${loanType === "emi" ? ` (EMI ${tenureMonths}mo)` : ""}.`, "loan_requested");
-    const admins = state.members.filter(m => m.role === "admin" && m.status === "active");
+    const admins = state.members.filter(m => m.role === "president" && m.status === "active");
     for (const admin of admins) {
       await notifyMember(admin.id, "loan_requested", "New loan request", `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the admin panel.`);
     }
