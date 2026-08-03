@@ -48,6 +48,11 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const now = istNow();
 
+  // ─── Auto-cleanup: delete notifications older than 60 days ───────────────
+  const cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from("notifications").delete().lt("created_at", cutoff);
+  console.log("Cleaned up notifications older than 60 days");
+
   // ─── Loan Availability & Bank Balance ────────────────────────────────────
   if (type === "availability") {
     const { data: settings } = await supabase
