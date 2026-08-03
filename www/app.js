@@ -2208,6 +2208,52 @@ function showLoansModal() {
             ${nextEmi ? `Next EMI: <strong>${money(nextEmi.amount)}</strong> due ${nextEmi.dueMonth}` : `<span style="color:#16a34a;font-weight:600;">✓ All EMIs paid</span>`}
           </p>
           <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
+          ${(() => {
+            if (!state.settings.emiEnabled) return "";
+            const schedule = state.loanEmis
+              .filter(e => e.loanId === loan.id)
+              .sort((a, b) => a.emiNumber - b.emiNumber);
+            if (!schedule.length) return "";
+            const thisMonth = currentMonth();
+            let balance = loan.amount;
+            const rows = schedule.map(e => {
+              const rowBalance = balance - Number(e.principalPart || 0);
+              const isCurrent = e.dueMonth === thisMonth && e.status === "pending";
+              const isPaid    = e.status === "paid";
+              balance = rowBalance;
+              const rowBg = isPaid ? "background:#f0fdf4;" : isCurrent ? "background:#fefce8;" : "";
+              const numStyle = "font-variant-numeric:tabular-nums;";
+              return `<tr style="${rowBg}">
+                <td style="padding:6px 8px;font-size:12px;color:${isPaid ? "#16a34a" : isCurrent ? "#b45309" : "var(--muted)"};white-space:nowrap;">
+                  ${isPaid ? "✓" : isCurrent ? "→" : e.emiNumber}&nbsp;${e.dueMonth}
+                </td>
+                <td style="padding:6px 8px;font-size:12px;text-align:right;${numStyle}">${money(e.amount)}</td>
+                <td style="padding:6px 8px;font-size:12px;text-align:right;${numStyle}color:#2563eb;">${money(e.principalPart)}</td>
+                <td style="padding:6px 8px;font-size:12px;text-align:right;${numStyle}color:#dc2626;">${money(e.interestPart)}</td>
+                <td style="padding:6px 8px;font-size:12px;text-align:right;${numStyle}color:var(--muted);">${money(Math.max(0, rowBalance))}</td>
+              </tr>`;
+            }).join("");
+            return `
+              <details style="margin-top:12px;border-top:1px solid var(--border,#e5e7eb);padding-top:10px;">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--accent,#2563eb);list-style:none;display:flex;align-items:center;gap:6px;user-select:none;">
+                  <span style="font-size:11px;">▶</span> 📅 View Full Schedule (${schedule.length} months)
+                </summary>
+                <div style="margin-top:10px;overflow-x:auto;">
+                  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                      <tr style="border-bottom:2px solid var(--border,#e5e7eb);">
+                        <th style="padding:5px 8px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Month</th>
+                        <th style="padding:5px 8px;text-align:right;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">EMI</th>
+                        <th style="padding:5px 8px;text-align:right;font-size:10px;color:#2563eb;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Principal</th>
+                        <th style="padding:5px 8px;text-align:right;font-size:10px;color:#dc2626;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Interest</th>
+                        <th style="padding:5px 8px;text-align:right;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                </div>
+              </details>`;
+          })()}
         </div>`;
     }
 
