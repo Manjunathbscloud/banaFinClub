@@ -3437,7 +3437,17 @@ function renderAdmin() {
                       </div>
                     </div>`;
                 }).join("")}
-              </div>`;
+              </div>
+              ${members.length - paidCount > 0 ? `
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e5e7eb);text-align:center;">
+                <button class="secondary" data-action="send-payment-reminder" type="button" style="width:100%;font-size:13px;">
+                  📣 Send Payment Reminder to All
+                </button>
+                <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">In-app + email to all · SMS to unpaid members only</p>
+              </div>` : `
+              <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#e5e7eb);text-align:center;">
+                <span style="font-size:12px;color:#16a34a;font-weight:600;">✓ All members have paid this month</span>
+              </div>`}`;
           })()}
         </div>
       </details>
@@ -4189,6 +4199,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
     if (action.dataset.action === "mark-payment-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId); }
+    if (action.dataset.action === "send-payment-reminder") { action.disabled = true; await sendPaymentReminder(); action.disabled = false; }
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "change-phone") {
       const newPhone = window.prompt(`Change phone for ${action.dataset.name}\nCurrent: ${action.dataset.phone}\n\nEnter new 10-digit phone number:`);
@@ -4809,6 +4820,39 @@ async function toggleEmiEnabled() {
   await loadLiveState();
   showToast(`EMI loans ${newVal ? "enabled" : "disabled"}.`);
   render();
+}
+
+async function sendPaymentReminder() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const month = currentMonth();
+  const monthLabel = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const members = depositMembers();
+  const unpaid = members.filter(m =>
+    !state.monthlyPayments.find(p => p.memberId === m.id && p.month === month && p.status === "paid")
+  );
+  if (!unpaid.length) { showToast("All members have paid this month."); return; }
+
+  const unpaidNames = unpaid.map(m => m.name).join(", ");
+
+  // In-app + email → all active members
+  await notifyAllActiveMembers(
+    "payment_reminder",
+    "Monthly Payment Reminder",
+    `${unpaidNames} ${unpaid.length === 1 ? "has" : "have"} not paid their monthly deposit for ${monthLabel}. Please ensure timely payments.`
+  );
+
+  // SMS → unpaid members only
+  for (const member of unpaid) {
+    const due = money(memberMonthlyDue(member));
+    await supabaseClient.functions.invoke("send-sms", {
+      body: {
+        profile_id: member.id,
+        message: `Hi ${member.name.split(" ")[0]}, your monthly deposit of ${due} for ${monthLabel} is still pending. Please pay at the earliest.`,
+      },
+    }).catch(console.error);
+  }
+
+  showToast(`Reminder sent — ${unpaid.length} member${unpaid.length !== 1 ? "s" : ""} notified via SMS.`);
 }
 
 async function togglePartialRepaymentEnabled() {
