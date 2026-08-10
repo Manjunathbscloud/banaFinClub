@@ -5268,7 +5268,6 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   await liveQuery(supabaseClient.from("notifications").insert(rows));
   for (const m of active) {
     supabaseClient.functions.invoke("send-push", { body: { profile_id: m.id, title, body } }).catch(() => {});
-    supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: body } }).catch(() => {});
   }
 }
 
