@@ -4956,6 +4956,12 @@ async function requestLoan(data) {
     const admins = state.members.filter(m => m.role === "president" && m.status === "active");
     for (const admin of admins) {
       await notifyMember(admin.id, "loan_requested", "New loan request", `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the admin panel.`);
+      await supabaseClient.functions.invoke("send-sms", {
+        body: {
+          profile_id: admin.id,
+          message: `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the app.`,
+        },
+      }).catch(console.error);
     }
     const allMemberBody = loanType === "emi"
       ? `${user.name} has applied for an EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months. Pending admin approval.`
