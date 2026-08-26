@@ -3433,7 +3433,7 @@ function renderAdmin() {
                         <span class="pc-amount">${due}</span>
                         ${isPaid
                           ? `<span class="badge good" style="font-size:11px;">✓ Paid</span>`
-                          : `<button class="primary small" data-action="mark-payment-paid" data-member-id="${member.id}" type="button">Mark Paid</button>`}
+                          : `<button class="primary small" data-action="show-mark-payment-modal" data-member-id="${member.id}" type="button">Mark Paid</button>`}
                       </div>
                     </div>`;
                 }).join("")}
@@ -4198,7 +4198,9 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
-    if (action.dataset.action === "mark-payment-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId); }
+    if (action.dataset.action === "show-mark-payment-modal") { showMarkPaymentModal(action.dataset.memberId); }
+    if (action.dataset.action === "close-mark-payment-modal") { document.getElementById("mark-payment-modal")?.remove(); document.body.style.overflow = ""; }
+    if (action.dataset.action === "confirm-mark-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId, action.dataset.month); document.getElementById("mark-payment-modal")?.remove(); document.body.style.overflow = ""; }
     if (action.dataset.action === "send-payment-reminder") { action.disabled = true; await sendPaymentReminder(); action.disabled = false; }
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
     if (action.dataset.action === "change-phone") {
@@ -6020,10 +6022,68 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-async function markPaymentPaid(memberId) {
+function showMarkPaymentModal(memberId) {
   const member = memberById(memberId);
   if (!member) return;
-  const month = currentMonth();
+  document.getElementById("mark-payment-modal")?.remove();
+
+  // Build list of all months from year start → current month
+  const yearStart = state.settings.activeYearStart || currentMonth();
+  const cur = currentMonth();
+  const allMonths = [];
+  let [y, mo] = yearStart.split("-").map(Number);
+  const [ey, em] = cur.split("-").map(Number);
+  while (y < ey || (y === ey && mo <= em)) {
+    allMonths.push(`${y}-${String(mo).padStart(2, "0")}`);
+    mo++; if (mo > 12) { mo = 1; y++; }
+  }
+
+  // Keep only months with no paid record
+  const unpaidMonths = allMonths.filter(m =>
+    !state.monthlyPayments.find(p => p.memberId === memberId && p.month === m && p.status === "paid")
+  );
+
+  if (!unpaidMonths.length) { showToast(`${member.name} has no pending months.`); return; }
+
+  function fmtMonth(m) {
+    const [yr, mn] = m.split("-");
+    return new Date(Number(yr), Number(mn) - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
+  }
+
+  const isCurrent = (m) => m === cur;
+
+  const html = `
+    <div id="mark-payment-modal" class="rules-modal-overlay" data-action="close-mark-payment-modal" style="z-index:1100;">
+      <div class="rules-modal-sheet" style="max-width:380px;" onclick="event.stopPropagation()">
+        <div class="rules-modal-header">
+          <div>
+            <h3>Mark Payment Paid</h3>
+            <p>${escapeHtml(member.name)} · Select the month to mark</p>
+          </div>
+          <button class="rules-modal-close" data-action="close-mark-payment-modal">✕</button>
+        </div>
+        <div class="rules-modal-body" style="padding:12px 16px;">
+          ${unpaidMonths.map(m => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:8px;border-radius:10px;border:1.5px solid ${isCurrent(m) ? "var(--accent,#2563eb)" : "var(--border,#e5e7eb)"};background:${isCurrent(m) ? "var(--accent-bg,#eff6ff)" : "var(--bg,#fff)"};">
+              <div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);">${fmtMonth(m)}</div>
+                <div style="font-size:12px;color:var(--muted);">${isCurrent(m) ? "Current month" : "Missed month"} · ${money(memberMonthlyDue(member))}</div>
+              </div>
+              <button class="primary small" data-action="confirm-mark-paid" data-member-id="${memberId}" data-month="${m}" style="${isCurrent(m) ? "" : "background:#f59e0b;border-color:#f59e0b;"}">
+                Mark Paid
+              </button>
+            </div>`).join("")}
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+}
+
+async function markPaymentPaid(memberId, month = currentMonth()) {
+  const member = memberById(memberId);
+  if (!member) return;
   const amount = memberMonthlyDue(member);
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("monthly_payments").upsert({
