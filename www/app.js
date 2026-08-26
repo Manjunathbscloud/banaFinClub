@@ -6054,7 +6054,7 @@ function showMarkPaymentModal(memberId) {
 
   const html = `
     <div id="mark-payment-modal" class="rules-modal-overlay" data-action="close-mark-payment-modal" style="z-index:1100;">
-      <div class="rules-modal-sheet" style="max-width:380px;" onclick="event.stopPropagation()">
+      <div class="rules-modal-sheet" style="max-width:380px;">
         <div class="rules-modal-header">
           <div>
             <h3>Mark Payment Paid</h3>
