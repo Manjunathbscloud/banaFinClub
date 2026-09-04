@@ -241,6 +241,7 @@ const initialState = {
   rules: [],
   meetingRecords: [],
   meetingAcknowledgements: [],
+  galleryPhotos: [],
   loanPartialPayments: [],
   meetings: [
     {
@@ -581,7 +582,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, galleryPhotosData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -599,6 +600,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("meeting_records").select("*").order("year", { ascending: true })),
     liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,acknowledged_at")),
     liveOptionalList(supabaseClient.from("loan_partial_payments").select("*").order("paid_on", { ascending: false })),
+    liveOptionalList(supabaseClient.from("gallery_photos").select("*").order("created_at", { ascending: false }).limit(300)),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -669,6 +671,15 @@ async function loadLiveState() {
     statementRows: statementsData.map(liveStatementToLocal),
     rules: rulesData.filter((r) => r.is_active !== false).map((r) => ({ id: r.id, section: r.section, item: r.item, sort_order: r.sort_order ?? 0 })),
     audit: audit.reverse().map(liveAuditToLocal),
+    galleryPhotos: galleryPhotosData.map(p => ({
+      id: p.id,
+      profileId: p.profile_id,
+      uploaderName: p.uploader_name || "Member",
+      storagePath: p.storage_path,
+      url: p.url,
+      caption: p.caption || "",
+      createdAt: p.created_at,
+    })),
   };
 
   // Cache identity + MPIN hash locally so the MPIN lock can greet the member on
@@ -1456,6 +1467,7 @@ function renderTab() {
     statement: renderStatement,
     history: renderHistory,
     profile: renderProfile,
+    gallery: renderGallery,
   };
   return (tabs[state.activeTab] || renderDashboard)();
 }
@@ -1503,6 +1515,7 @@ function renderDashboard() {
     { icon: "📊", title: "DASHBOARD", sub: "Association analytics", tab: "meetings" },
     { icon: "📒", title: "STATEMENT", sub: "Transaction history & balances", tab: "statement" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
+    { icon: "🖼️", title: "GALLERY", sub: `Club photos & memories · ${state.galleryPhotos.length} photo${state.galleryPhotos.length !== 1 ? "s" : ""}`, tab: "gallery" },
     isAdmin()
       ? { icon: "📅", title: "MEETINGS", sub: "Annual meeting records & photos", tab: "history" }
       : null,
@@ -2447,6 +2460,13 @@ function lightboxShow(index) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (document.getElementById("gallery-lightbox")) {
+    const n = state.galleryPhotos.length || 1;
+    if (e.key === "ArrowRight") { galleryLbIndex = (galleryLbIndex + 1) % n; renderGalleryLightbox(); }
+    else if (e.key === "ArrowLeft") { galleryLbIndex = ((galleryLbIndex - 1 + n) % n); renderGalleryLightbox(); }
+    else if (e.key === "Escape") { document.getElementById("gallery-lightbox")?.remove(); document.body.style.overflow = ""; }
+    return;
+  }
   if (!document.getElementById("photo-lightbox")) return;
   if (e.key === "ArrowRight") lightboxShow(lightboxIndex + 1);
   else if (e.key === "ArrowLeft") lightboxShow(lightboxIndex - 1);
@@ -4128,6 +4148,54 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  // ── Gallery actions ──────────────────────────────────────────────────────
+  if (action.dataset.action === "open-gallery-photo") {
+    openGalleryLightbox(Number(action.dataset.index));
+    return;
+  }
+  if (action.dataset.action === "close-gallery-lightbox") {
+    document.getElementById("gallery-lightbox")?.remove();
+    document.body.style.overflow = "";
+    return;
+  }
+  if (action.dataset.action === "gallery-lb-prev") {
+    galleryLbIndex = ((galleryLbIndex - 1 + (state.galleryPhotos.length || 1)) % (state.galleryPhotos.length || 1));
+    renderGalleryLightbox();
+    return;
+  }
+  if (action.dataset.action === "gallery-lb-next") {
+    galleryLbIndex = (galleryLbIndex + 1) % (state.galleryPhotos.length || 1);
+    renderGalleryLightbox();
+    return;
+  }
+  if (action.dataset.action === "download-gallery-photo") {
+    downloadGalleryPhoto(action.dataset.url, action.dataset.filename || "banakar-finclub-photo.jpg");
+    return;
+  }
+  if (action.dataset.action === "delete-gallery-photo") {
+    await deleteGalleryPhoto(action.dataset.id, action.dataset.path);
+    document.getElementById("gallery-lightbox")?.remove();
+    document.body.style.overflow = "";
+    return;
+  }
+  if (action.dataset.action === "close-gallery-upload-modal") {
+    document.getElementById("gallery-upload-modal")?.remove();
+    document.body.style.overflow = "";
+    pendingGalleryFiles = [];
+    return;
+  }
+  if (action.dataset.action === "confirm-gallery-upload") {
+    const caption = action.dataset.skipCaption === "true"
+      ? ""
+      : (document.getElementById("gallery-caption-input")?.value?.trim() || "");
+    const files = pendingGalleryFiles;
+    pendingGalleryFiles = [];
+    document.getElementById("gallery-upload-modal")?.remove();
+    document.body.style.overflow = "";
+    if (files.length) await uploadGalleryPhotos(files, caption);
+    return;
+  }
+
   if (action.dataset.action === "pay-now") {
     const amount = action.dataset.amount;
     const now = new Date();
@@ -4329,6 +4397,15 @@ document.addEventListener("change", (event) => {
       }
     };
     reader.readAsDataURL(event.target.files[0]);
+    return;
+  }
+
+  // Gallery photo upload
+  const galleryInput = event.target.closest("[data-action='upload-gallery-photos']");
+  if (galleryInput && galleryInput.files?.length > 0) {
+    if (!liveBackendReady) { showToast("Live backend required."); return; }
+    showGalleryUploadModal(galleryInput.files);
+    galleryInput.value = "";
     return;
   }
 
@@ -5708,6 +5785,198 @@ async function savePostCloseData(closedYearNum, data) {
   await loadLiveState();
   showToast("Meeting details saved.");
   render();
+}
+
+// ── Club Gallery ──────────────────────────────────────────────────────────────
+
+function renderGallery() {
+  const photos = state.galleryPhotos || [];
+  return `
+    <section class="page-title"><p>Club</p><h2>Gallery</h2></section>
+    <section class="grid">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;">
+          <div>
+            <h3 style="margin:0;font-size:15px;">Club Photos</h3>
+            <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">${photos.length} photo${photos.length !== 1 ? "s" : ""} · shared memories</p>
+          </div>
+          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--accent,#2563eb);color:#fff;border-radius:8px;font-size:13px;font-weight:600;flex-shrink:0;">
+            <input type="file" accept="image/*" multiple data-action="upload-gallery-photos" style="display:none;" />
+            + Upload
+          </label>
+        </div>
+        ${photos.length === 0 ? `
+          <div style="text-align:center;padding:48px 20px 40px;color:var(--muted);">
+            <div style="font-size:44px;margin-bottom:12px;">🖼️</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">No photos yet</div>
+            <div style="font-size:13px;margin-top:6px;">Be the first to upload a memory!</div>
+          </div>
+        ` : `
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding-bottom:4px;">
+            ${photos.map((photo, i) => `
+              <div style="position:relative;aspect-ratio:1;overflow:hidden;background:var(--panel,#f3f4f6);">
+                <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.caption || "Club photo")}"
+                     loading="lazy" data-action="open-gallery-photo" data-index="${i}"
+                     style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;" />
+                ${isAdmin() ? `
+                  <button data-action="delete-gallery-photo" data-id="${escapeHtml(photo.id)}" data-path="${escapeHtml(photo.storagePath)}"
+                          style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;">✕</button>
+                ` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+    </section>`;
+}
+
+let pendingGalleryFiles = [];
+let galleryLbIndex = 0;
+let galleryLbTouchX = null;
+
+function showGalleryUploadModal(files) {
+  pendingGalleryFiles = Array.from(files);
+  document.getElementById("gallery-upload-modal")?.remove();
+  const count = pendingGalleryFiles.length;
+  const el = document.createElement("div");
+  el.id = "gallery-upload-modal";
+  el.className = "rules-modal-overlay";
+  el.dataset.action = "close-gallery-upload-modal";
+  el.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:360px;">
+      <div class="rules-modal-header">
+        <div><h3>Upload ${count} Photo${count !== 1 ? "s" : ""}</h3><p>Add an optional caption for this batch</p></div>
+        <button class="rules-modal-close" data-action="close-gallery-upload-modal">✕</button>
+      </div>
+      <div style="padding:16px;">
+        <textarea id="gallery-caption-input" placeholder="Add a caption… (optional)" rows="3"
+                  style="width:100%;border:1.5px solid var(--border,#e5e7eb);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;resize:none;background:var(--bg);color:var(--text);box-sizing:border-box;"></textarea>
+        <button class="primary" style="width:100%;margin-top:12px;" data-action="confirm-gallery-upload">
+          Upload ${count} Photo${count !== 1 ? "s" : ""}
+        </button>
+        <button class="secondary" style="width:100%;margin-top:8px;" data-action="confirm-gallery-upload" data-skip-caption="true">
+          Skip & Upload
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  document.body.style.overflow = "hidden";
+  setTimeout(() => document.getElementById("gallery-caption-input")?.focus(), 100);
+}
+
+async function uploadGalleryPhotos(files, caption) {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const user = state.members.find(m => m.id === currentProfileId()) || state.allMembers?.find(m => m.id === currentProfileId());
+  const uploaderName = user?.name || "Member";
+  let done = 0;
+  showToast(`Uploading ${files.length} photo${files.length !== 1 ? "s" : ""}…`);
+  await Promise.all(files.map(async (file) => {
+    try {
+      const blob = await compressImage(file, 1200, 0.85);
+      const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      const path = `${currentProfileId()}/${suffix}.jpg`;
+      const { error } = await supabaseClient.storage.from("club-gallery").upload(path, blob, { contentType: "image/jpeg" });
+      if (error) throw error;
+      const { data: urlData } = supabaseClient.storage.from("club-gallery").getPublicUrl(path);
+      await liveQuery(supabaseClient.from("gallery_photos").insert({
+        profile_id: currentProfileId(),
+        uploader_name: uploaderName,
+        storage_path: path,
+        url: urlData.publicUrl,
+        caption: caption || null,
+      }));
+      done++;
+    } catch (e) {
+      console.error("Gallery upload error:", e);
+    }
+  }));
+  await loadLiveState();
+  render();
+  showToast(`${done} photo${done !== 1 ? "s" : ""} uploaded successfully!`);
+}
+
+async function deleteGalleryPhoto(photoId, storagePath) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  if (!confirm("Delete this photo? This cannot be undone.")) return;
+  await supabaseClient.storage.from("club-gallery").remove([storagePath]).catch(() => {});
+  await liveQuery(supabaseClient.from("gallery_photos").delete().eq("id", photoId));
+  await loadLiveState();
+  render();
+  showToast("Photo deleted.");
+}
+
+async function downloadGalleryPhoto(url, filename) {
+  try {
+    showToast("Downloading…");
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch {
+    showToast("Download failed. Long-press the image to save.");
+  }
+}
+
+function openGalleryLightbox(index) {
+  galleryLbIndex = index;
+  renderGalleryLightbox();
+}
+
+function renderGalleryLightbox() {
+  document.getElementById("gallery-lightbox")?.remove();
+  const photos = state.galleryPhotos || [];
+  if (!photos.length) return;
+  galleryLbIndex = ((galleryLbIndex % photos.length) + photos.length) % photos.length;
+  const photo = photos[galleryLbIndex];
+  const multi = photos.length > 1;
+  const dateStr = photo.createdAt
+    ? new Date(photo.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+    : "";
+
+  const lb = document.createElement("div");
+  lb.id = "gallery-lightbox";
+  lb.className = "photo-lightbox";
+  lb.style.cssText = "display:flex;flex-direction:column;";
+  lb.innerHTML = `
+    <button class="photo-lightbox-close" data-action="close-gallery-lightbox">✕</button>
+    ${multi ? `<button class="photo-lightbox-nav photo-lightbox-prev" data-action="gallery-lb-prev">‹</button>` : ""}
+    <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.caption || "Club photo")}"
+         style="flex:1;min-height:0;width:100%;object-fit:contain;" />
+    ${multi ? `<button class="photo-lightbox-nav photo-lightbox-next" data-action="gallery-lb-next">›</button>` : ""}
+    <div style="background:rgba(0,0,0,0.78);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
+      <div style="min-width:0;overflow:hidden;">
+        <div style="font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(photo.uploaderName)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${dateStr}${photo.caption ? ` · ${escapeHtml(photo.caption)}` : ""}
+        </div>
+      </div>
+      <button data-action="download-gallery-photo"
+              data-url="${escapeHtml(photo.url)}"
+              data-filename="banakar-finclub-${galleryLbIndex + 1}.jpg"
+              style="flex-shrink:0;padding:8px 14px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+        ↓ Save
+      </button>
+    </div>
+    ${multi ? `<div class="photo-lightbox-counter">${galleryLbIndex + 1} / ${photos.length}</div>` : ""}`;
+
+  document.body.appendChild(lb);
+  document.body.style.overflow = "hidden";
+
+  lb.addEventListener("click", e => { if (e.target === lb) { lb.remove(); document.body.style.overflow = ""; } });
+  lb.addEventListener("touchstart", e => { galleryLbTouchX = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener("touchend", e => {
+    if (galleryLbTouchX === null) return;
+    const dx = e.changedTouches[0].clientX - galleryLbTouchX;
+    galleryLbTouchX = null;
+    if (Math.abs(dx) < 40) return;
+    galleryLbIndex = ((galleryLbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length);
+    renderGalleryLightbox();
+  }, { passive: true });
 }
 
 async function closeCurrentYear() {
