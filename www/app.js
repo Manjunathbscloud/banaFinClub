@@ -5504,9 +5504,9 @@ function showSignoffModal() {
   const poolBal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0) + expectedBankBalance();
   const activeYearStart = activeYearCutoffMonth();
   let yearDeposits = 0, yearInterest = 0;
-  state.monthlyPayments
-    .filter(p => p.status === "paid" && p.month >= activeYearStart)
-    .forEach(p => {
+  const paidMonths = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
+  const distinctMonths = [...new Set(paidMonths.map(p => p.month))].sort();
+  paidMonths.forEach(p => {
       const mem = memberById(p.memberId);
       if (!mem) return;
       const paid = Number(p.paidAmount || p.amount || 0);
@@ -5516,10 +5516,19 @@ function showSignoffModal() {
     });
   // Year 6: monthly_payments only has clean live data from Jul 2026.
   // Add verified pre-Jul totals (same figures used in closeCurrentYear).
+  const preDigitalMonths = yearNum === 6 ? 8 : 0; // Nov 2025–Jun 2026 = 8 months before live data
   if (yearNum === 6) {
     yearDeposits += 153922;
     yearInterest += 76717;
   }
+  const totalMonthsCollected = distinctMonths.length + preDigitalMonths;
+  const monthRangeLabel = (() => {
+    if (yearNum === 6) return `Nov 2025 – ${distinctMonths.length ? new Date(distinctMonths[distinctMonths.length - 1] + "-01").toLocaleString("en-IN", { month: "short", year: "numeric" }) : "Jun 2026"} · ${totalMonthsCollected} months`;
+    if (!distinctMonths.length) return "No months recorded";
+    const first = new Date(distinctMonths[0] + "-01").toLocaleString("en-IN", { month: "short", year: "numeric" });
+    const last = new Date(distinctMonths[distinctMonths.length - 1] + "-01").toLocaleString("en-IN", { month: "short", year: "numeric" });
+    return `${first} – ${last} · ${totalMonthsCollected} month${totalMonthsCollected !== 1 ? "s" : ""}`;
+  })();
   const totalLoans = currentLoans()
     .filter(l => l.notes !== "emi_entry")
     .reduce((s, l) => s + loanOutstanding(l), 0);
@@ -5528,9 +5537,9 @@ function showSignoffModal() {
   const myLoanAmt = memberOutstanding(currentProfileId());
   const myLoanText = myLoanAmt > 0 ? money(myLoanAmt) : "No active loan";
 
-  const summaryRow = (icon, label, value, valueColor) =>
+  const summaryRow = (icon, label, value, valueColor, sub) =>
     `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f3f4f6;">
-      <span style="font-size:13px;color:#6b7280;">${icon} ${label}</span>
+      <span style="font-size:13px;color:#6b7280;">${icon} ${label}${sub ? `<br><span style="font-size:11px;color:#9ca3af;">${sub}</span>` : ""}</span>
       <span style="font-size:13px;font-weight:700;color:${valueColor || "#1C1C2E"};">${value}</span>
     </div>`;
 
@@ -5560,7 +5569,7 @@ function showSignoffModal() {
         ` : `
           <div style="background:#f8fafc;border-radius:12px;padding:4px 14px;margin-bottom:16px;">
             ${summaryRow("🏦", "Pool Balance", money(poolBal), "#0369a1")}
-            ${summaryRow("💰", "Total Deposits this Year", money(yearDeposits))}
+            ${summaryRow("💰", "Total Deposits this Year", money(yearDeposits), null, monthRangeLabel)}
             ${summaryRow("📈", "Interest Earned this Year", money(yearInterest), "#15803d")}
             ${summaryRow("📋", "Active Loans (all members)", money(totalLoans), "#b45309")}
             <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;">
