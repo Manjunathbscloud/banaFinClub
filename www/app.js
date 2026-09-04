@@ -5463,9 +5463,9 @@ async function toggleSignoffRequest(enable) {
     await _silentResetAcks();
   } else {
     await notifyAllActiveMembers(
+      "signoff_request",
       "Record Sign-off Requested",
-      `Admin has requested you to confirm your Year ${state.settings.activeYearNumber || ""} records are correct. Please open the app.`,
-      "signoff_request"
+      `Admin has requested you to confirm your Year ${state.settings.activeYearNumber || ""} records are correct. Please open the app.`
     );
     showToast("Sign-off request enabled — members notified.");
   }
