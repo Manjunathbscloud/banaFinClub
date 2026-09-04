@@ -3836,6 +3836,16 @@ function renderAdmin() {
             <div class="card-body">
               ${yearClosed ? closedBody : openBody}
             </div>
+          </details>
+
+          <details class="card collapsible" id="storage-usage-card">
+            <summary class="card-header" data-action="load-storage-usage">
+              <div><h3>Storage Usage</h3><p>Supabase free tier · 1 GB limit</p></div>
+              <span class="collapse-icon">⌄</span>
+            </summary>
+            <div class="card-body" id="storage-usage-body">
+              <p style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Tap to load storage info</p>
+            </div>
           </details>`;
       })()}
     </section>
@@ -4095,6 +4105,11 @@ document.addEventListener("click", async (event) => {
       expenditure: finExp + expVal, exitPayouts: finExit,
       balance: finBalance - expVal,
     });
+    return;
+  }
+
+  if (action.dataset.action === "load-storage-usage") {
+    loadStorageUsage();
     return;
   }
 
@@ -5785,6 +5800,62 @@ async function savePostCloseData(closedYearNum, data) {
   await loadLiveState();
   showToast("Meeting details saved.");
   render();
+}
+
+// ── Storage Usage ────────────────────────────────────────────────────────────
+
+async function loadStorageUsage() {
+  const body = document.getElementById("storage-usage-body");
+  if (!body || !liveBackendReady) return;
+  body.innerHTML = `<p style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Loading…</p>`;
+
+  async function bucketSize(bucketName) {
+    let totalBytes = 0, count = 0;
+    const listAll = async (prefix = "") => {
+      const { data } = await supabaseClient.storage.from(bucketName).list(prefix, { limit: 1000 });
+      if (!data) return;
+      for (const item of data) {
+        if (item.metadata?.size) { totalBytes += item.metadata.size; count++; }
+        else if (!item.metadata) await listAll(prefix ? `${prefix}/${item.name}` : item.name);
+      }
+    };
+    await listAll();
+    return { bytes: totalBytes, count };
+  }
+
+  const [gallery, meeting, avatars] = await Promise.all([
+    bucketSize("club-gallery").catch(() => ({ bytes: 0, count: 0 })),
+    bucketSize("meeting-photos").catch(() => ({ bytes: 0, count: 0 })),
+    bucketSize("Avatars").catch(() => ({ bytes: 0, count: 0 })),
+  ]);
+
+  const totalBytes = gallery.bytes + meeting.bytes + avatars.bytes;
+  const LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
+  const pct = Math.min(100, (totalBytes / LIMIT_BYTES) * 100).toFixed(1);
+  const usedColor = pct >= 80 ? "#dc2626" : pct >= 50 ? "#f59e0b" : "#16a34a";
+
+  const fmt = (b) => b >= 1024 * 1024 ? `${(b / (1024 * 1024)).toFixed(1)} MB` : b >= 1024 ? `${(b / 1024).toFixed(0)} KB` : `${b} B`;
+
+  const row = (label, info, bytes) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border,#e5e7eb);">
+      <span style="font-size:13px;color:var(--muted);">${label} <span style="font-size:11px;">(${info})</span></span>
+      <span style="font-size:13px;font-weight:600;">${fmt(bytes)}</span>
+    </div>`;
+
+  body.innerHTML = `
+    <div style="padding:4px 0 12px;">
+      ${row("🖼️ Gallery", `${gallery.count} photos`, gallery.bytes)}
+      ${row("📅 Meeting Photos", `${meeting.count} photos`, meeting.bytes)}
+      ${row("👤 Avatars", `${avatars.count} files`, avatars.bytes)}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 8px;">
+        <span style="font-size:13px;font-weight:700;">Total Used</span>
+        <span style="font-size:13px;font-weight:700;color:${usedColor};">${fmt(totalBytes)} / 1 GB</span>
+      </div>
+      <div style="height:8px;background:var(--border,#e5e7eb);border-radius:4px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${usedColor};border-radius:4px;transition:width 0.4s;"></div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0;text-align:right;">${pct}% used · ${(100 - Number(pct)).toFixed(1)}% free</p>
+    </div>`;
 }
 
 // ── Club Gallery ──────────────────────────────────────────────────────────────
