@@ -3406,13 +3406,20 @@ function renderAdmin() {
         <div class="card-body" style="padding:12px 14px;">
           ${(() => {
             const members = depositMembers();
-            const paidCount = members.filter(m => state.monthlyPayments.find(p => p.memberId === m.id && p.month === currentMonth() && p.status === "paid")).length;
+            const paidCount = members.filter(m => {
+              if (memberMonthlyDue(m) === 0) return true; // ₹0 due = not applicable, counts as cleared
+              return state.monthlyPayments.find(p => p.memberId === m.id && p.month === currentMonth() && p.status === "paid");
+            }).length;
+            const pendingCount = members.filter(m => {
+              if (memberMonthlyDue(m) === 0) return false;
+              return !state.monthlyPayments.find(p => p.memberId === m.id && p.month === currentMonth() && p.status === "paid");
+            }).length;
             const nextMonthName = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleString("en-IN", { month: "long" });
             return `
               <div class="pc-summary">
                 <span class="pc-summary-stat"><strong>${paidCount}</strong> paid</span>
                 <span class="pc-summary-divider">·</span>
-                <span class="pc-summary-stat pending-stat"><strong>${members.length - paidCount}</strong> pending</span>
+                <span class="pc-summary-stat pending-stat"><strong>${pendingCount}</strong> pending</span>
                 <span class="pc-summary-divider">·</span>
                 <span class="pc-summary-stat">${members.length} total</span>
               </div>
@@ -3420,20 +3427,24 @@ function renderAdmin() {
                 ${members.map((member) => {
                   const payment = state.monthlyPayments.find(p => p.memberId === member.id && p.month === currentMonth());
                   const isPaid = payment?.status === "paid";
-                  const due = money(memberMonthlyDue(member));
+                  const dueAmt = memberMonthlyDue(member);
+                  const isNA = dueAmt === 0;
+                  const due = money(dueAmt);
                   const initials = (member.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                   return `
-                    <div class="pc-row ${isPaid ? "pc-row-paid" : "pc-row-pending"}">
-                      <div class="pc-avatar ${isPaid ? "pc-avatar-paid" : "pc-avatar-pending"}">${escapeHtml(initials)}</div>
+                    <div class="pc-row ${(isPaid || isNA) ? "pc-row-paid" : "pc-row-pending"}">
+                      <div class="pc-avatar ${(isPaid || isNA) ? "pc-avatar-paid" : "pc-avatar-pending"}">${escapeHtml(initials)}</div>
                       <div class="pc-info">
                         <strong>${escapeHtml(member.name)}</strong>
-                        <span>${isPaid ? `Next: 1–5 ${nextMonthName}` : `Due: ${due}`}</span>
+                        <span>${isPaid ? `Next: 1–5 ${nextMonthName}` : isNA ? "Not applicable this month" : `Due: ${due}`}</span>
                       </div>
                       <div class="pc-right">
-                        <span class="pc-amount">${due}</span>
+                        <span class="pc-amount">${isNA ? "—" : due}</span>
                         ${isPaid
                           ? `<span class="badge good" style="font-size:11px;">✓ Paid</span>`
-                          : `<button class="primary small" data-action="show-mark-payment-modal" data-member-id="${member.id}" type="button">Mark Paid</button>`}
+                          : isNA
+                            ? `<span class="badge" style="font-size:11px;background:var(--border,#e5e7eb);color:var(--muted);">N/A</span>`
+                            : `<button class="primary small" data-action="show-mark-payment-modal" data-member-id="${member.id}" type="button">Mark Paid</button>`}
                       </div>
                     </div>`;
                 }).join("")}
@@ -6038,10 +6049,21 @@ function showMarkPaymentModal(memberId) {
     mo++; if (mo > 12) { mo = 1; y++; }
   }
 
-  // Keep only months with no paid record
-  const unpaidMonths = allMonths.filter(m =>
-    !state.monthlyPayments.find(p => p.memberId === memberId && p.month === m && p.status === "paid")
-  );
+  // Keep only months with no paid record AND where something is actually owed
+  const unpaidMonths = allMonths.filter(m => {
+    if (state.monthlyPayments.find(p => p.memberId === memberId && p.month === m && p.status === "paid")) return false;
+    const [yr, mn] = m.split("-").map(Number);
+    const tempMember = { ...member };
+    const monthNum = mn;
+    // Check if due is 0 for this specific month (e.g. president in December)
+    const dueForMonth = (() => {
+      if (monthNum !== 12) return state.settings.monthlyDeposit;
+      if (member.role === "president") return state.settings.presidentDecemberDeposit || 0;
+      if (member.role === "vice_president") return state.settings.vicePresidentDecemberDeposit || 0;
+      return state.settings.monthlyDeposit;
+    })();
+    return dueForMonth > 0;
+  });
 
   if (!unpaidMonths.length) { showToast(`${member.name} has no pending months.`); return; }
 
