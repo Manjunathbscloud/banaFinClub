@@ -4916,7 +4916,7 @@ function updateEmiPreview() {
 }
 
 async function toggleEmiEnabled() {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const newVal = !state.settings.emiEnabled;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "emi_settings",
@@ -4928,7 +4928,7 @@ async function toggleEmiEnabled() {
 }
 
 async function sendPaymentReminder() {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const month = currentMonth();
   const monthLabel = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
   const members = depositMembers();
@@ -4961,7 +4961,7 @@ async function sendPaymentReminder() {
 }
 
 async function togglePartialRepaymentEnabled() {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const newVal = !state.settings.partialRepaymentEnabled;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "partial_repayment_settings",
@@ -5048,6 +5048,7 @@ async function requestLoan(data) {
   const user = currentUser();
   const loanType = data.loan_type || "full";
   const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
+  if (!Number(data.amount) || Number(data.amount) <= 0) throw new Error("Please enter a valid loan amount.");
   if (loanType === "emi" && (!tenureMonths || tenureMonths < 1)) throw new Error("Please enter a valid tenure (months).");
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").insert({
@@ -5470,7 +5471,7 @@ async function rejectExtension(id, profileId) {
 // ── Year Close / New Year Start ───────────────────────────────────────────────
 
 async function saveMeetingExpense(amount) {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const activeYearDbYear = 2020 + (state.settings.activeYearNumber || 6);
   const roundedAmount = Math.round(amount);
   await liveQuery(supabaseClient.from("deposit_summaries")
@@ -6051,7 +6052,7 @@ function renderGalleryLightbox() {
 }
 
 async function closeCurrentYear() {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const activeYearNum = state.settings.activeYearNumber || 6;
   const activeYearStart = activeYearCutoffMonth();
   const activeYearDbYear = 2020 + activeYearNum;
@@ -6223,7 +6224,7 @@ async function closeCurrentYear() {
 }
 
 async function startNewYear(data) {
-  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const currentYearNum = state.settings.activeYearNumber || 6;
   const newYearNum = currentYearNum + 1;
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
