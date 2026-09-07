@@ -5048,7 +5048,7 @@ async function requestLoan(data) {
   const user = currentUser();
   const loanType = data.loan_type || "full";
   const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
-  if (!Number(data.amount) || Number(data.amount) <= 0) throw new Error("Please enter a valid loan amount.");
+  if (!Number(data.amount) || Number(data.amount) < 10000) throw new Error("Minimum loan amount is ₹10,000.");
   if (loanType === "emi" && (!tenureMonths || tenureMonths < 1)) throw new Error("Please enter a valid tenure (months).");
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").insert({
@@ -5374,6 +5374,7 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   await liveQuery(supabaseClient.from("notifications").insert(rows));
   for (const m of active) {
     supabaseClient.functions.invoke("send-push", { body: { profile_id: m.id, title, body } }).catch(() => {});
+    supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: body } }).catch(() => {});
   }
 }
 
@@ -6211,6 +6212,11 @@ async function closeCurrentYear() {
   }));
 
   await addLiveAudit(`Year ${activeYearNum} closed. Final balance: ${money(Math.round(finalBalance))}. ${activeLoans.length} loans carried forward.`, "year_closed");
+  await notifyAllActiveMembers(
+    "year_closed",
+    `Year ${activeYearNum} Closed`,
+    `Banakar FinClub Year ${activeYearNum} has been officially closed. Final balance: ${money(Math.round(finalBalance))}. Please open the app to review your records.`
+  );
   await loadLiveState();
   showToast(`Year ${activeYearNum} closed. Add meeting details below.`);
   render();
@@ -6293,6 +6299,11 @@ async function startNewYear(data) {
   }
 
   await addLiveAudit(`Year ${newYearNum} started. Renewal fee: ${money(renewalFee)}. Monthly deposit: ${money(newMonthlyDeposit)}. Exits: ${exits.length}.`, "year_started");
+  await notifyAllActiveMembers(
+    "year_started",
+    `Year ${newYearNum} Has Begun!`,
+    `Banakar FinClub Year ${newYearNum} has officially started. Monthly deposit: ${money(newMonthlyDeposit)}. Please open the app to view your updated details.`
+  );
   await loadLiveState();
   showToast(`Year ${newYearNum} started successfully.`);
   render();
