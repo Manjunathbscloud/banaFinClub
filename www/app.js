@@ -2003,7 +2003,7 @@ function renderHistory() {
   return `
     <section class="page-title"><p>Banakar FinClub</p><h2>Meetings</h2></section>
     ${closedYears.map(({ yearNum, dbYear, dep, meeting }) => {
-      const canEdit = isAdmin() && yearNum >= 6;
+      const canEdit = isAdmin();
       const canAddPhotos = liveBackendReady;
 
       // Build the photos array — local files for years 1-5, DB URLs for 6+
