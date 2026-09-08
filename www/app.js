@@ -1237,7 +1237,7 @@ function render() {
   }
 
   // renderChatFab();
-  renderAiFab();
+  // renderAiFab();
   requestAnimationFrame(runPageAnimations);
 }
 
@@ -2837,6 +2837,7 @@ function renderLoans() {
     _histByYear[h.year].push(h);
   });
   const closedLoanTiles = Object.entries(_histByYear)
+    .filter(([yLabel]) => yLabel !== activeYearLabel && (parseInt(yLabel.replace(/\D/g,""),10)||0) !== activeYearNum)
     .sort((a, b) => (parseInt(a[0].replace(/\D/g,""),10)||0) - (parseInt(b[0].replace(/\D/g,""),10)||0))
     .map(([yLabel, loans]) => ({
       key: `lh_${yLabel.replace(/\s+/g,"_")}`,

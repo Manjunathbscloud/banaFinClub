@@ -1427,7 +1427,8 @@ tr:hover td { background: rgba(249,115,22,0.025); }
   .user-chip    { gap: 8px; }
   .user-chip strong { max-width: 160px; font-size: 14px; }
   .user-chip span   { font-size: 11px; }
-  .top-actions .icon-button { font-size: 12px; padding: 8px; }
+  .top-actions { gap: 2px; }
+  .top-actions .icon-button { font-size: 12px; padding: 6px; min-width: 32px; min-height: 32px; border-radius: 8px; }
   .grid, .two-col, .row-list { gap: 10px; }
   .card-header { align-items: flex-start; }
 
