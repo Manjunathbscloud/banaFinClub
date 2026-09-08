@@ -3708,10 +3708,6 @@ function renderAdmin() {
           <div class="alert" style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#15803d;">
             ✓ Year ${activeYearNum} has been closed. Fill in the details below to start Year ${newYearNum}.
           </div>
-          <button class="secondary" data-action="revert-year-close" type="button"
-            style="width:100%;margin-bottom:16px;background:#fff3cd;border-color:#ffc107;color:#856404;font-size:12px;">
-            ↩ Revert to Year ${activeYearNum} (Test Reset)
-          </button>
           <form class="form" data-form="start-new-year">
             <label class="field">
               <span>Renewal Fee per Member (₹)</span>
@@ -3849,20 +3845,6 @@ function renderAdmin() {
             </summary>
             <div class="card-body" id="storage-usage-body">
               <p style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Tap to load storage info</p>
-            </div>
-          </details>
-          <details class="card collapsible" style="border:2px dashed #ffc107;">
-            <summary class="card-header" style="background:#fffbe6;">
-              <div><h3 style="color:#856404;">🧪 Test Mode</h3><p style="color:#a16207;">Notifications go to admin only — safe to test year flow</p></div>
-              <span class="collapse-icon">⌄</span>
-            </summary>
-            <div class="card-body">
-              <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">When <strong>Test Mode</strong> is ON, all notifications (in-app, push, SMS, email) are sent <em>only to the admin</em> instead of all members. Use this to test the year close/start flow without disturbing members.</p>
-              <button class="secondary" data-action="toggle-test-notify-mode" type="button"
-                style="width:100%;${window._NOTIFY_ADMIN_ONLY ? "background:#856404;color:#fff;border-color:#856404;" : ""}">
-                ${window._NOTIFY_ADMIN_ONLY ? "🧪 Test Mode ON — tap to turn OFF" : "Turn ON Test Mode"}
-              </button>
-              ${window._NOTIFY_ADMIN_ONLY ? `<p style="font-size:12px;color:#b45309;margin-top:8px;text-align:center;">⚠️ Remember to turn this OFF after testing</p>` : ""}
             </div>
           </details>`;
       })()}
@@ -4338,12 +4320,6 @@ document.addEventListener("click", async (event) => {
         if (!ok) return;
       }
       await closeCurrentYear();
-    }
-    if (action.dataset.action === "revert-year-close") { await revertYearClose(); }
-    if (action.dataset.action === "toggle-test-notify-mode") {
-      window._NOTIFY_ADMIN_ONLY = !window._NOTIFY_ADMIN_ONLY;
-      showToast(window._NOTIFY_ADMIN_ONLY ? "🧪 Test mode ON — notifications go to admin only" : "✅ Test mode OFF — notifications go to all members");
-      render();
     }
     if (action.dataset.action === "save-meeting-expense") {
       const input = document.getElementById("meeting-expense-input");
@@ -5393,13 +5369,10 @@ async function rejectLoan(id) {
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   if (!liveBackendReady) return;
-  // TEST MODE: when window._NOTIFY_ADMIN_ONLY is true, notify only the logged-in admin
-  const targets = window._NOTIFY_ADMIN_ONLY
-    ? state.members.filter((m) => m.id === state.currentUserId)
-    : state.members.filter((m) => m.status === "active");
-  const rows = targets.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
+  const active = state.members.filter((m) => m.status === "active");
+  const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
   await liveQuery(supabaseClient.from("notifications").insert(rows));
-  for (const m of targets) {
+  for (const m of active) {
     supabaseClient.functions.invoke("send-push", { body: { profile_id: m.id, title, body } }).catch(() => {});
     supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: body } }).catch(() => {});
   }
@@ -6077,45 +6050,6 @@ function renderGalleryLightbox() {
     galleryLbIndex = ((galleryLbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length);
     renderGalleryLightbox();
   }, { passive: true });
-}
-
-async function revertYearClose() {
-  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
-  const ok = confirm(
-    "⚠️ TEST REVERT\n\n" +
-    "This will reset Year 6 as active and remove the 'yearClosed' flag.\n\n" +
-    "Any statements created during Start New Year (renewal fee rows) will also be deleted.\n\n" +
-    "Proceed?"
-  );
-  if (!ok) return;
-  // Revert settings back to Year 6 active state
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: 6,
-      activeYearStart: "2026-07",
-      activeYearLabel: "Sixth Year",
-      activeYearRenewalFee: 0,
-      activeYearExits: [],
-      yearClosed: false,
-    },
-    updated_at: new Date().toISOString(),
-  }));
-  // Delete any statements rows from year 7 test (renewal_fee type)
-  await supabaseClient.from("statements")
-    .delete()
-    .gte("date", new Date().toISOString().slice(0, 7) + "-01")
-    .eq("description", "Year 7 renewal fee")
-    .catch(() => {});
-  // Also delete generic renewal fee rows created during test
-  await supabaseClient.from("statements")
-    .delete()
-    .ilike("description", "%Year 7 renewal fee%")
-    .catch(() => {});
-  await addLiveAudit("TEST REVERT: Year 6 restored as active year (test reset)", "test_revert");
-  await loadLiveState();
-  showToast("↩ Reverted to Year 6. Test mode reset complete.");
-  render();
 }
 
 async function closeCurrentYear() {
