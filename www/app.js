@@ -5369,8 +5369,7 @@ async function rejectLoan(id) {
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   if (!liveBackendReady) return;
-  // TEMP: admin-only during year-end testing — revert after test is done
-  const active = state.members.filter((m) => m.id === state.currentUserId);
+  const active = state.members.filter((m) => m.status === "active");
   const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
   await liveQuery(supabaseClient.from("notifications").insert(rows));
   for (const m of active) {
