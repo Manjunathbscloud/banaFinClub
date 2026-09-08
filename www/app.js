@@ -785,10 +785,15 @@ function roleLabel(role) {
 
 function expectedMonthlyDeposit(member, month = currentMonth()) {
   const monthNumber = Number(month.slice(5, 7));
-  if (monthNumber !== 12) return state.settings.monthlyDeposit;
-  if (member.role === "president") return state.settings.presidentDecemberDeposit;
-  if (member.role === "vice_president") return state.settings.vicePresidentDecemberDeposit;
-  return state.settings.monthlyDeposit;
+  let base;
+  if (monthNumber !== 12) base = state.settings.monthlyDeposit;
+  else if (member.role === "president") base = state.settings.presidentDecemberDeposit;
+  else if (member.role === "vice_president") base = state.settings.vicePresidentDecemberDeposit;
+  else base = state.settings.monthlyDeposit;
+  // For the first month of a new year, include renewal fee in each member's deposit due
+  const renewalFeePerMember = Number(state.settings.activeYearRenewalFeePerMember || 0);
+  if (renewalFeePerMember > 0 && month === activeYearCutoffMonth()) base += renewalFeePerMember;
+  return base;
 }
 
 function loanOutstanding(loan) {
@@ -2587,7 +2592,8 @@ function renderDeposits() {
       .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
     activeBalance = yr6HistFixed + yr6LiveTotal;
   } else {
-    activeBalance = activeHistBase + activeYearRenewalFee - exitPayouts + livePayments;
+    // Renewal fee is now collected as part of first-month payment — do not add separately
+    activeBalance = activeHistBase - exitPayouts + livePayments;
   }
 
   const closedRows = state.deposits
@@ -2647,7 +2653,6 @@ function showDepositYearModal(yearKey) {
     const activeYearNum = state.settings.activeYearNumber || 6;
     const activeYearStart = activeYearCutoffMonth();
     const activeYearLabel = state.settings.activeYearLabel || `${ORDINALS[(activeYearNum || 1) - 1] || "Current"} Year`;
-    const activeYearRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
     const activeYearExits = state.settings.activeYearExits || [];
     const activeYearDbYear = 2020 + activeYearNum;
     const activeHistBase = Number(state.deposits.find(d => d.year === activeYearDbYear)?.balance || 0);
@@ -2724,20 +2729,16 @@ function showDepositYearModal(yearKey) {
         ];
       });
       const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-      const runningTotal = activeYearRenewalFee - exitPayouts + liveTotal;
+      // Renewal fee is now part of first-month payments — do not add separately
+      const runningTotal = -exitPayouts + liveTotal;
       const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
       const startMo = new Date(activeYearStart + "-01");
       const startLabel = `${MNAMES[startMo.getMonth()]} ${startMo.getFullYear()}`;
       const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : _now;
       const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
       title = `${activeYearLabel} (${startLabel} – ${endLabel})`;
-      const _perMem = Number(state.settings.activeYearRenewalFeePerMember || 0);
-      const _memCount = activeMembers().length;
-      const _renewalDetail = _perMem > 0
-        ? `₹${_perMem.toLocaleString("en-IN")} × ${_memCount} members`
-        : `Collected at year start`;
       const points = [
-        ...(activeYearRenewalFee > 0 ? [{ label: "Yearly Renewal Fee", detail: _renewalDetail, amount: activeYearRenewalFee }] : []),
+        // Renewal fee is included in each member's first-month payment row — shown via liveRows
         ...activeYearExits.map(e => ({ label: "Member Exited", detail: `${e.name} – amount paid out`, amount: -Number(e.payout || 0) })),
         ...liveRows,
       ];
@@ -6244,7 +6245,9 @@ async function closeCurrentYear() {
   const activeYearExits = state.settings.activeYearExits || [];
   const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
 
-  const finalPrincipal = renewalFee + allDeposits;
+  // For Year 7+, renewal fee is already captured inside monthly_payments (first month's payment)
+  const renewalFeeExtra = activeYearNum === 6 ? renewalFee : 0;
+  const finalPrincipal = renewalFeeExtra + allDeposits;
   const finalInterest = allInterest;
   const finalExpenditure = histExpenditure;
   const finalExitPayouts = exitPayouts;
@@ -6260,8 +6263,8 @@ async function closeCurrentYear() {
   const confirmed = confirm(
     `Close Year ${activeYearNum}?\n\n` +
     `── Financial Summary ──\n` +
-    `Monthly Deposits : ${money(Math.round(allDeposits))}\n` +
-    `Renewal Fee      : ${money(Math.round(renewalFee))}\n` +
+    `Monthly Deposits : ${money(Math.round(allDeposits))}${activeYearNum > 6 && renewalFee > 0 ? " (incl. renewal fee)" : ""}\n` +
+    (renewalFeeExtra > 0 ? `Renewal Fee      : ${money(Math.round(renewalFeeExtra))}\n` : "") +
     `Interest Earned  : ${money(Math.round(finalInterest))}\n` +
     (finalExpenditure > 0 ? `Meeting Expense  : −${money(Math.round(finalExpenditure))}\n` : "") +
     (exitPayouts > 0 ? `Exit Payouts     : −${money(Math.round(exitPayouts))} (${exitNames})\n` : "") +
@@ -6276,10 +6279,10 @@ async function closeCurrentYear() {
   const yearLabel = `${ORDINALS[activeYearNum - 1] || "Year " + activeYearNum} Year (${activeYearDbYear})`;
 
   const breakdownItems = [];
-  if (renewalFee > 0) {
-    breakdownItems.push({ description: "Yearly Renewal Fee", details: "Collected at year start", amount: Math.round(renewalFee) });
+  if (renewalFeeExtra > 0) {
+    breakdownItems.push({ description: "Yearly Renewal Fee", details: "Collected at year start", amount: Math.round(renewalFeeExtra) });
   }
-  const monthlyDepositsTotal = Math.round(finalPrincipal - renewalFee);
+  const monthlyDepositsTotal = Math.round(finalPrincipal - renewalFeeExtra);
   if (monthlyDepositsTotal > 0) {
     breakdownItems.push({ description: "Total Monthly Deposits", details: "Member contributions for the year", amount: monthlyDepositsTotal });
   }
@@ -6433,19 +6436,9 @@ async function startNewYear(data) {
     }
   }
 
-  // Record renewal fee as a credit in statements so bank balance reflects it
-  if (renewalFee > 0) {
-    const _lastBal = state.statementRows[0]?.balance || 0;
-    await liveQuery(supabaseClient.from("statements").insert({
-      date: today(),
-      type: "credit",
-      amount: renewalFee,
-      description: `Year ${newYearNum} renewal fee (₹${renewalFeePerMember.toLocaleString("en-IN")} × ${nonExitingCount} members)`,
-      balance: _lastBal + renewalFee,
-    }));
-  }
-
-  await addLiveAudit(`Year ${newYearNum} started. Renewal fee: ${money(renewalFee)}. Monthly deposit: ${money(newMonthlyDeposit)}. Exits: ${exits.length}.`, "year_started");
+  // Renewal fee is NOT pre-credited here — it is collected as part of each member's
+  // first-month payment when admin marks that payment done.
+  await addLiveAudit(`Year ${newYearNum} started. Renewal fee: ${money(renewalFee)} per member (collected via first-month payments). Monthly deposit: ${money(newMonthlyDeposit)}. Exits: ${exits.length}.`, "year_started");
   await notifyAllActiveMembers(
     "year_started",
     `Year ${newYearNum} Has Begun!`,
