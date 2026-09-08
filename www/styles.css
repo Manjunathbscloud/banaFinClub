@@ -643,7 +643,7 @@ button:focus-visible {
   gap: 12px;
 }
 
-.user-chip { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.user-chip { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; overflow: hidden; }
 
 .avatar {
   width: 38px;
@@ -684,7 +684,7 @@ button:focus-visible {
 
 .user-chip span { color: var(--muted); font-size: 12px; }
 
-.top-actions { display: flex; align-items: center; gap: 6px; }
+.top-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 .mode-badge {
   display: none;

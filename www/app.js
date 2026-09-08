@@ -1206,7 +1206,7 @@ function render() {
           <div class="top-actions">
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
-            <button class="icon-button" type="button" data-action="manual-refresh" title="Refresh data" aria-label="Refresh" id="refresh-btn" style="font-size:18px;line-height:1;">↻</button>
+            <button class="icon-button" type="button" data-action="manual-refresh" title="Refresh data" aria-label="Refresh" id="refresh-btn">↻</button>
             <button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
               ${bellIcon()}
               ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
