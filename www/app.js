@@ -3748,16 +3748,6 @@ function renderAdmin() {
               }).join("")}
             </div>` : ""}
           </div>
-          <div style="margin-bottom:12px;">
-            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Annual Meeting Expense</p>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <input type="number" id="meeting-expense-input" placeholder="e.g. 20000" min="0"
-                value="${currentExpenditure > 0 ? currentExpenditure : ''}"
-                style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;" />
-              <button class="secondary" data-action="save-meeting-expense" type="button" style="white-space:nowrap;">Save</button>
-            </div>
-            ${currentExpenditure > 0 ? `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Saved: ${money(currentExpenditure)}</p>` : `<p style="font-size:12px;color:var(--muted);margin-top:4px;">Add after the annual meeting is done.</p>`}
-          </div>
           <button class="danger" data-action="close-current-year" type="button" style="width:100%;" ${!allReady ? "disabled" : ""}>
             Close Year ${activeYearNum} &amp; Finalize Records
           </button>
@@ -5629,10 +5619,9 @@ async function toggleSignoffRequest(enable) {
     activeYearRenewalFee: state.settings.activeYearRenewalFee || 0,
     activeYearRenewalFeePerMember: state.settings.activeYearRenewalFeePerMember || 0,
   };
-  const { error } = await liveQuery(supabaseClient.from("settings")
+  await liveQuery(supabaseClient.from("settings")
     .update({ value: currentInfo })
     .eq("id", "active_year_info"));
-  if (error) { showToast("Failed to update sign-off setting."); return; }
   if (!enable) {
     await _silentResetAcks();
   } else {
@@ -5650,10 +5639,9 @@ async function toggleSignoffRequest(enable) {
 async function acknowledgeMeetingRecords() {
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
-  const { error } = await liveQuery(supabaseClient.from("meeting_acknowledgements")
+  await liveQuery(supabaseClient.from("meeting_acknowledgements")
     .upsert({ profile_id: currentProfileId(), year: yearDbYear, acknowledged_at: new Date().toISOString() },
       { onConflict: "profile_id,year" }));
-  if (error) { showToast("Could not save confirmation. Try again."); return; }
   document.getElementById("signoff-modal")?.remove();
   document.body.style.overflow = "";
   await loadLiveState();
