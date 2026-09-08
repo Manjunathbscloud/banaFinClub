@@ -3421,7 +3421,7 @@ function renderAdmin() {
   return `
     <section class="page-title"><p>${t("admin")}</p><h2>Operations</h2></section>
     <section class="grid">
-      <details class="card collapsible" open>
+      <details class="card collapsible">
         <summary class="card-header"><div><h3>Payment Collection</h3><p>${new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} · Mark members as paid</p></div><span class="collapse-icon">⌄</span></summary>
         <div class="card-body" style="padding:12px 14px;">
           ${(() => {
@@ -4114,9 +4114,9 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "toggle-signoff-request") {
-    const enable = action.checked !== undefined ? action.checked : action.dataset.enable === "true";
+    const enable = action.type === "checkbox" ? action.checked : action.dataset.enable === "true";
     action.disabled = true;
-    try { await toggleSignoffRequest(enable); } catch(e) { showToast(e.message || "Something went wrong."); } finally { action.disabled = false; }
+    try { await toggleSignoffRequest(enable); } catch(e) { showToast(typeof e?.message === "string" ? e.message : "Failed to update sign-off setting."); } finally { action.disabled = false; }
     return;
   }
 
@@ -5540,14 +5540,14 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 async function toggleSignoffRequest(enable) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const currentInfo = {
-    activeYearNumber: state.settings.activeYearNumber,
-    activeYearStart: state.settings.activeYearStart,
-    activeYearLabel: state.settings.activeYearLabel,
-    activeYearExits: state.settings.activeYearExits,
-    yearClosed: state.settings.yearClosed,
+    activeYearNumber: state.settings.activeYearNumber || 6,
+    activeYearStart: state.settings.activeYearStart || "2026-07",
+    activeYearLabel: state.settings.activeYearLabel || "Sixth Year",
+    activeYearExits: state.settings.activeYearExits || [],
+    yearClosed: state.settings.yearClosed || false,
     signoffEnabled: enable,
-    activeYearRenewalFee: state.settings.activeYearRenewalFee,
-    activeYearRenewalFeePerMember: state.settings.activeYearRenewalFeePerMember,
+    activeYearRenewalFee: state.settings.activeYearRenewalFee || 0,
+    activeYearRenewalFeePerMember: state.settings.activeYearRenewalFeePerMember || 0,
   };
   const { error } = await liveQuery(supabaseClient.from("settings")
     .update({ value: currentInfo })
@@ -6657,17 +6657,18 @@ function initPullToRefresh() {
 
   document.addEventListener("touchstart", (e) => {
     if (refreshing) return;
-    if ((document.documentElement.scrollTop || document.body.scrollTop) === 0) {
-      startY = e.touches[0].clientY;
-      pulling = true;
-    }
+    startY = e.touches[0].clientY;
+    // Only arm pull-to-refresh when genuinely at the very top
+    pulling = (document.documentElement.scrollTop || document.body.scrollTop) === 0;
   }, { passive: true });
 
   document.addEventListener("touchmove", (e) => {
     if (!pulling || refreshing) return;
     const dist = e.touches[0].clientY - startY;
-    if (dist > 8) {
-      indicator().style.height = Math.min(dist * 0.55, 56) + "px";
+    // Abort if user scrolls sideways or upward — don't show indicator
+    if (dist <= 0) { pulling = false; indicator().style.height = "0"; return; }
+    if (dist > 12) {
+      indicator().style.height = Math.min(dist * 0.5, 56) + "px";
     }
   }, { passive: true });
 
