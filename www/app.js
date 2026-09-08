@@ -1206,6 +1206,7 @@ function render() {
           <div class="top-actions">
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
+            <button class="icon-button" type="button" data-action="manual-refresh" title="Refresh data" aria-label="Refresh" id="refresh-btn" style="font-size:18px;line-height:1;">↻</button>
             <button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
               ${bellIcon()}
               ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
@@ -4315,6 +4316,21 @@ document.addEventListener("click", async (event) => {
     render();
   }
 
+  if (action.dataset.action === "manual-refresh") {
+    if (!liveBackendReady) { showToast("Not connected to live data."); return; }
+    const btn = document.getElementById("refresh-btn");
+    if (btn) { btn.style.animation = "spin 0.7s linear infinite"; btn.disabled = true; }
+    try {
+      await loadLiveState();
+      render();
+      showToast("Data refreshed.");
+    } catch (_) {
+      showToast("Refresh failed. Check connection.");
+    } finally {
+      if (btn) { btn.style.animation = ""; btn.disabled = false; }
+    }
+    return;
+  }
 
   if (action.dataset.action === "logout") {
     if (mpinSet()) {
@@ -6768,6 +6784,8 @@ async function initApp() {
 }
 
 function initPullToRefresh() {
+  // Removed — replaced by the ↻ Refresh button in the header
+  return;
   const THRESHOLD = 72;
   let startY = 0;
   let pulling = false;
