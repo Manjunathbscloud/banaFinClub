@@ -633,6 +633,7 @@ async function loadLiveState() {
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
+      annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
     currentUserId: current?.status === "active" ? current.id : null,
     members,
@@ -3605,6 +3606,64 @@ function renderAdmin() {
       </details>
 
       ${(() => {
+        const _arActiveYearNum = state.settings.activeYearNumber || 6;
+        const _arPrevYearNum = _arActiveYearNum - 1;
+        if (_arActiveYearNum < 7) return "";
+        const _arPrevDbYear = 2020 + _arPrevYearNum;
+        const _arDepRow = state.deposits.find(d => d.year === _arPrevDbYear);
+        if (!_arDepRow) return "";
+        const _arReportSentYear = state.settings.annualReportSentYear || 0;
+        const _arAlreadySent = _arReportSentYear === _arPrevYearNum;
+        const _arMeeting = state.meetingRecords.find(r => r.year === _arPrevDbYear);
+        const _arMeetingDetails = _arMeeting && _arMeeting.date
+          ? (_arMeeting.venue ? `${_arMeeting.date} at ${_arMeeting.venue}` : _arMeeting.date)
+          : "Meeting details: not yet filled — edit in Meetings tab";
+        const _arPrincipal = _arDepRow.principal;
+        const _arInterest = _arDepRow.interest;
+        const _arExpenditure = _arDepRow.expenditure;
+        const _arBalance = _arDepRow.balance;
+        return `
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+          <h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">📧 Year ${_arPrevYearNum} Annual Report</h3>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+            <strong>Financial Summary:</strong>
+            Principal: ${money(_arPrincipal)} &nbsp;|&nbsp;
+            Interest: ${money(_arInterest)} &nbsp;|&nbsp;
+            Expenses: ${money(_arExpenditure)} &nbsp;|&nbsp;
+            Balance: ${money(_arBalance)}
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            <strong>Meeting:</strong> ${_arMeetingDetails}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <label style="font-size:13px;font-weight:600;">Meeting Expenses (&#8377;):</label>
+            <input id="ar-expense-input" type="number" min="0" step="1"
+              value="${_arExpenditure || ""}"
+              style="width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--input-bg,var(--card));color:var(--text);">
+            <button data-action="save-closed-year-expense" data-year="${_arPrevYearNum}"
+              style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+              Save Expenses
+            </button>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:0 0 14px;">Saving expenses updates the Year ${_arPrevYearNum} final balance.</p>
+          ${_arAlreadySent
+            ? `<div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:13px;color:#16a34a;font-weight:600;">&#10003; Report sent.</span>
+                <button data-action="send-annual-report" data-year="${_arPrevYearNum}"
+                  style="padding:7px 16px;background:#f3f4f6;color:#374151;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+                  Send Again
+                </button>
+              </div>`
+            : `<button data-action="send-annual-report" data-year="${_arPrevYearNum}"
+                style="width:100%;padding:10px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
+                &#128231; Send Year ${_arPrevYearNum} Annual Report to All Members
+              </button>`
+          }
+        </div>
+        `;
+      })()}
+
+      ${(() => {
         const yearClosed = state.settings.yearClosed === true;
         const activeYearNum = state.settings.activeYearNumber || 6;
         const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
@@ -4105,6 +4164,26 @@ document.addEventListener("click", async (event) => {
       expenditure: finExp + expVal, exitPayouts: finExit,
       balance: finBalance - expVal,
     });
+    return;
+  }
+
+  if (action.dataset.action === "save-closed-year-expense") {
+    const yearNum = Number(action.dataset.year);
+    const amount = Number(document.getElementById("ar-expense-input")?.value || 0);
+    if (!yearNum || amount < 0) { showToast("Enter a valid expense amount."); return; }
+    action.disabled = true;
+    action.textContent = "Saving…";
+    await saveClosedYearExpense(yearNum, amount);
+    return;
+  }
+
+  if (action.dataset.action === "send-annual-report") {
+    const yearNum = Number(action.dataset.year);
+    if (!yearNum) return;
+    if (!confirm(`Send Year ${yearNum} Annual Report to all members?`)) return;
+    action.disabled = true;
+    action.textContent = "Sending…";
+    await sendAnnualReport(yearNum);
     return;
   }
 
@@ -5802,6 +5881,69 @@ async function savePostCloseData(closedYearNum, data) {
   await loadLiveState();
   showToast("Meeting details saved.");
   render();
+}
+
+// ── Annual Report ─────────────────────────────────────────────────────────────
+
+async function saveClosedYearExpense(yearNum, newExpenditure) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const yearDbYear = 2020 + yearNum;
+  const depRow = state.deposits.find(d => d.year === yearDbYear);
+  if (!depRow) { showToast("No deposit summary found for Year " + yearNum); return; }
+  const currentBalance = Number(depRow.balance || 0);
+  const currentExp = Number(depRow.expenditure || 0);
+  const newBalance = currentBalance - newExpenditure + currentExp;
+  await liveQuery(supabaseClient.from("deposit_summaries")
+    .update({ expenditure: newExpenditure, balance: newBalance })
+    .eq("year", yearDbYear));
+  const lastBalance = state.statementRows[0]?.balance || 0;
+  await liveQuery(supabaseClient.from("statements").insert({
+    date: today(), type: "debit", amount: newExpenditure,
+    description: `Year ${yearNum} annual meeting expense`,
+    balance: lastBalance - newExpenditure,
+  }));
+  await loadLiveState();
+  render();
+  showToast(`Year ${yearNum} expenses saved (${money(newExpenditure)})`);
+}
+
+async function sendAnnualReport(yearNum) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const yearDbYear = 2020 + yearNum;
+  const depRow = state.deposits.find(d => d.year === yearDbYear);
+  const meeting = state.meetingRecords.find(r => r.year === yearDbYear);
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const yearLabel = ORDINALS[yearNum - 1] || `Year ${yearNum}`;
+  try {
+    showToast("Sending Year " + yearNum + " Annual Report…");
+    const { error } = await supabaseClient.functions.invoke("send-meeting-summary", {
+      body: {
+        yearNum,
+        yearLabel,
+        date: meeting?.date || "",
+        venue: meeting?.venue || "",
+        notes: meeting?.notes || "",
+        decisions: meeting?.decisions || [],
+        principal: Number(depRow?.principal || 0),
+        interest: Number(depRow?.interest || 0),
+        expenditure: Number(depRow?.expenditure || 0),
+        exitPayouts: Number(depRow?.exit_payouts || 0),
+        balance: Number(depRow?.balance || 0),
+      }
+    });
+    if (error) throw error;
+    await liveQuery(supabaseClient.from("settings").upsert({
+      id: "annual_report_status",
+      value: { annualReportSentYear: yearNum, sentAt: new Date().toISOString() },
+      updated_at: new Date().toISOString(),
+    }));
+    await loadLiveState();
+    render();
+    showToast(`📧 Year ${yearNum} Annual Report sent to all members!`);
+  } catch (e) {
+    console.error("sendAnnualReport error:", e);
+    showToast("Email send failed: " + (e?.message || "check edge function logs."));
+  }
 }
 
 // ── Storage Usage ────────────────────────────────────────────────────────────
