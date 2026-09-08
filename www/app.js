@@ -3700,10 +3700,9 @@ function renderAdmin() {
         const bankCurrent = state.statementRows.some(s => s.date && (s.date.startsWith(_thisMonth) || s.date.startsWith(_lastMonth)));
 
         const readinessChecks = [
-          { ok: allMembersPaid,       label: allMembersPaid ? `All members paid for ${latestMonthLabel}` : `Not all members paid for ${latestMonthLabel}` },
-          { ok: currentExpenditure > 0, label: currentExpenditure > 0 ? `Meeting expense recorded (${money(currentExpenditure)})` : "Meeting expense not recorded yet" },
-          { ok: pendingLoans === 0,   label: pendingLoans === 0 ? "No pending loan requests" : `${pendingLoans} loan request${pendingLoans > 1 ? "s" : ""} pending approval` },
-          { ok: bankCurrent,          label: bankCurrent ? "Bank statement up to date" : "Bank statement not updated this month" },
+          { ok: allMembersPaid,     label: allMembersPaid ? `All members paid for ${latestMonthLabel}` : `Not all members paid for ${latestMonthLabel}` },
+          { ok: pendingLoans === 0, label: pendingLoans === 0 ? "No pending loan requests" : `${pendingLoans} loan request${pendingLoans > 1 ? "s" : ""} pending approval` },
+          { ok: bankCurrent,        label: bankCurrent ? "Bank statement up to date" : "Bank statement not updated this month" },
         ];
         const allReady = readinessChecks.every(c => c.ok);
 
