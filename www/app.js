@@ -2574,7 +2574,6 @@ function renderDeposits() {
   const activeYearNum = state.settings.activeYearNumber || 6;
   const activeYearStart = activeYearCutoffMonth();
   const activeYearLabel = state.settings.activeYearLabel || `${ORDINALS[(activeYearNum || 1) - 1] || "Current"} Year`;
-  const activeYearRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
   const activeYearExits = state.settings.activeYearExits || [];
   const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
   const activeYearDbYear = 2020 + activeYearNum;
@@ -5669,11 +5668,15 @@ async function acknowledgeMeetingRecords() {
     .delete().eq("profile_id", pid).eq("year", yearDbYear));
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
     .insert({ profile_id: pid, year: yearDbYear, acknowledged_at: new Date().toISOString() }));
+  // Optimistically update local state so the banner clears immediately regardless of SELECT RLS
+  state.meetingAcknowledgements = state.meetingAcknowledgements.filter(a => !(a.profileId === pid && a.year === yearDbYear));
+  state.meetingAcknowledgements.push({ id: `local-${pid}`, profileId: pid, year: yearDbYear, acknowledgedAt: new Date().toISOString() });
   document.getElementById("signoff-modal")?.remove();
   document.body.style.overflow = "";
-  await loadLiveState();
   render();
   showToast("✓ Records confirmed.");
+  await loadLiveState();
+  render();
 }
 
 async function _silentResetAcks() {
