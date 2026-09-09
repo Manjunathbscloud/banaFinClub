@@ -350,6 +350,42 @@ button { cursor: pointer; }
 .app { height: 100%; }
 
 /* ── Auth page ──────────────────────────────── */
+/* ── Login screen keyframes ─────────────────────────────────────────────── */
+@keyframes bfc-fade-down {
+  from { opacity: 0; transform: translateY(-22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bfc-fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bfc-card-up {
+  from { opacity: 0; transform: translateY(60px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bfc-orb-1 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  40%     { transform: translate(28px,-36px) scale(1.08); }
+  70%     { transform: translate(-18px,22px) scale(0.94); }
+}
+@keyframes bfc-orb-2 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  30%     { transform: translate(-22px,32px) scale(1.06); }
+  65%     { transform: translate(26px,-18px) scale(0.92); }
+}
+@keyframes bfc-orb-3 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50%     { transform: translate(16px,28px) scale(1.1); }
+}
+@keyframes bfc-logo-pulse {
+  0%,100% { box-shadow: 0 8px 28px rgba(0,0,0,0.22), 0 0 0 2px rgba(249,115,22,0.35); }
+  50%     { box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 0 0 5px rgba(249,115,22,0.55), 0 0 48px rgba(249,115,22,0.18); }
+}
+@keyframes bfc-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
 .auth-page {
   min-height: 100vh;
   display: grid;
@@ -360,14 +396,45 @@ button { cursor: pointer; }
     radial-gradient(circle at 18% 82%, rgba(234,88,12,0.42), transparent 44%),
     var(--charcoal);
   color: white;
+  overflow: hidden;
 }
 
-.auth-hero { padding: 28px 22px 12px; }
+/* floating orbs */
+.auth-orbs { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.auth-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.28;
+}
+.auth-orb-1 {
+  width: 340px; height: 340px;
+  background: radial-gradient(circle, #f97316, #ea580c);
+  top: -80px; right: -60px;
+  animation: bfc-orb-1 14s ease-in-out infinite;
+}
+.auth-orb-2 {
+  width: 260px; height: 260px;
+  background: radial-gradient(circle, #fb923c, #c2410c);
+  bottom: 30%; left: -80px;
+  animation: bfc-orb-2 18s ease-in-out infinite;
+}
+.auth-orb-3 {
+  width: 180px; height: 180px;
+  background: radial-gradient(circle, #fbbf24, #f97316);
+  bottom: -40px; right: 20%;
+  animation: bfc-orb-3 11s ease-in-out infinite;
+}
+
+/* hero animations */
+.auth-hero { position: relative; padding: 28px 22px 12px; }
 
 .brand-row {
   display: flex;
   align-items: center;
   gap: 12px;
+  animation: bfc-fade-down 0.55s cubic-bezier(0.22,1,0.36,1) both;
+  animation-delay: 0.05s;
 }
 
 .brand-logo {
@@ -378,6 +445,35 @@ button { cursor: pointer; }
   display: grid;
   place-items: center;
   box-shadow: 0 8px 28px rgba(0,0,0,0.22), 0 0 0 2px rgba(249,115,22,0.35);
+  animation: bfc-logo-pulse 3.5s ease-in-out 1s infinite;
+}
+
+.auth-copy {
+  max-width: 560px;
+  margin-top: 28px;
+  animation: bfc-fade-up 0.6s cubic-bezier(0.22,1,0.36,1) both;
+  animation-delay: 0.2s;
+}
+
+.auth-card {
+  align-self: end;
+  background: white;
+  color: var(--ink);
+  border-radius: 24px 24px 0 0;
+  padding: 22px 18px;
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.22);
+  animation: bfc-card-up 0.6s cubic-bezier(0.22,1,0.36,1) both;
+  animation-delay: 0.15s;
+}
+
+/* shimmer on the club name */
+.auth-brand-shimmer {
+  background: linear-gradient(90deg, #fff 30%, #fbbf24 50%, #fff 70%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: bfc-shimmer 3.5s linear 0.8s infinite;
 }
 
 .brand-logo img { width: 44px; height: 44px; }
@@ -387,8 +483,6 @@ button { cursor: pointer; }
 
 .brand-row h1 { font-size: 24px; line-height: 1.1; }
 .brand-row p  { opacity: 0.82; font-size: 13px; }
-
-.auth-copy { max-width: 560px; margin-top: 28px; }
 
 .auth-copy h2 {
   font-size: 28px;
@@ -400,15 +494,6 @@ button { cursor: pointer; }
   margin-top: 14px;
   color: rgba(255,255,255,0.78);
   line-height: 1.55;
-}
-
-.auth-card {
-  align-self: end;
-  background: white;
-  color: var(--ink);
-  border-radius: 24px 24px 0 0;
-  padding: 22px 18px;
-  box-shadow: 0 -20px 60px rgba(0,0,0,0.22);
 }
 
 /* ── Segmented control ──────────────────────── */
@@ -1581,7 +1666,7 @@ tr:hover td { background: rgba(249,115,22,0.025); }
     grid-template-rows: 1fr;
   }
 
-  .auth-hero { padding: 48px; }
+  .auth-hero { padding: 48px; position: relative; }
 
   .auth-card {
     align-self: stretch;
