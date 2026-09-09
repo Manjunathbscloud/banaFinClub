@@ -296,6 +296,9 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("send-meeting-summary error:", err);
-    return new Response(String(err), { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    });
   }
 });
