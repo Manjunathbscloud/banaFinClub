@@ -4205,7 +4205,13 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "acknowledge-records") {
     action.disabled = true;
     action.textContent = "Confirming…";
-    await acknowledgeMeetingRecords();
+    try {
+      await acknowledgeMeetingRecords();
+    } catch (e) {
+      action.disabled = false;
+      action.textContent = "Records Look Good ✓";
+      showToast(typeof e?.message === "string" ? e.message : "Failed to confirm. Please try again.");
+    }
     return;
   }
 
@@ -5655,10 +5661,14 @@ async function toggleSignoffRequest(enable) {
 
 async function acknowledgeMeetingRecords() {
   if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const pid = currentProfileId();
+  if (!pid) { showToast("Not logged in."); return; }
   const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+  // Delete any existing ack first, then insert — avoids relying on a unique constraint
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .upsert({ profile_id: currentProfileId(), year: yearDbYear, acknowledged_at: new Date().toISOString() },
-      { onConflict: "profile_id,year" }));
+    .delete().eq("profile_id", pid).eq("year", yearDbYear));
+  await liveQuery(supabaseClient.from("meeting_acknowledgements")
+    .insert({ profile_id: pid, year: yearDbYear, acknowledged_at: new Date().toISOString() }));
   document.getElementById("signoff-modal")?.remove();
   document.body.style.overflow = "";
   await loadLiveState();
