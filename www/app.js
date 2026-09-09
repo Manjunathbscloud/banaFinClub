@@ -1334,10 +1334,15 @@ function renderAuth(mode) {
   document.querySelector("#app").innerHTML = `
     <div class="auth-page">
       <section class="auth-hero">
+        <div class="auth-orbs">
+          <div class="auth-orb auth-orb-1"></div>
+          <div class="auth-orb auth-orb-2"></div>
+          <div class="auth-orb auth-orb-3"></div>
+        </div>
         <div class="brand-row">
           <div class="brand-logo"><img src="icon.svg" alt="Banakar FinClub logo" /></div>
           <div>
-            <h1>Banakar FinClub</h1>
+            <h1 class="auth-brand-shimmer">Banakar FinClub</h1>
             <p>${t("privateClub")}</p>
           </div>
         </div>
