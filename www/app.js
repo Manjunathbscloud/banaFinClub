@@ -5788,6 +5788,16 @@ async function sendMeetingSummaryEmail(data) {
     showToast("Sending meeting summary to all members…");
     const { error } = await supabaseClient.functions.invoke("send-meeting-summary", { body: data });
     if (error) throw error;
+    // Mark annual report as sent so admin panel shows "✓ Report sent."
+    if (data.yearNum) {
+      await liveQuery(supabaseClient.from("settings").upsert({
+        id: "annual_report_status",
+        value: { annualReportSentYear: data.yearNum, sentAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      }));
+    }
+    await loadLiveState();
+    render();
     showToast("✓ Meeting summary sent to all members.");
   } catch (e) {
     console.error("send-meeting-summary error:", e);
