@@ -4148,12 +4148,16 @@ document.addEventListener("click", async (event) => {
     modal?.remove();
     document.body.style.overflow = "";
     await savePostCloseData(closedYearNum, { date: dateVal, venue: venueVal, expenditure: expVal, notes: notesVal, decisions });
+    const _pcLoansOut = state.currentLoans.reduce((s, l) => s + loanOutstanding(l), 0);
     await sendMeetingSummaryEmail({
+      type: "annual_meeting",
       yearNum: closedYearNum, yearLabel,
       date: dateVal, venue: venueVal, notes: notesVal, decisions,
       principal: finPrincipal, interest: finInterest,
       expenditure: finExp + expVal, exitPayouts: finExit,
       balance: finBalance - expVal,
+      loansOutstanding: Math.round(_pcLoansOut),
+      poolBalance: Math.round(finBalance - expVal) + Math.round(_pcLoansOut),
     });
     return;
   }
@@ -5944,8 +5948,11 @@ async function sendAnnualReport(yearNum) {
   const yearLabel = ORDINALS[yearNum - 1] || `Year ${yearNum}`;
   try {
     showToast("Sending Year " + yearNum + " Annual Report…");
+    const _arLoansOut = state.currentLoans.reduce((s, l) => s + loanOutstanding(l), 0);
+    const _arBalance  = Number(depRow?.balance || 0);
     const { error } = await supabaseClient.functions.invoke("send-meeting-summary", {
       body: {
+        type: "annual_meeting",
         yearNum,
         yearLabel,
         date: meeting?.date || "",
@@ -5956,7 +5963,9 @@ async function sendAnnualReport(yearNum) {
         interest: Number(depRow?.interest || 0),
         expenditure: Number(depRow?.expenditure || 0),
         exitPayouts: Number(depRow?.exit_payouts || 0),
-        balance: Number(depRow?.balance || 0),
+        balance: _arBalance,
+        loansOutstanding: Math.round(_arLoansOut),
+        poolBalance: Math.round(_arBalance) + Math.round(_arLoansOut),
       }
     });
     if (error) throw error;
@@ -6389,6 +6398,23 @@ async function closeCurrentYear() {
     `Year ${activeYearNum} Closed`,
     `Banakar FinClub Year ${activeYearNum} has been officially closed. Final balance: ${money(Math.round(finalBalance))}. Please open the app to review your records.`
   );
+  try {
+    const loansOutstanding = activeLoans.reduce((s, l) => s + loanOutstanding(l), 0);
+    const poolBalance = Math.round(finalBalance) + Math.round(loansOutstanding);
+    await supabaseClient.functions.invoke("send-meeting-summary", {
+      body: {
+        type: "year_close",
+        yearNum: activeYearNum,
+        principal: Math.round(finalPrincipal),
+        interest: Math.round(finalInterest),
+        expenditure: Math.round(finalExpenditure),
+        exitPayouts: Math.round(finalExitPayouts),
+        balance: Math.round(finalBalance),
+        loansOutstanding: Math.round(loansOutstanding),
+        poolBalance,
+      },
+    });
+  } catch (e) { console.warn("Year-close email failed:", e); }
   await loadLiveState();
   showToast(`Year ${activeYearNum} closed. Add meeting details below.`);
   render();
@@ -6466,6 +6492,17 @@ async function startNewYear(data) {
     `Year ${newYearNum} Has Begun!`,
     `Banakar FinClub Year ${newYearNum} has officially started. Monthly deposit: ${money(newMonthlyDeposit)}. Please open the app to view your updated details.`
   );
+  try {
+    await supabaseClient.functions.invoke("send-meeting-summary", {
+      body: {
+        type: "year_start",
+        yearNum: newYearNum,
+        monthlyDeposit: newMonthlyDeposit,
+        renewalFeePerMember: renewalFeePerMember,
+        startMonth,
+      },
+    });
+  } catch (e) { console.warn("Year-start email failed:", e); }
   await loadLiveState();
   showToast(`Year ${newYearNum} started successfully.`);
   render();
