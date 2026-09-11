@@ -3210,10 +3210,10 @@ function renderMembers() {
     <section class="card">
       <div class="card-body row-list">
         ${rows.map((member) => `
-          <div class="row-item">
+          <div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px;">
             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
               ${memberAvatarHtml(member, "md")}
-              <div style="min-width:0;">
+              <div style="min-width:0;flex:1;">
                 <strong>${escapeHtml(member.name)}</strong>
                 <span>
                   ${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}
@@ -3224,11 +3224,26 @@ function renderMembers() {
                   <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
                 ` : ""}
               </div>
+              <div class="member-actions">
+                ${statusBadge(member.status)}
+                ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
+              </div>
             </div>
-            <div class="member-actions">
-              ${statusBadge(member.status)}
-              ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
-            </div>
+            ${isAdmin() ? (member.nomineeName
+              ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg2,#F9FAFB);border-radius:8px;border:1px solid var(--border,#E5E7EB);">
+                  <span style="font-size:13px;">👤</span>
+                  <div style="font-size:12px;color:var(--muted);line-height:1.4;">
+                    <span style="font-weight:600;color:var(--ink);">Nominee:</span>
+                    ${escapeHtml(member.nomineeName)}
+                    ${member.nomineeRelationship ? `<span style="color:var(--muted);"> · ${escapeHtml(member.nomineeRelationship)}</span>` : ""}
+                    ${member.nomineePhone ? `<span style="color:var(--muted);"> · ${escapeHtml(member.nomineePhone)}</span>` : ""}
+                  </div>
+                </div>`
+              : `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#FFF7ED;border-radius:8px;border:1px solid #FED7AA;">
+                  <span style="font-size:13px;">⚠️</span>
+                  <span style="font-size:12px;color:#9A3412;font-weight:500;">No nominee added yet</span>
+                </div>`)
+            : ""}
           </div>
         `).join("")}
       </div>
