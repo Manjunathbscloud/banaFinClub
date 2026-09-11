@@ -238,6 +238,9 @@ const initialState = {
   notifications: [],
   messages: [],
   statementRows: [],
+  gameSession: null,
+  gamePlayers: [],
+  myHand: [],
   rules: [],
   meetingRecords: [],
   meetingAcknowledgements: [],
@@ -681,7 +684,32 @@ async function loadLiveState() {
       caption: p.caption || "",
       createdAt: p.created_at,
     })),
+    gameSession: null,
+    gamePlayers: [],
+    myHand: [],
   };
+
+  // Load active game session
+  try {
+    const { data: gSessions } = await supabaseClient.from("game_sessions")
+      .select("*").in("status", ["waiting","playing"]).order("created_at", { ascending: false }).limit(1);
+    if (gSessions?.length) {
+      state.gameSession = gSessions[0];
+      const { data: gPlayers } = await supabaseClient.from("game_players")
+        .select("id,session_id,profile_id,status,seat_position,joined_at")
+        .eq("session_id", state.gameSession.id);
+      state.gamePlayers = (gPlayers || []).map(p => ({
+        id: p.id, sessionId: p.session_id, profileId: p.profile_id,
+        status: p.status, seatPosition: p.seat_position, joinedAt: p.joined_at,
+      }));
+      if (current?.id) {
+        const { data: myRow } = await supabaseClient.from("game_players")
+          .select("hand").eq("session_id", state.gameSession.id)
+          .eq("profile_id", current.id).single();
+        state.myHand = myRow?.hand || [];
+      }
+    }
+  } catch (_) { /* game tables may not exist yet */ }
 
   // Cache identity + MPIN hash locally so the MPIN lock can greet the member on
   // next open even before the live session is restored.
@@ -1228,7 +1256,7 @@ function render() {
         ${navButton("deposits", "₹", t("deposits"))}
         ${navButton("loans", "⇄", t("loans"))}
         ${navButton("members", "☷", t("members"))}
-        ${navButton("meetings", "◎", t("meetings"))}
+        ${navButton("games", "🎮", "Games")}
         ${isAdmin() ? navButton("admin", "⚙", t("admin")) : navButton("history", "📅", "Meetings")}
       </nav>
     </div>
@@ -1475,6 +1503,7 @@ function renderTab() {
     loans: renderLoans,
     members: renderMembers,
     meetings: renderMeetings,
+    games: renderGames,
     admin: renderAdmin,
     statement: renderStatement,
     history: renderHistory,
@@ -3952,9 +3981,26 @@ document.addEventListener("pointerdown", (e) => {
 
 let _actionBusy = false;
 document.addEventListener("click", async (event) => {
+  // Card selection during discard phase
+  const gcCard = event.target.closest(".gc[data-idx]");
+  if (gcCard && state.activeTab === "games" && state.gameSession?.status === "playing"
+      && state.gameSession.current_turn_profile_id === currentProfileId()
+      && state.gameSession.phase === "discard"
+      && !document.getElementById("game-declare-modal")) {
+    const idx = Number(gcCard.dataset.idx);
+    window._gSelIdx = window._gSelIdx === idx ? null : idx;
+    // Re-render just the hand section without full render
+    document.querySelectorAll(".gc[data-idx]").forEach((c, i) => {
+      if (window._gSelIdx === Number(c.dataset.idx)) c.classList.add("gcsel");
+      else c.classList.remove("gcsel");
+    });
+    return;
+  }
+
   const tabButton = event.target.closest("[data-tab]");
   if (tabButton) {
     state.activeTab = tabButton.dataset.tab;
+    if (state.activeTab === "games") gSubscribe();
     saveState();
     history.pushState({ bfc: true, tab: state.activeTab }, "");
     render();
@@ -4412,6 +4458,48 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "confirm-mark-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId, action.dataset.month); document.getElementById("mark-payment-modal")?.remove(); document.body.style.overflow = ""; }
     if (action.dataset.action === "send-payment-reminder") { action.disabled = true; await sendPaymentReminder(); action.disabled = false; }
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
+
+    // ── Game actions ──────────────────────────────────────────────────────────
+    if (action.dataset.action === "game-create")  { await gCreateSession(); return; }
+    if (action.dataset.action === "game-join")    { await gJoinSession(); return; }
+    if (action.dataset.action === "game-start")   { await gStartGame(); return; }
+    if (action.dataset.action === "game-delete")  { await gDeleteTable(); return; }
+    if (action.dataset.action === "game-draw-deck")    { await gDrawDeck(); return; }
+    if (action.dataset.action === "game-draw-discard") { await gDrawDiscard(); return; }
+    if (action.dataset.action === "game-end")     { await gEndGame(); return; }
+    if (action.dataset.action === "game-declare-cancel") { await gWrongDeclare(); return; }
+    if (action.dataset.action === "game-declare-submit") { await gSubmitDeclaration(); return; }
+    if (action.dataset.action === "game-discard") {
+      await gDiscard(window._gSelIdx, false); return;
+    }
+    if (action.dataset.action === "game-declare") {
+      // Open declare modal — discard happens inside the modal
+      showDeclareModal(window._gSelIdx ?? 0); return;
+    }
+    if (action.dataset.action === "game-group-add") {
+      const g = Number(action.dataset.group);
+      const sel = document.querySelector("#gdeck-unassigned .gc.gcsel");
+      if (!sel) { showToast("Tap a card first, then click + Add selected."); return; }
+      const idx = Number(sel.dataset.idx);
+      const card = window._gDeclareHand[idx];
+      if (!card) return;
+      // Move from unassigned to group
+      window._gGroups[g].push(card);
+      window._gDeclareHand.splice(idx, 1);
+      // Re-render unassigned and group divs
+      const unassignedEl = document.getElementById("gdeck-unassigned");
+      const groupEl = document.getElementById(`gdeck-group-${g}`);
+      if (unassignedEl) unassignedEl.innerHTML = window._gDeclareHand.map((c, i) => gCardHtml(c, { idx: i, wildNum: state.gameSession?.wild_joker })).join("");
+      if (groupEl) groupEl.innerHTML = window._gGroups[g].map((c, i) => gCardHtml(c, { idx: i, wildNum: state.gameSession?.wild_joker })).join("");
+      // Re-attach click listener on unassigned
+      unassignedEl?.addEventListener("click", e => {
+        const card2 = e.target.closest(".gc");
+        if (!card2) return;
+        document.querySelectorAll("#gdeck-unassigned .gc.gcsel").forEach(c => c.classList.remove("gcsel"));
+        card2.classList.toggle("gcsel");
+      });
+      return;
+    }
     if (action.dataset.action === "change-phone") {
       const newPhone = window.prompt(`Change phone for ${action.dataset.name}\nCurrent: ${action.dataset.phone}\n\nEnter new 10-digit phone number:`);
       if (newPhone && newPhone.replace(/\D/g, "").slice(-10) !== action.dataset.phone.replace(/\D/g, "").slice(-10)) {
@@ -6526,6 +6614,597 @@ async function startNewYear(data) {
   await loadLiveState();
   showToast(`Year ${newYearNum} started successfully.`);
   render();
+}
+
+// ── Set Rummy Card Game ───────────────────────────────────────────────────────
+
+const G_SUITS   = ["H","D","C","S"];
+const G_NUMS    = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const G_SYM     = { H:"♥", D:"♦", C:"♣", S:"♠", JKR:"★" };
+const G_COL     = { H:"#dc2626", D:"#dc2626", C:"#111827", S:"#111827", JKR:"#7c3aed" };
+let   gameChannel = null;
+
+function gBuildDeck() {
+  const cards = [];
+  for (let d = 0; d < 2; d++) {
+    for (const s of G_SUITS) for (const n of G_NUMS) cards.push({ s, n, d });
+    cards.push({ s:"JKR", n:"JKR", d });
+  }
+  return cards; // 106 cards
+}
+
+function gShuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+function gIsJoker(card, wildNum) {
+  return card.s === "JKR" || card.n === wildNum;
+}
+
+function gCardHtml(card, { sel = false, sm = false, back = false, idx = null, wildNum = null } = {}) {
+  if (back) return `<div class="gc${sm ? " gcsm" : ""} gcback" data-idx="${idx ?? ""}"></div>`;
+  const printed = card.s === "JKR";
+  const wild    = wildNum && !printed && card.n === wildNum;
+  const sym     = G_SYM[card.s] || "?";
+  const lbl     = printed ? "JKR" : card.n;
+  const col     = G_COL[card.s] || "#000";
+  return `<div class="gc${sm ? " gcsm" : ""}${sel ? " gcsel" : ""}${printed ? " gcjoker" : ""}${wild ? " gcwild" : ""}"
+    style="--cc:${col}" data-idx="${idx ?? ""}" data-card='${JSON.stringify(card)}'>
+    <div class="gctl">${lbl}<br><span>${sym}</span></div>
+    <div class="gccn">${printed ? "JKR" : sym}</div>
+    <div class="gcbr"><span>${sym}</span><br>${lbl}</div>
+  </div>`;
+}
+
+function gIsPure(group, wildNum) {
+  if (group.some(c => gIsJoker(c, wildNum))) return false;
+  return new Set(group.map(c => c.n)).size === 1;
+}
+
+function gIsValidGroup(group, wildNum) {
+  const real = group.filter(c => !gIsJoker(c, wildNum));
+  if (!real.length) return false;
+  return new Set(real.map(c => c.n)).size === 1;
+}
+
+function gValidate(groups, wildNum) {
+  if (groups.length !== 4) return { ok: false, msg: "Need exactly 4 groups" };
+  const sorted = [...groups].sort((a, b) => b.length - a.length);
+  if (sorted[0].length !== 4 || sorted[1].length !== 3 || sorted[2].length !== 3 || sorted[3].length !== 3)
+    return { ok: false, msg: "Groups must be 4 + 3 + 3 + 3 cards" };
+  if (!gIsPure(sorted[0], wildNum))
+    return { ok: false, msg: "The 4-card group must be pure (no jokers)" };
+  const pureThrees = sorted.slice(1).filter(g => gIsPure(g, wildNum));
+  if (!pureThrees.length)
+    return { ok: false, msg: "At least one 3-card group must be pure" };
+  for (const g of sorted.slice(1))
+    if (!gIsValidGroup(g, wildNum)) return { ok: false, msg: "Each group must have matching numbers" };
+  return { ok: true };
+}
+
+function gMemberName(profileId) {
+  return state.members.find(m => m.id === profileId)?.name || "Player";
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function renderGames() {
+  const sess = state.gameSession;
+  const pid  = currentProfileId();
+  const me   = state.gamePlayers.find(p => p.profileId === pid);
+
+  if (!sess) return renderGameLobby();
+  if (sess.status === "waiting")  return renderGameWaiting(sess, me);
+  if (sess.status === "playing")  return renderGameBoard(sess, me);
+  if (sess.status === "finished") return renderGameFinished(sess);
+  return renderGameLobby();
+}
+
+function renderGameLobby() {
+  return `
+    <section class="page-title"><p>Games</p><h2>🎮 Game Room</h2></section>
+    <section class="card">
+      <div class="card-body" style="text-align:center;padding:32px 20px;">
+        <div style="font-size:56px;margin-bottom:16px;">🃏</div>
+        <h3 style="font-size:18px;margin:0 0 8px;">Set Rummy</h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 24px;line-height:1.6;">
+          13 cards each · Make 4+3+3+3 sets of same number · First to declare wins!
+        </p>
+        ${isAdmin()
+          ? `<button class="primary" data-action="game-create" type="button" style="width:100%;max-width:260px;">
+               Create Table
+             </button>`
+          : `<p style="font-size:13px;color:var(--muted);">Waiting for admin to create a table…</p>`}
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-body">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">How to Play</div>
+        ${[
+          ["🃏","13 cards dealt to each player"],
+          ["🎯","Form 4 groups — sizes 4, 3, 3, 3 of same number"],
+          ["✅","4-card group and one 3-card group must be PURE (no jokers)"],
+          ["🃏","Other groups can use jokers"],
+          ["🏆","Discard your last card face-down to declare and win!"],
+          ["❌","Wrong declaration = you're eliminated"],
+        ].map(([icon,txt]) => `
+          <div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border,#f3f4f6);">
+            <span style="font-size:18px;flex-shrink:0;">${icon}</span>
+            <span style="font-size:13px;color:var(--ink);line-height:1.5;">${txt}</span>
+          </div>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderGameWaiting(sess, me) {
+  const players = [...state.gamePlayers].sort((a, b) => a.seatPosition - b.seatPosition);
+  const joined  = !!me;
+  const isFull  = players.length >= 7;
+  return `
+    <section class="page-title"><p>Games</p><h2>🃏 Waiting Room</h2></section>
+    <section class="card">
+      <div class="card-body">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;">
+          Players at Table (${players.length}/7)
+        </div>
+        ${players.map((p, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#f3f4f6);">
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--saffron,#f97316),#ea580c);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0;">${i + 1}</div>
+            <span style="font-size:14px;font-weight:600;color:var(--ink);">${escapeHtml(gMemberName(p.profileId))}</span>
+            ${p.profileId === currentProfileId() ? `<span style="font-size:11px;color:var(--saffron,#f97316);font-weight:700;margin-left:auto;">You</span>` : ""}
+          </div>`).join("")}
+        ${Array.from({ length: 7 - players.length }, (_, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#f3f4f6);opacity:0.35;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;">${players.length + i + 1}</div>
+            <span style="font-size:13px;color:var(--muted);">Empty seat</span>
+          </div>`).join("")}
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+        ${!joined && !isFull ? `<button class="primary" data-action="game-join" type="button">Join Table</button>` : ""}
+        ${!joined && isFull  ? `<p style="text-align:center;font-size:13px;color:var(--muted);">Table is full</p>` : ""}
+        ${joined && !isAdmin() ? `<p style="text-align:center;font-size:13px;color:#16a34a;font-weight:600;">✓ You've joined! Waiting for admin to start…</p>` : ""}
+        ${isAdmin() && players.length >= 2
+          ? `<button class="primary" data-action="game-start" type="button">▶ Start Game (${players.length} players)</button>`
+          : isAdmin()
+            ? `<p style="text-align:center;font-size:13px;color:var(--muted);">Need at least 2 players to start</p>`
+            : ""}
+        ${isAdmin() ? `<button class="secondary" data-action="game-delete" type="button" style="font-size:12px;">Delete Table</button>` : ""}
+      </div>
+    </section>`;
+}
+
+function renderGameBoard(sess, me) {
+  const pid      = currentProfileId();
+  const myTurn   = sess.current_turn_profile_id === pid;
+  const myStatus = me?.status || "active";
+  const eliminated = myStatus === "eliminated";
+  const wildNum  = sess.wild_joker;
+  const discardTop = sess.discard_pile?.length ? sess.discard_pile[sess.discard_pile.length - 1] : null;
+  const deckCount  = sess.deck?.length || 0;
+  const players    = [...state.gamePlayers].sort((a, b) => a.seatPosition - b.seatPosition);
+  const hand       = state.myHand || [];
+  const phase      = sess.phase || "draw";
+
+  // Selected card indices (stored in DOM state via data attribute hack — use window var)
+  const selIdx = window._gSelIdx ?? null;
+  const phase14 = myTurn && phase === "discard"; // 14-card phase
+
+  return `
+    <section class="page-title" style="padding-bottom:6px;">
+      <p>Games</p><h2>🃏 Set Rummy — Round in Progress</h2>
+    </section>
+
+    ${eliminated ? `
+    <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px 18px;margin:0 16px 12px;text-align:center;">
+      <div style="font-size:14px;font-weight:700;color:#991b1b;">You've been eliminated</div>
+      <div style="font-size:12px;color:#b91c1c;margin-top:4px;">Watch the game until someone wins</div>
+    </div>` : ""}
+
+    <!-- Wild joker indicator -->
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;margin-bottom:4px;">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Wild Joker:</span>
+      <div style="background:#7c3aed;color:#fff;padding:3px 12px;border-radius:8px;font-size:13px;font-weight:800;">${wildNum || "?"}</div>
+      <span style="font-size:11px;color:var(--muted);">(all ${wildNum}s + printed ★ are jokers)</span>
+    </div>
+
+    <!-- Other players -->
+    <section class="card" style="margin-bottom:8px;">
+      <div class="card-body" style="padding:10px 14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Players</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${players.map(p => {
+            const isMe = p.profileId === pid;
+            const isCur = sess.current_turn_profile_id === p.profileId;
+            const elim = p.status === "eliminated";
+            return `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${elim ? 0.4 : 1};">
+                <div style="width:36px;height:36px;border-radius:50%;background:${isCur ? "linear-gradient(135deg,#f97316,#ea580c)" : elim ? "#e5e7eb" : "#374151"};border:${isCur ? "2.5px solid #f97316" : "2px solid transparent"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;">
+                  ${escapeHtml((gMemberName(p.profileId).split(" ").map(w => w[0]).join("").slice(0, 2)).toUpperCase())}
+                </div>
+                <span style="font-size:10px;font-weight:600;color:${isCur ? "var(--saffron,#f97316)" : "var(--muted)"};max-width:50px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
+                  ${isMe ? "You" : escapeHtml(gMemberName(p.profileId).split(" ")[0])}
+                </span>
+                ${elim ? `<span style="font-size:9px;color:#ef4444;">OUT</span>` : ""}
+              </div>`;
+          }).join("")}
+        </div>
+      </div>
+    </section>
+
+    <!-- Draw & Discard piles -->
+    <section class="card" style="margin-bottom:8px;">
+      <div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:center;gap:24px;padding:8px 0;">
+          <!-- Draw pile -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;">Deck (${deckCount})</div>
+            ${myTurn && phase === "draw" && !eliminated
+              ? `<div class="gc gcback" data-action="game-draw-deck" style="cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.2);"></div>`
+              : `<div class="gc gcback" style="opacity:0.5;"></div>`}
+          </div>
+          <!-- Discard pile -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;">Discard</div>
+            ${discardTop
+              ? (myTurn && phase === "draw" && !eliminated
+                  ? `<div data-action="game-draw-discard" style="cursor:pointer;">${gCardHtml(discardTop, { wildNum })}</div>`
+                  : gCardHtml(discardTop, { wildNum }))
+              : `<div style="width:56px;height:80px;border-radius:8px;border:2px dashed var(--border,#e5e7eb);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);">Empty</div>`}
+          </div>
+        </div>
+        ${myTurn && !eliminated ? `
+          <div style="text-align:center;padding-top:8px;font-size:12px;font-weight:600;color:var(--saffron,#f97316);">
+            ${phase === "draw" ? "👆 Your turn — tap Deck or Discard pile to pick a card" : "👇 Select a card below to discard"}
+          </div>` : !eliminated ? `
+          <div style="text-align:center;padding-top:8px;font-size:12px;color:var(--muted);">
+            Waiting for ${escapeHtml(gMemberName(sess.current_turn_profile_id))}…
+          </div>` : ""}
+      </div>
+    </section>
+
+    <!-- My hand -->
+    <section class="card">
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">
+            Your Hand (${hand.length} cards)
+          </div>
+          ${phase14 ? `<span style="font-size:11px;font-weight:600;color:#7c3aed;">Select card to discard</span>` : ""}
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:14px;">
+          ${hand.map((card, i) => gCardHtml(card, {
+            sel: selIdx === i,
+            wildNum,
+            idx: i,
+          })).join("")}
+        </div>
+
+        ${myTurn && phase14 && !eliminated ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="secondary" data-action="game-discard" style="flex:1;min-width:120px;${selIdx === null ? "opacity:0.5;pointer-events:none;" : ""}">
+              Discard & End Turn
+            </button>
+            <button class="primary" data-action="game-declare" style="flex:1;min-width:120px;background:linear-gradient(135deg,#7c3aed,#6d28d9);${selIdx === null ? "opacity:0.5;pointer-events:none;" : ""}">
+              🏆 Discard & Declare
+            </button>
+          </div>` : ""}
+      </div>
+    </section>`;
+}
+
+function renderGameFinished(sess) {
+  const winnerId = sess.winner_profile_id;
+  const winnerName = winnerId ? gMemberName(winnerId) : "Unknown";
+  const iWon = winnerId === currentProfileId();
+  return `
+    <section class="page-title"><p>Games</p><h2>🏆 Game Over</h2></section>
+    <section class="card">
+      <div class="card-body" style="text-align:center;padding:32px 20px;">
+        <div style="font-size:64px;margin-bottom:12px;">${iWon ? "🥇" : "🎴"}</div>
+        <h3 style="font-size:20px;margin:0 0 8px;">${iWon ? "You Won!" : `${escapeHtml(winnerName)} Won!`}</h3>
+        <p style="font-size:14px;color:var(--muted);margin:0 0 24px;">
+          ${iWon ? "Congratulations! You declared and won the round." : `${escapeHtml(winnerName)} declared and won the round.`}
+        </p>
+        ${isAdmin() ? `<button class="primary" data-action="game-end" type="button" style="width:100%;max-width:260px;">End Game &amp; Back to Lobby</button>` : `<p style="font-size:13px;color:var(--muted);">Waiting for admin to close the game…</p>`}
+      </div>
+    </section>`;
+}
+
+// ── Declaration modal ─────────────────────────────────────────────────────────
+
+function showDeclareModal(discardIdx) {
+  const hand = [...state.myHand];
+  hand.splice(discardIdx, 1); // remove the discarded card
+  window._gDeclareHand = hand;
+  window._gDeclareDiscardIdx = discardIdx;
+  window._gGroups = [[], [], [], []];
+
+  const existing = document.getElementById("game-declare-modal");
+  if (existing) existing.remove();
+
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="game-declare-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="background:var(--bg1,#fff);flex:1;overflow-y:auto;border-radius:20px 20px 0 0;margin-top:40px;">
+        <div style="padding:18px 16px 0;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border,#e5e7eb);padding-bottom:14px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;color:var(--ink);">🏆 Declare Win</div>
+            <div style="font-size:12px;color:var(--muted);">Group your 13 cards into 4+3+3+3</div>
+          </div>
+          <button type="button" data-action="game-declare-cancel" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
+        </div>
+
+        <!-- Unassigned cards -->
+        <div style="padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Unassigned Cards</div>
+          <div id="gdeck-unassigned" style="display:flex;flex-wrap:wrap;gap:5px;min-height:48px;background:var(--bg2,#f9fafb);border-radius:10px;padding:8px;">
+            ${hand.map((c, i) => gCardHtml(c, { idx: i, wildNum: state.gameSession?.wild_joker })).join("")}
+          </div>
+        </div>
+
+        <!-- 4 groups -->
+        ${[0,1,2,3].map(g => `
+        <div style="padding:0 16px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">
+              Group ${g + 1} ${g === 0 ? "(4 cards · PURE)" : g === 1 ? "(3 cards · PURE)" : "(3 cards · jokers OK)"}
+            </div>
+            <button type="button" data-action="game-group-add" data-group="${g}"
+              style="font-size:11px;padding:3px 10px;background:var(--saffron,#f97316);color:#fff;border:none;border-radius:6px;cursor:pointer;">
+              + Add selected
+            </button>
+          </div>
+          <div id="gdeck-group-${g}" style="display:flex;flex-wrap:wrap;gap:5px;min-height:48px;background:${g<2?"#eff6ff":"#f0fdf4"};border:1.5px dashed ${g<2?"#bfdbfe":"#86efac"};border-radius:10px;padding:8px;" data-group="${g}"></div>
+        </div>`).join("")}
+
+        <div style="padding:0 16px 24px;">
+          <div id="gdeclare-msg" style="font-size:12px;color:#dc2626;text-align:center;margin-bottom:10px;min-height:18px;"></div>
+          <button class="primary" data-action="game-declare-submit" type="button" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);">Submit Declaration</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  // Tap card in unassigned → toggle selection
+  document.getElementById("gdeck-unassigned").addEventListener("click", e => {
+    const card = e.target.closest(".gc");
+    if (!card) return;
+    document.querySelectorAll("#gdeck-unassigned .gc.gcsel").forEach(c => c.classList.remove("gcsel"));
+    card.classList.toggle("gcsel");
+  });
+}
+
+// ── Game actions ──────────────────────────────────────────────────────────────
+
+async function gCreateSession() {
+  if (!isAdmin() || !liveBackendReady) return;
+  const { data: ex } = await supabaseClient.from("game_sessions").select("id").in("status",["waiting","playing"]).limit(1);
+  if (ex?.length) { showToast("A game table already exists."); return; }
+  await liveQuery(supabaseClient.from("game_sessions").insert({
+    status: "waiting", created_by: currentProfileId(),
+    deck: [], discard_pile: [], wild_joker: null, turn_order: [], phase: "draw",
+  }));
+  await loadLiveState();
+  gSubscribe();
+  render();
+}
+
+async function gJoinSession() {
+  const sess = state.gameSession;
+  if (!sess || sess.status !== "waiting" || !liveBackendReady) return;
+  if (state.gamePlayers.find(p => p.profileId === currentProfileId())) return;
+  if (state.gamePlayers.length >= 7) { showToast("Table is full."); return; }
+  await liveQuery(supabaseClient.from("game_players").insert({
+    session_id: sess.id, profile_id: currentProfileId(),
+    hand: [], status: "active", seat_position: state.gamePlayers.length,
+  }));
+  await loadLiveState();
+  render();
+}
+
+async function gStartGame() {
+  if (!isAdmin() || !liveBackendReady) return;
+  const sess = state.gameSession;
+  if (!sess || sess.status !== "waiting") return;
+  if (state.gamePlayers.length < 2) { showToast("Need at least 2 players."); return; }
+
+  let deck = gShuffle(gBuildDeck());
+  // Pick wild joker — skip printed jokers
+  let wi = 0;
+  while (wi < deck.length && deck[wi].s === "JKR") wi++;
+  const wildJoker = deck[wi].n;
+  deck.splice(wi, 1);
+
+  const players = [...state.gamePlayers].sort((a, b) => a.seatPosition - b.seatPosition);
+  const hands = players.map(() => []);
+  for (let i = 0; i < 13; i++)
+    for (let j = 0; j < players.length; j++)
+      hands[j].push(deck.shift());
+
+  const firstDiscard = deck.shift();
+
+  for (let i = 0; i < players.length; i++) {
+    await liveQuery(supabaseClient.from("game_players")
+      .update({ hand: hands[i] }).eq("id", players[i].id));
+  }
+
+  const turnOrder = players.map(p => p.profileId);
+  await liveQuery(supabaseClient.from("game_sessions").update({
+    status: "playing", deck, discard_pile: [firstDiscard],
+    wild_joker: wildJoker, current_turn_profile_id: turnOrder[0],
+    turn_order: turnOrder, phase: "draw",
+    updated_at: new Date().toISOString(),
+  }).eq("id", sess.id));
+
+  await loadLiveState();
+  render();
+  showToast(`Game started! Wild joker: ${wildJoker}`);
+}
+
+async function gDrawDeck() {
+  const sess = state.gameSession;
+  if (!sess || sess.current_turn_profile_id !== currentProfileId()) return;
+  if (sess.phase !== "draw") return;
+  const deck = [...sess.deck];
+  if (!deck.length) { showToast("Deck empty!"); return; }
+  const card = deck.shift();
+  await liveQuery(supabaseClient.from("game_players")
+    .update({ hand: [...state.myHand, card] })
+    .eq("session_id", sess.id).eq("profile_id", currentProfileId()));
+  await liveQuery(supabaseClient.from("game_sessions")
+    .update({ deck, phase: "discard", updated_at: new Date().toISOString() })
+    .eq("id", sess.id));
+  window._gSelIdx = null;
+  await loadLiveState(); render();
+}
+
+async function gDrawDiscard() {
+  const sess = state.gameSession;
+  if (!sess || sess.current_turn_profile_id !== currentProfileId()) return;
+  if (sess.phase !== "draw") return;
+  const pile = [...sess.discard_pile];
+  if (!pile.length) { showToast("Discard pile empty!"); return; }
+  const card = pile.pop();
+  await liveQuery(supabaseClient.from("game_players")
+    .update({ hand: [...state.myHand, card] })
+    .eq("session_id", sess.id).eq("profile_id", currentProfileId()));
+  await liveQuery(supabaseClient.from("game_sessions")
+    .update({ discard_pile: pile, phase: "discard", updated_at: new Date().toISOString() })
+    .eq("id", sess.id));
+  window._gSelIdx = null;
+  await loadLiveState(); render();
+}
+
+function gNextActive(sess) {
+  const order  = sess.turn_order || [];
+  const active = state.gamePlayers.filter(p => p.status === "active" && p.profileId !== currentProfileId()).map(p => p.profileId);
+  const cur    = order.indexOf(sess.current_turn_profile_id);
+  for (let i = 1; i <= order.length; i++) {
+    const c = order[(cur + i) % order.length];
+    if (active.includes(c)) return c;
+  }
+  return active[0] || null;
+}
+
+async function gDiscard(cardIdx, declare = false) {
+  const sess = state.gameSession;
+  if (!sess || sess.current_turn_profile_id !== currentProfileId()) return;
+  if (sess.phase !== "discard") return;
+  if (cardIdx === null || cardIdx === undefined) { showToast("Select a card to discard."); return; }
+
+  const hand = [...state.myHand];
+  const [card] = hand.splice(cardIdx, 1);
+  const pile = [...sess.discard_pile, card];
+  const nextPid = gNextActive(sess);
+
+  await liveQuery(supabaseClient.from("game_players")
+    .update({ hand }).eq("session_id", sess.id).eq("profile_id", currentProfileId()));
+  await liveQuery(supabaseClient.from("game_sessions").update({
+    discard_pile: pile, current_turn_profile_id: nextPid,
+    phase: "draw", updated_at: new Date().toISOString(),
+  }).eq("id", sess.id));
+
+  window._gSelIdx = null;
+  await loadLiveState();
+
+  if (declare) {
+    showDeclareModal(cardIdx); // opens after state refreshed
+    return;
+  }
+  render();
+}
+
+async function gSubmitDeclaration() {
+  const sess    = state.gameSession;
+  const wildNum = sess.wild_joker;
+  const groups  = window._gGroups || [];
+  const result  = gValidate(groups, wildNum);
+
+  document.getElementById("gdeclare-msg").textContent = result.ok ? "" : result.msg;
+  if (!result.ok) return;
+
+  document.getElementById("game-declare-modal")?.remove();
+
+  // First commit the discard
+  const discardIdx = window._gDeclareDiscardIdx;
+  const hand = [...state.myHand];
+  const [discardCard] = hand.splice(discardIdx, 1);
+  const pile = [...sess.discard_pile, discardCard];
+  await liveQuery(supabaseClient.from("game_players")
+    .update({ hand, status: "winner" })
+    .eq("session_id", sess.id).eq("profile_id", currentProfileId()));
+  await liveQuery(supabaseClient.from("game_sessions").update({
+    discard_pile: pile, status: "finished",
+    winner_profile_id: currentProfileId(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", sess.id));
+
+  window._gSelIdx = null; window._gGroups = null; window._gDeclareHand = null;
+  await loadLiveState(); render();
+  showToast("🏆 You declared and won!");
+}
+
+async function gWrongDeclare() {
+  // Called when player opens declare modal but cancels or is wrong
+  // In this flow, wrong declaration happens at submit time
+  const sess = state.gameSession;
+  const pid  = currentProfileId();
+  document.getElementById("game-declare-modal")?.remove();
+  showToast("Declaration cancelled. Your turn continues.");
+  // Re-deal the discard — undo the pending discard
+  window._gSelIdx = null; window._gGroups = null;
+  await loadLiveState(); render();
+}
+
+async function gEndGame() {
+  if (!isAdmin() || !liveBackendReady) return;
+  const sess = state.gameSession;
+  if (!sess) return;
+  await liveQuery(supabaseClient.from("game_sessions").update({
+    status: "finished", updated_at: new Date().toISOString(),
+  }).eq("id", sess.id));
+  await loadLiveState();
+  // Clear finished session from state
+  state.gameSession = null; state.gamePlayers = []; state.myHand = [];
+  gUnsubscribe();
+  render();
+  showToast("Game ended. Table cleared.");
+}
+
+async function gDeleteTable() {
+  if (!isAdmin() || !liveBackendReady) return;
+  const sess = state.gameSession;
+  if (!sess) return;
+  if (!confirm("Delete the table and remove all players?")) return;
+  await liveQuery(supabaseClient.from("game_players").delete().eq("session_id", sess.id));
+  await liveQuery(supabaseClient.from("game_sessions").delete().eq("id", sess.id));
+  state.gameSession = null; state.gamePlayers = []; state.myHand = [];
+  gUnsubscribe(); render();
+  showToast("Table deleted.");
+}
+
+function gSubscribe() {
+  gUnsubscribe();
+  if (!liveBackendReady) return;
+  gameChannel = supabaseClient.channel("bfc-game-" + (state.gameSession?.id || "x"))
+    .on("postgres_changes", { event: "*", schema: "public", table: "game_sessions" }, async () => {
+      await loadLiveState(); render();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "game_players" }, async () => {
+      await loadLiveState(); render();
+    })
+    .subscribe();
+}
+
+function gUnsubscribe() {
+  if (gameChannel) { supabaseClient.removeChannel(gameChannel); gameChannel = null; }
 }
 
 // ── Session idle timeout (40 minutes) ────────────────────────────────────────
