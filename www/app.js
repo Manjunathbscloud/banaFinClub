@@ -3981,20 +3981,29 @@ document.addEventListener("pointerdown", (e) => {
 
 let _actionBusy = false;
 document.addEventListener("click", async (event) => {
-  // Card selection during discard phase
+  // Card selection during discard phase (multiplayer or bot game)
   const gcCard = event.target.closest(".gc[data-idx]");
-  if (gcCard && state.activeTab === "games" && state.gameSession?.status === "playing"
+  const inBotHand = gcCard && gcCard.closest("#gbot-hand");
+  const inMultiHand = gcCard && !inBotHand;
+  if (gcCard && state.activeTab === "games" && !document.getElementById("game-declare-modal")) {
+    const isBotDiscard = window._gBotGame?.status === "playing"
+      && window._gBotGame.players[window._gBotGame.turnIdx]?.id === currentProfileId()
+      && window._gBotGame.phase === "discard"
+      && inBotHand;
+    const isMultiDiscard = state.gameSession?.status === "playing"
       && state.gameSession.current_turn_profile_id === currentProfileId()
       && state.gameSession.phase === "discard"
-      && !document.getElementById("game-declare-modal")) {
-    const idx = Number(gcCard.dataset.idx);
-    window._gSelIdx = window._gSelIdx === idx ? null : idx;
-    // Re-render just the hand section without full render
-    document.querySelectorAll(".gc[data-idx]").forEach((c, i) => {
-      if (window._gSelIdx === Number(c.dataset.idx)) c.classList.add("gcsel");
-      else c.classList.remove("gcsel");
-    });
-    return;
+      && inMultiHand;
+    if (isBotDiscard || isMultiDiscard) {
+      const idx = Number(gcCard.dataset.idx);
+      window._gSelIdx = window._gSelIdx === idx ? null : idx;
+      const scope = isBotDiscard ? "#gbot-hand .gc[data-idx]" : ".gc[data-idx]";
+      document.querySelectorAll(scope).forEach(c => {
+        if (window._gSelIdx === Number(c.dataset.idx)) c.classList.add("gcsel");
+        else c.classList.remove("gcsel");
+      });
+      return;
+    }
   }
 
   const tabButton = event.target.closest("[data-tab]");
@@ -4476,6 +4485,22 @@ document.addEventListener("click", async (event) => {
       // Open declare modal — discard happens inside the modal
       showDeclareModal(window._gSelIdx ?? 0); return;
     }
+    // ── Bot game actions ──────────────────────────────────────────────────────
+    if (action.dataset.action === "gbot-start") {
+      const n = Number(action.dataset.bots || 1);
+      gBotStart(n); return;
+    }
+    if (action.dataset.action === "gbot-draw-deck")    { gBotPlayerDraw("deck"); return; }
+    if (action.dataset.action === "gbot-draw-discard") { gBotPlayerDraw("discard"); return; }
+    if (action.dataset.action === "gbot-discard") { gBotPlayerDiscard(false); return; }
+    if (action.dataset.action === "gbot-declare")  { gBotPlayerDiscard(true); return; }
+    if (action.dataset.action === "gbot-declare-cancel") {
+      document.getElementById("game-declare-modal")?.remove();
+      window._gSelIdx = null; window._gGroups = null;
+      render(); return;
+    }
+    if (action.dataset.action === "gbot-declare-submit") { gBotSubmitDeclaration(); return; }
+    if (action.dataset.action === "gbot-quit")     { gBotQuit(); return; }
     if (action.dataset.action === "game-group-add") {
       const g = Number(action.dataset.group);
       const sel = document.querySelector("#gdeck-unassigned .gc.gcsel");
@@ -4489,8 +4514,9 @@ document.addEventListener("click", async (event) => {
       // Re-render unassigned and group divs
       const unassignedEl = document.getElementById("gdeck-unassigned");
       const groupEl = document.getElementById(`gdeck-group-${g}`);
-      if (unassignedEl) unassignedEl.innerHTML = window._gDeclareHand.map((c, i) => gCardHtml(c, { idx: i, wildNum: state.gameSession?.wild_joker })).join("");
-      if (groupEl) groupEl.innerHTML = window._gGroups[g].map((c, i) => gCardHtml(c, { idx: i, wildNum: state.gameSession?.wild_joker })).join("");
+      const _wn = window._gBotGame?.wildJoker || state.gameSession?.wild_joker;
+      if (unassignedEl) unassignedEl.innerHTML = window._gDeclareHand.map((c, i) => gCardHtml(c, { idx: i, wildNum: _wn })).join("");
+      if (groupEl) groupEl.innerHTML = window._gGroups[g].map((c, i) => gCardHtml(c, { idx: i, wildNum: _wn })).join("");
       // Re-attach click listener on unassigned
       unassignedEl?.addEventListener("click", e => {
         const card2 = e.target.closest(".gc");
@@ -6694,6 +6720,9 @@ function gMemberName(profileId) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function renderGames() {
+  // Bot game takes priority over multiplayer
+  if (window._gBotGame) return renderBotGame();
+
   const sess = state.gameSession;
   const pid  = currentProfileId();
   const me   = state.gamePlayers.find(p => p.profileId === pid);
@@ -6709,17 +6738,31 @@ function renderGameLobby() {
   return `
     <section class="page-title"><p>Games</p><h2>🎮 Game Room</h2></section>
     <section class="card">
-      <div class="card-body" style="text-align:center;padding:32px 20px;">
-        <div style="font-size:56px;margin-bottom:16px;">🃏</div>
-        <h3 style="font-size:18px;margin:0 0 8px;">Set Rummy</h3>
-        <p style="font-size:13px;color:var(--muted);margin:0 0 24px;line-height:1.6;">
+      <div class="card-body" style="padding:20px;">
+        <div style="font-size:56px;text-align:center;margin-bottom:12px;">🃏</div>
+        <h3 style="font-size:18px;margin:0 0 6px;text-align:center;">Set Rummy</h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.6;text-align:center;">
           13 cards each · Make 4+3+3+3 sets of same number · First to declare wins!
         </p>
-        ${isAdmin()
-          ? `<button class="primary" data-action="game-create" type="button" style="width:100%;max-width:260px;">
-               Create Table
-             </button>`
-          : `<p style="font-size:13px;color:var(--muted);">Waiting for admin to create a table…</p>`}
+
+        <!-- Multiplayer -->
+        <div style="border:1.5px solid var(--border,#e5e7eb);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">👥 Multiplayer</div>
+          ${isAdmin()
+            ? `<button class="primary" data-action="game-create" type="button" style="width:100%;">Create Table (up to 7 players)</button>`
+            : `<p style="font-size:13px;color:var(--muted);margin:0;">Waiting for admin to create a table…</p>`}
+        </div>
+
+        <!-- vs Computer -->
+        <div style="border:1.5px solid #7c3aed33;border-radius:12px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed08,#6d28d908);">
+          <div style="font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🤖 Play vs Computer</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="secondary" data-action="gbot-start" data-bots="1" type="button" style="flex:1;min-width:80px;border-color:#7c3aed40;color:#7c3aed;">1 Bot</button>
+            <button class="secondary" data-action="gbot-start" data-bots="2" type="button" style="flex:1;min-width:80px;border-color:#7c3aed40;color:#7c3aed;">2 Bots</button>
+            <button class="secondary" data-action="gbot-start" data-bots="3" type="button" style="flex:1;min-width:80px;border-color:#7c3aed40;color:#7c3aed;">3 Bots</button>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">No other players needed — start playing instantly!</p>
+        </div>
       </div>
     </section>
     <section class="card">
@@ -7205,6 +7248,397 @@ function gSubscribe() {
 
 function gUnsubscribe() {
   if (gameChannel) { supabaseClient.removeChannel(gameChannel); gameChannel = null; }
+}
+
+// ── Bot / Solo Mode ───────────────────────────────────────────────────────────
+
+const BOT_NAMES = ["Bot Arjun", "Bot Priya", "Bot Ravi"];
+let _gBotTurnTimer = null;
+
+function gBotStart(numBots) {
+  clearTimeout(_gBotTurnTimer);
+  let deck = gShuffle(gBuildDeck());
+  let wi = 0;
+  while (wi < deck.length && deck[wi].s === "JKR") wi++;
+  const wildJoker = deck[wi].n;
+  deck.splice(wi, 1);
+
+  const pid = currentProfileId();
+  const myName = state.members.find(m => m.id === pid)?.name || "You";
+  const players = [
+    { id: pid, name: myName, hand: [], isBot: false, status: "active" },
+    ...Array.from({ length: numBots }, (_, i) => ({
+      id: `bot-${i}`, name: BOT_NAMES[i % BOT_NAMES.length], hand: [], isBot: true, status: "active",
+    })),
+  ];
+
+  for (let r = 0; r < 13; r++)
+    for (const p of players) p.hand.push(deck.shift());
+
+  const firstDiscard = deck.shift();
+
+  window._gBotGame = {
+    deck, discardPile: [firstDiscard], wildJoker,
+    players, turnIdx: 0, phase: "draw", status: "playing", winnerId: null,
+  };
+  window._gSelIdx = null;
+  render();
+  showToast(`Game started vs ${numBots} bot${numBots > 1 ? "s" : ""}! Wild joker: ${wildJoker}`);
+}
+
+function gBotQuit() {
+  clearTimeout(_gBotTurnTimer);
+  window._gBotGame = null;
+  window._gSelIdx = null;
+  render();
+}
+
+function gBotNextTurn() {
+  const g = window._gBotGame;
+  if (!g) return;
+  const active = g.players.filter(p => p.status === "active");
+  if (active.length <= 1) {
+    g.status = "finished";
+    g.winnerId = active[0]?.id || null;
+    render(); return;
+  }
+  let next = (g.turnIdx + 1) % g.players.length;
+  while (g.players[next].status !== "active") next = (next + 1) % g.players.length;
+  g.turnIdx = next;
+  g.phase = "draw";
+  window._gSelIdx = null;
+  render();
+  if (g.players[g.turnIdx].isBot) _gBotTurnTimer = setTimeout(gBotAutoPlay, 1000);
+}
+
+function gBotAutoPlay() {
+  const g = window._gBotGame;
+  if (!g || g.status !== "playing") return;
+  const bot = g.players[g.turnIdx];
+  if (!bot?.isBot) return;
+
+  const discardTop = g.discardPile.length ? g.discardPile[g.discardPile.length - 1] : null;
+  const useful = discardTop && !gIsJoker(discardTop, g.wildJoker) &&
+    bot.hand.filter(c => c.n === discardTop.n && !gIsJoker(c, g.wildJoker)).length >= 1;
+
+  if (useful) {
+    g.discardPile.pop();
+    bot.hand.push(discardTop);
+  } else {
+    if (!g.deck.length) {
+      const top = g.discardPile.pop();
+      g.deck = gShuffle([...g.discardPile]);
+      g.discardPile = top ? [top] : [];
+    }
+    if (g.deck.length) bot.hand.push(g.deck.shift());
+  }
+
+  // Try to declare with each card as the discard
+  for (let di = 0; di < bot.hand.length; di++) {
+    if (gIsJoker(bot.hand[di], g.wildJoker)) continue;
+    const testHand = bot.hand.filter((_, i) => i !== di);
+    if (gBotTryGrouping(testHand, g.wildJoker)) {
+      const [discardCard] = bot.hand.splice(di, 1);
+      g.discardPile.push(discardCard);
+      g.status = "finished";
+      g.winnerId = bot.id;
+      render();
+      showToast(`🤖 ${escapeHtml(bot.name)} declared and won!`);
+      return;
+    }
+  }
+
+  const discardIdx = gBotChooseDiscard(bot.hand, g.wildJoker);
+  const [discardCard] = bot.hand.splice(discardIdx, 1);
+  g.discardPile.push(discardCard);
+  gBotNextTurn();
+}
+
+function gBotTryGrouping(hand, wildNum) {
+  const jokers = hand.filter(c => gIsJoker(c, wildNum));
+  const reals  = hand.filter(c => !gIsJoker(c, wildNum));
+  const byNum = {};
+  for (const c of reals) (byNum[c.n] = byNum[c.n] || []).push(c);
+  const sorted = Object.values(byNum).sort((a, b) => b.length - a.length);
+  const groups = [];
+  let jLeft = [...jokers];
+  for (const size of [4, 3, 3, 3]) {
+    if (!sorted.length) return null;
+    const cards = sorted.shift();
+    if (cards.length >= size) {
+      groups.push(cards.slice(0, size));
+    } else {
+      const need = size - cards.length;
+      if (jLeft.length < need) return null;
+      groups.push([...cards, ...jLeft.splice(0, need)]);
+    }
+  }
+  return gValidate(groups, wildNum).ok ? groups : null;
+}
+
+function gBotChooseDiscard(hand, wildNum) {
+  const nonJokers = hand.map((c, i) => ({ c, i })).filter(x => !gIsJoker(x.c, wildNum));
+  if (!nonJokers.length) return 0;
+  const freq = {};
+  for (const { c } of nonJokers) freq[c.n] = (freq[c.n] || 0) + 1;
+  const singletons = nonJokers.filter(x => freq[x.c.n] === 1);
+  if (singletons.length) return singletons[0].i;
+  // Discard excess of over-represented number
+  const overflow = nonJokers.filter(x => freq[x.c.n] > 4);
+  if (overflow.length) return overflow[0].i;
+  return nonJokers[0].i;
+}
+
+function gBotPlayerDraw(from) {
+  const g = window._gBotGame;
+  if (!g || g.status !== "playing" || g.phase !== "draw") return;
+  const me = g.players[g.turnIdx];
+  if (me?.id !== currentProfileId()) return;
+  if (from === "discard") {
+    if (!g.discardPile.length) { showToast("Discard pile empty!"); return; }
+    me.hand.push(g.discardPile.pop());
+  } else {
+    if (!g.deck.length) {
+      const top = g.discardPile.pop();
+      g.deck = gShuffle([...g.discardPile]);
+      g.discardPile = top ? [top] : [];
+    }
+    if (!g.deck.length) { showToast("Deck empty!"); return; }
+    me.hand.push(g.deck.shift());
+  }
+  g.phase = "discard";
+  window._gSelIdx = null;
+  render();
+}
+
+function gBotPlayerDiscard(declare) {
+  const g = window._gBotGame;
+  if (!g || g.status !== "playing" || g.phase !== "discard") return;
+  const me = g.players[g.turnIdx];
+  if (me?.id !== currentProfileId()) return;
+  const idx = window._gSelIdx;
+  if (idx === null || idx === undefined) { showToast("Select a card to discard."); return; }
+  if (declare) {
+    showBotDeclareModal(idx);
+    return;
+  }
+  const [card] = me.hand.splice(idx, 1);
+  g.discardPile.push(card);
+  gBotNextTurn();
+}
+
+function showBotDeclareModal(discardIdx) {
+  const g = window._gBotGame;
+  if (!g) return;
+  const me = g.players[g.turnIdx];
+  if (!me) return;
+  const hand = [...me.hand];
+  hand.splice(discardIdx, 1);
+  window._gDeclareHand = hand;
+  window._gDeclareDiscardIdx = discardIdx;
+  window._gGroups = [[], [], [], []];
+
+  const existing = document.getElementById("game-declare-modal");
+  if (existing) existing.remove();
+
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="game-declare-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="background:var(--bg1,#fff);flex:1;overflow-y:auto;border-radius:20px 20px 0 0;margin-top:40px;">
+        <div style="padding:18px 16px 0;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border,#e5e7eb);padding-bottom:14px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;color:var(--ink);">🏆 Declare Win</div>
+            <div style="font-size:12px;color:var(--muted);">Group your 13 cards into 4+3+3+3</div>
+          </div>
+          <button type="button" data-action="gbot-declare-cancel" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Unassigned Cards</div>
+          <div id="gdeck-unassigned" style="display:flex;flex-wrap:wrap;gap:5px;min-height:48px;background:var(--bg2,#f9fafb);border-radius:10px;padding:8px;">
+            ${hand.map((c, i) => gCardHtml(c, { idx: i, wildNum: g.wildJoker })).join("")}
+          </div>
+        </div>
+        ${[0,1,2,3].map(gr => `
+        <div style="padding:0 16px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">
+              Group ${gr + 1} ${gr === 0 ? "(4 cards · PURE)" : gr === 1 ? "(3 cards · PURE)" : "(3 cards · jokers OK)"}
+            </div>
+            <button type="button" data-action="game-group-add" data-group="${gr}"
+              style="font-size:11px;padding:3px 10px;background:var(--saffron,#f97316);color:#fff;border:none;border-radius:6px;cursor:pointer;">
+              + Add selected
+            </button>
+          </div>
+          <div id="gdeck-group-${gr}" style="display:flex;flex-wrap:wrap;gap:5px;min-height:48px;background:${gr<2?"#eff6ff":"#f0fdf4"};border:1.5px dashed ${gr<2?"#bfdbfe":"#86efac"};border-radius:10px;padding:8px;" data-group="${gr}"></div>
+        </div>`).join("")}
+        <div style="padding:0 16px 24px;">
+          <div id="gdeclare-msg" style="font-size:12px;color:#dc2626;text-align:center;margin-bottom:10px;min-height:18px;"></div>
+          <button class="primary" data-action="gbot-declare-submit" type="button" style="width:100%;background:linear-gradient(135deg,#7c3aed,#6d28d9);">Submit Declaration</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  document.getElementById("gdeck-unassigned").addEventListener("click", e => {
+    const card = e.target.closest(".gc");
+    if (!card) return;
+    document.querySelectorAll("#gdeck-unassigned .gc.gcsel").forEach(c => c.classList.remove("gcsel"));
+    card.classList.toggle("gcsel");
+  });
+}
+
+function gBotSubmitDeclaration() {
+  const g = window._gBotGame;
+  if (!g) return;
+  const groups = window._gGroups || [];
+  const result = gValidate(groups, g.wildJoker);
+  document.getElementById("gdeclare-msg").textContent = result.ok ? "" : result.msg;
+  if (!result.ok) return;
+
+  document.getElementById("game-declare-modal")?.remove();
+  const me = g.players[g.turnIdx];
+  if (!me) return;
+  const discardIdx = window._gDeclareDiscardIdx;
+  const [discardCard] = me.hand.splice(discardIdx, 1);
+  g.discardPile.push(discardCard);
+  g.status = "finished";
+  g.winnerId = me.id;
+
+  window._gSelIdx = null; window._gGroups = null; window._gDeclareHand = null;
+  render();
+  showToast("🏆 You declared and won!");
+}
+
+// ── Bot game render ────────────────────────────────────────────────────────────
+
+function renderBotGame() {
+  const g = window._gBotGame;
+  if (!g) return renderGameLobby();
+  if (g.status === "finished") return renderBotFinished();
+
+  const pid = currentProfileId();
+  const me = g.players.find(p => p.id === pid);
+  const curP = g.players[g.turnIdx];
+  const myTurn = curP?.id === pid;
+  const wildNum = g.wildJoker;
+  const discardTop = g.discardPile.length ? g.discardPile[g.discardPile.length - 1] : null;
+  const hand = me?.hand || [];
+  const selIdx = window._gSelIdx ?? null;
+  const phase14 = myTurn && g.phase === "discard";
+
+  return `
+    <section class="page-title" style="padding-bottom:6px;">
+      <p>Games</p><h2>🃏 Set Rummy vs Bots</h2>
+    </section>
+
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;margin-bottom:4px;">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Wild Joker:</span>
+      <div style="background:#7c3aed;color:#fff;padding:3px 12px;border-radius:8px;font-size:13px;font-weight:800;">${wildNum}</div>
+      <span style="font-size:11px;color:var(--muted);">(all ${wildNum}s + ★ are jokers)</span>
+    </div>
+
+    <section class="card" style="margin-bottom:8px;">
+      <div class="card-body" style="padding:10px 14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Players</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${g.players.map(p => {
+            const isCur = g.players[g.turnIdx]?.id === p.id;
+            const elim = p.status === "eliminated";
+            const initials = p.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+            return `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${elim ? 0.4 : 1};">
+                <div style="width:36px;height:36px;border-radius:50%;background:${p.isBot ? (isCur ? "linear-gradient(135deg,#6d28d9,#7c3aed)" : "#374151") : (isCur ? "linear-gradient(135deg,#f97316,#ea580c)" : "#1d4ed8")};border:${isCur ? `2.5px solid ${p.isBot ? "#7c3aed" : "#f97316"}` : "2px solid transparent"};display:flex;align-items:center;justify-content:center;font-size:${p.isBot ? "14" : "11"}px;font-weight:800;color:#fff;">
+                  ${p.isBot ? "🤖" : initials}
+                </div>
+                <span style="font-size:10px;font-weight:600;color:${isCur ? (p.isBot ? "#7c3aed" : "var(--saffron,#f97316)") : "var(--muted)"};max-width:54px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
+                  ${p.id === pid ? "You" : escapeHtml(p.name.split(" ")[0])}
+                </span>
+                <span style="font-size:9px;color:var(--muted);">${p.hand.length} cards</span>
+                ${elim ? `<span style="font-size:9px;color:#ef4444;">OUT</span>` : ""}
+              </div>`;
+          }).join("")}
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-bottom:8px;">
+      <div class="card-body" style="padding:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">
+          ${myTurn
+            ? (g.phase === "draw" ? "Your turn — tap deck or discard pile to draw" : "Select a card to discard")
+            : `${escapeHtml(curP?.name || "Bot")}'s turn — thinking…`}
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-end;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            ${myTurn && g.phase === "draw"
+              ? `<div data-action="gbot-draw-deck" style="cursor:pointer;">${gCardHtml({ s:"?", n:"?" }, { back: true })}</div>`
+              : gCardHtml({ s:"?", n:"?" }, { back: true })}
+            <span style="font-size:10px;color:var(--muted);">Deck (${g.deck.length})</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            ${discardTop
+              ? (myTurn && g.phase === "draw"
+                  ? `<div data-action="gbot-draw-discard" style="cursor:pointer;">${gCardHtml(discardTop, { wildNum })}</div>`
+                  : gCardHtml(discardTop, { wildNum }))
+              : `<div class="gc gcback" style="opacity:0.3;"></div>`}
+            <span style="font-size:10px;color:var(--muted);">Discard</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-bottom:8px;">
+      <div class="card-body" style="padding:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">
+          Your Hand (${hand.length} cards)
+        </div>
+        <div id="gbot-hand" style="display:flex;flex-wrap:wrap;gap:5px;">
+          ${hand.map((c, i) => gCardHtml(c, { sel: selIdx === i, idx: i, wildNum, sm: true })).join("")}
+        </div>
+        ${me?.status === "eliminated"
+          ? `<div style="text-align:center;margin-top:12px;font-size:13px;color:#dc2626;font-weight:700;">You've been eliminated. Watching…</div>`
+          : phase14 ? `
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="primary" data-action="gbot-discard" type="button" ${selIdx === null ? "disabled" : ""} style="flex:1;min-width:100px;">Discard</button>
+              <button data-action="gbot-declare" type="button" ${selIdx === null ? "disabled" : ""} style="flex:1;min-width:100px;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;">🏆 Declare</button>
+            </div>` : ""}
+      </div>
+    </section>
+    <div style="padding:0 16px 16px;">
+      <button class="secondary" data-action="gbot-quit" type="button" style="width:100%;font-size:12px;">Quit Bot Game</button>
+    </div>
+  `;
+}
+
+function renderBotFinished() {
+  const g = window._gBotGame;
+  const pid = currentProfileId();
+  const winner = g.players.find(p => p.id === g.winnerId);
+  const iWon = g.winnerId === pid;
+  return `
+    <section class="page-title"><p>Games</p><h2>🏆 Bot Game Over</h2></section>
+    <section class="card">
+      <div class="card-body" style="text-align:center;padding:32px 20px;">
+        <div style="font-size:64px;margin-bottom:12px;">${iWon ? "🥇" : (winner?.isBot ? "🤖" : "🎴")}</div>
+        <h3 style="font-size:20px;margin:0 0 8px;">${iWon ? "You Won!" : `${escapeHtml(winner?.name || "Bot")} Won!`}</h3>
+        <p style="font-size:14px;color:var(--muted);margin:0 0 8px;">
+          ${iWon ? "Great job — you beat the bots!" : "Better luck next time!"}
+        </p>
+        ${!iWon ? `
+          <div style="margin-bottom:20px;">
+            ${g.players.filter(p => !p.isBot).map(p => `
+              <div style="margin-top:10px;">
+                <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Your final hand</div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;">
+                  ${p.hand.map(c => gCardHtml(c, { wildNum: g.wildJoker, sm: true })).join("")}
+                </div>
+              </div>`).join("")}
+          </div>` : ""}
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="primary" data-action="gbot-start" data-bots="${g.players.filter(p => p.isBot).length}" type="button" style="min-width:130px;">Play Again</button>
+          <button class="secondary" data-action="gbot-quit" type="button" style="min-width:130px;">Back to Lobby</button>
+        </div>
+      </div>
+    </section>`;
 }
 
 // ── Session idle timeout (40 minutes) ────────────────────────────────────────
