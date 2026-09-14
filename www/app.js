@@ -2488,12 +2488,12 @@ document.addEventListener("keydown", (e) => {
 function appannaEmiProgress() {
   const totalMonths = 18;
   const monthlyEmi = 7445.38;
-  // Jan–Apr 2026 were paid before the app existed — fixed offset of 4
-  const preAppPaid = 4;
+  // Jan–Sep 2026 paid before app was set up in July — hardcoded offset of 9
+  const preAppPaid = 9;
   const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active");
   const inAppPaid = legacyLoan
     ? state.monthlyPayments.filter(p =>
-        p.memberId === legacyLoan.memberId && p.status === "paid" && p.month >= "2026-05"
+        p.memberId === legacyLoan.memberId && p.status === "paid" && p.month >= "2026-10"
       ).length
     : 0;
   const paid = Math.min(preAppPaid + inAppPaid, totalMonths);
@@ -3448,7 +3448,7 @@ function renderDashboard() {
           const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, m) && l.loanType === "emi" && l.status === "active");
           if (emiLoan) return { name: m.name, paid: emiLoan.emisPaid, total: emiLoan.tenureMonths, emi: emiLoan.emiAmount, outstanding: loanOutstanding(emiLoan) };
           const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, m) && l.status === "active");
-          if (legacyLoan) { const prog = appannaEmiProgress(); return { name: m.name, paid: prog.paid, total: prog.totalMonths, emi: prog.monthlyEmi, outstanding: loanOutstanding(legacyLoan) }; }
+          if (legacyLoan) { const prog = appannaEmiProgress(); return { name: m.name, paid: prog.paid, total: prog.totalMonths, emi: prog.monthlyEmi, outstanding: prog.monthlyEmi * (prog.totalMonths - prog.paid) }; }
           return null;
         }).filter(Boolean);
         if (!emiRows.length) return "";
@@ -3473,7 +3473,7 @@ function renderDashboard() {
         const paid = emiLoan ? emiLoan.emisPaid : appannaEmiProgress().paid;
         const total = emiLoan ? emiLoan.tenureMonths : appannaEmiProgress().totalMonths;
         const emiAmt = emiLoan ? emiLoan.emiAmount : appannaEmiProgress().monthlyEmi;
-        const outstanding = emiLoan ? loanOutstanding(emiLoan) : loanOutstanding(legacyLoan);
+        const outstanding = emiLoan ? loanOutstanding(emiLoan) : (() => { const p = appannaEmiProgress(); return p.monthlyEmi * (p.totalMonths - p.paid); })();
         return `
           <div class="card" style="margin-top:12px;">
             <div class="card-header"><div><h3>💳 Your EMI Loan</h3><p>Monthly repayment progress</p></div></div>
