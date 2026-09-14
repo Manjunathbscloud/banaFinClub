@@ -2488,15 +2488,13 @@ document.addEventListener("keydown", (e) => {
 function appannaEmiProgress() {
   const totalMonths = 18;
   const monthlyEmi = 7445.38;
-  // Jan–Apr 2026 were paid before the app existed — fixed offset of 4
-  const preAppPaid = 4;
   const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active");
   const inAppPaid = legacyLoan
     ? state.monthlyPayments.filter(p =>
-        p.memberId === legacyLoan.memberId && p.status === "paid" && p.month >= "2026-05"
+        p.memberId === legacyLoan.memberId && p.status === "paid" && p.month >= "2026-01"
       ).length
     : 0;
-  const paid = Math.min(preAppPaid + inAppPaid, totalMonths);
+  const paid = Math.min(inAppPaid, totalMonths);
   return { paid, remaining: totalMonths - paid, totalMonths, monthlyEmi, totalAmount: monthlyEmi * totalMonths };
 }
 
