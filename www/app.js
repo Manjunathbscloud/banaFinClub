@@ -633,6 +633,7 @@ async function loadLiveState() {
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
+      maxLoanPerMember: Number(settingsById.loan_settings?.value?.maxLoanPerMember ?? 300000),
       annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
     currentUserId: current?.status === "active" ? current.id : null,
@@ -1228,7 +1229,7 @@ function render() {
         ${navButton("deposits", "₹", t("deposits"))}
         ${navButton("loans", "⇄", t("loans"))}
         ${navButton("members", "☷", t("members"))}
-        ${navButton("history", "📅", "Meetings")}
+        ${navButton("meetings", "📊", "Dashboard")}
         ${isAdmin() ? navButton("admin", "⚙", t("admin")) : ""}
       </nav>
     </div>
@@ -1583,7 +1584,7 @@ function renderHome() {
         <div class="dash-summary-brand">
           <span class="dash-summary-dot">●</span>
           <div>
-            <p class="dash-summary-label">Banakar FinClub · Year 6 of 10</p>
+            <p class="dash-summary-label">Banakar FinClub · Year ${state.settings.activeYearNumber || 6} of 10</p>
             <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
           </div>
         </div>
@@ -1632,13 +1633,18 @@ function renderHome() {
           <div><h3>🏛️ About Our Association</h3><p>Sri Mukkanneshwara Associate · Est. February 2021</p></div>
         </div>
         <div class="card-body">
-          <p class="assoc-intro">A private member finance association by the Banakar family — pooling monthly deposits, earning interest, and providing low-interest loans to build a shared financial future.</p>
-          <div class="row-list" style="margin-top:10px;">
+          <p class="assoc-intro">A private member finance association by the Banakar family — pooling monthly deposits, earning interest, and providing low-interest loans to build a shared financial future together.</p>
+          <p class="assoc-intro" style="margin-top:8px;">What started as a simple idea among family members has grown into a trusted financial circle — where every rupee deposited works harder, every member has access to fair loans, and the collective fund grows year after year.</p>
+          <div class="row-list" style="margin-top:12px;">
             <div class="row-item"><div><strong>Founded</strong><span>February 2021</span></div></div>
-            <div class="row-item"><div><strong>Active members</strong><span>7 (after 1 exit in Year 5)</span></div></div>
-            <div class="row-item"><div><strong>Monthly deposit</strong><span>₹2,000 per member · ₹14,000 total</span></div></div>
-            <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year 6 of 10</span></div></div>
+            <div class="row-item"><div><strong>Patron deity</strong><span>Sri Mukkanneshwara</span></div></div>
+            <div class="row-item"><div><strong>Active members</strong><span>${activeMembers().length} members</span></div></div>
+            <div class="row-item"><div><strong>Monthly deposit</strong><span>${money(state.settings.monthlyDeposit)} per member · ${money(state.settings.monthlyDeposit * activeMembers().length)} total</span></div></div>
+            <div class="row-item"><div><strong>Loan interest</strong><span>1.25% per month · fair & transparent</span></div></div>
+            <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year ${state.settings.activeYearNumber || 6} of 10</span></div></div>
+            <div class="row-item"><div><strong>Goal</strong><span>Build a strong financial future for every member by 2031</span></div></div>
           </div>
+          <p class="assoc-intro" style="margin-top:12px;font-style:italic;color:var(--muted);font-size:13px;">🙏 United by family, strengthened by trust.</p>
         </div>
       </div>
 
@@ -3028,56 +3034,63 @@ function showLoanYearModal(yearKey) {
       window.bfcFilterLoanTable();
     };
 
-    const gridClass = isAdmin() ? "lg-admin" : "lg-member";
-    const gridRows = loans.map(loan => {
+    const loanCards = loans.map(loan => {
       const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
       const myLoan = loanBelongsToMember(loan, user);
       const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
       const rowStatus = dueThisMonth ? "due" : loan.status;
       const memberName = loanMemberName(loan);
       const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
+      const outstanding = loanOutstanding(loan);
+      const isEmiType = loan.loanType === "emi" || loan.notes === "emi_entry";
 
       const statusBadgeHtml = dueThisMonth
-        ? `<span class="badge warn" style="font-size:9px;">Due</span>`
+        ? `<span class="badge warn">Due this month</span>`
         : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
 
-      let adminAction = "";
+      let actionHtml = "";
       if (isAdmin()) {
-        const isFullLoan = loan.loanType !== "emi" && loan.notes !== "emi_entry";
+        const isFullLoan = !isEmiType;
         const partialBtn = loan.status === "active" && isFullLoan && state.settings.partialRepaymentEnabled
-          ? `<button class="secondary" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Partial</button>`
+          ? `<button class="secondary lc-btn" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button">Partial</button>`
           : "";
-        adminAction = `<div class="loan-grid-cell" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-          ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Clear</button>` : ""}
+        actionHtml = `<div class="lc-actions">
+          ${loan.status === "active" ? `<button class="primary lc-btn" data-action="clear-current-loan" data-id="${loan.id}" type="button">Clear</button>` : ""}
           ${partialBtn}
-          <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Del</button>
+          <button class="danger lc-btn" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
         </div>`;
       } else if (dueThisMonth && myLoan) {
-        let extHtml = "";
         if (!extInfo || extInfo.status === "rejected") {
-          extHtml = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Extend</button>`;
+          actionHtml = `<div class="lc-actions"><button class="secondary lc-btn" data-action="request-extension" data-loan-id="${loan.id}" type="button">Request Extension</button></div>`;
         } else if (extInfo.status === "pending") {
-          extHtml = `<span style="font-size:10px;color:#b45309;">⏳ Awaiting</span>`;
+          actionHtml = `<div class="lc-actions"><span style="font-size:12px;color:#b45309;">⏳ Extension awaiting approval</span></div>`;
         } else if (extInfo.status === "approved") {
-          extHtml = `<span style="font-size:10px;color:#16a34a;">✓ Extended</span>`;
+          actionHtml = `<div class="lc-actions"><span style="font-size:12px;color:#16a34a;">✓ Extension approved</span></div>`;
         }
-        if (extHtml) adminAction = `<div class="loan-grid-cell">${extHtml}</div>`;
       }
 
-      return `<div class="loan-grid-row lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
-        <div class="loan-grid-cell">
-          <strong style="font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(memberName)}</strong>
-          <span style="margin-top:2px;display:block;">${statusBadgeHtml}</span>
+      const cardBorder = dueThisMonth ? "border-left:3px solid #f59e0b;" : loan.status === "clear" ? "border-left:3px solid #16a34a;" : "border-left:3px solid #2563eb;";
+
+      return `<div class="lc-card lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}" style="${cardBorder}">
+        <div class="lc-top">
+          <div class="lc-name-block">
+            <span class="lc-name">${escapeHtml(memberName)}</span>
+            ${statusBadgeHtml}
+          </div>
+          <div class="lc-amount-block">
+            <span class="lc-amount">${money(loan.amount)}</span>
+            ${intPerMo > 0 ? `<span class="lc-int">${money(intPerMo)}/mo interest</span>` : ""}
+          </div>
         </div>
-        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loan.from)}</div>
-        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loanRenewalDate(loan))}</div>
-        <div class="loan-grid-cell">
-          <span style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;font-size:13px;">${moneyCompact(loan.amount)}</span>
-          ${intPerMo > 0 ? `<small style="display:block;color:var(--muted);font-size:10px;opacity:0.65;font-variant-numeric:tabular-nums;margin-top:1px;">${moneyCompact(intPerMo)}/mo</small>` : ""}
+        <div class="lc-meta">
+          <span>📅 From <strong>${fmtMonthYearShort(loan.from)}</strong></span>
+          <span>⏳ Due <strong>${fmtMonthYearShort(loanRenewalDate(loan))}</strong></span>
+          ${outstanding > 0 && loan.status === "active" ? `<span>💰 Outstanding <strong style="color:#dc2626;">${money(outstanding)}</strong></span>` : ""}
+          ${isEmiType && loan.emisPaid > 0 ? `<span>✓ ${loan.emisPaid}/${loan.tenureMonths} EMIs paid</span>` : ""}
         </div>
-        ${adminAction}
+        ${actionHtml}
       </div>`;
-    }).join("") || `<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No active loans.</div>`;
+    }).join("") || `<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">No active loans.</div>`;
 
     bodyHtml = `
       <div class="lm-stats">
@@ -3105,19 +3118,10 @@ function showLoanYearModal(yearKey) {
         <button class="lm-chip lm-chip-active" onclick="bfcSetLoanChip(this,'all')">All</button>
         ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
       </div>
-      <div class="lm-table-card">
-        <div class="loan-grid ${gridClass}">
-          <div class="loan-grid-head">
-            <span>Member</span>
-            <span>From</span>
-            <span>Due</span>
-            <span>Amount</span>
-            ${isAdmin() ? "<span>Action</span>" : ""}
-          </div>
-          ${gridRows}
-        </div>
+      <div class="lc-list">${loanCards}</div>
+      <div class="lm-table-card" style="margin-top:10px;">
         <div class="loan-grid-footer">
-          <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Interest</span>
+          <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Total Interest</span>
           <span style="font-weight:700;color:#059669;">${money(_totalYrInt)}</span>
         </div>
       </div>`;
@@ -3343,36 +3347,37 @@ function renderDashboard() {
       </div>
       <div class="analytics-stat">
         <span>Year</span>
-        <strong>6 of 10</strong>
+        <strong>${state.settings.activeYearNumber || 6} of 10</strong>
         <small>Since 2021</small>
       </div>
     </div>
 
     <div class="card" style="margin-top:14px;">
-      <div class="card-header"><div><h3>📈 Deposits vs Interest</h3><p>Collective year-wise data · all members</p></div></div>
-      <div class="card-body">
-        <div class="analytics-chart">
-          ${chartData.map(d => `
-            <div class="analytics-chart-row">
-              <span class="analytics-chart-label">${escapeHtml(d.label)}${d.live ? "*" : ""}</span>
-              <div class="analytics-chart-bars">
-                <div class="analytics-bar-row">
-                  <div class="analytics-bar-track"><div class="analytics-bar-fill dep" style="width:${Math.round(d.deposits / maxVal * 100)}%"></div></div>
-                  <span class="analytics-bar-val">${compactMoney(d.deposits)}</span>
-                </div>
-                <div class="analytics-bar-row">
-                  <div class="analytics-bar-track"><div class="analytics-bar-fill int" style="width:${Math.round(d.interest / maxVal * 100)}%"></div></div>
-                  <span class="analytics-bar-val">${compactMoney(d.interest)}</span>
-                </div>
+      <div class="card-header"><div><h3>📈 Growth Story</h3><p>Deposits vs interest · year by year</p></div></div>
+      <div class="card-body" style="padding:10px 14px 14px;">
+        ${chartData.map(d => {
+          const total = d.deposits + d.interest;
+          const depPct = total > 0 ? Math.round(d.deposits / total * 100) : 100;
+          const intPct = 100 - depPct;
+          return `
+          <div class="growth-year-card">
+            <div class="growth-year-top">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="growth-year-label">${escapeHtml(d.label)}</span>
+                ${d.live ? `<span class="badge warn" style="font-size:9px;">Live</span>` : ""}
               </div>
+              <span class="growth-year-total">${compactMoney(total)}</span>
             </div>
-          `).join("")}
-        </div>
-        <div class="analytics-legend">
-          <div class="analytics-legend-item"><span class="analytics-legend-dot dep"></span>Deposits</div>
-          <div class="analytics-legend-item"><span class="analytics-legend-dot int"></span>Interest</div>
-          <small style="margin-left:auto;color:var(--muted);">* Live data</small>
-        </div>
+            <div class="growth-stacked-bar">
+              <div class="growth-bar-dep" style="width:${depPct}%"></div>
+              <div class="growth-bar-int" style="width:${intPct}%"></div>
+            </div>
+            <div class="growth-year-meta">
+              <span><span class="growth-dot dep"></span>${compactMoney(d.deposits)} deposits</span>
+              <span><span class="growth-dot int"></span>${compactMoney(d.interest)} interest <strong style="color:#f59e0b;">(${intPct}%)</strong></span>
+            </div>
+          </div>`;
+        }).join("")}
       </div>
     </div>
 
@@ -3391,39 +3396,41 @@ function renderDashboard() {
     </div>
 
     ${(() => {
+      const maxLoan = state.settings.maxLoanPerMember || 300000;
       const loanGroups = {};
       currentLoans()
         .filter(l => l.notes !== "emi_entry")
         .forEach(loan => {
-          const name = (loan.memberName || "Unknown").split(" ")[0];
+          const name = loanMemberName(loan);
           loanGroups[name] = (loanGroups[name] || 0) + loanOutstanding(loan);
         });
-      const availBal = expectedBankBalance();
-      const totalPool = Object.values(loanGroups).reduce((s, v) => s + v, 0) + availBal;
-      const bars = [
-        ...Object.entries(loanGroups).map(([name, amt]) => ({ label: name, amount: amt, type: "loan" })),
-        { label: "Available", amount: availBal, type: "avail" },
-      ];
-      const maxAmt = Math.max(...bars.map(b => b.amount), 1);
+      const rows = Object.entries(loanGroups).map(([name, amt]) => ({ name, outstanding: amt }));
+      if (!rows.length) return "";
       return `
       <div class="card" style="margin-top:12px;">
         <div class="card-header">
-          <div><h3>💰 Fund Allocation</h3><p>Loans outstanding + available balance</p></div>
+          <div><h3>💰 Loan Utilisation</h3><p>Outstanding vs max limit of ${money(maxLoan)}</p></div>
         </div>
-        <div class="card-body">
-          <div class="fund-pool-badge">Total Pool <span>${money(totalPool)}</span></div>
-          <div class="fund-chart">
-            ${bars.map(b => `
-              <div class="fund-bar-wrap">
-                <span class="fund-bar-val">${compactMoney(b.amount)}</span>
-                <div class="fund-bar ${b.type}" style="height:${Math.max(4, Math.round(b.amount / maxAmt * 140))}px"></div>
-                <span class="fund-bar-label">${escapeHtml(b.label)}</span>
-              </div>`).join("")}
-          </div>
-          <div class="analytics-legend" style="margin-top:28px;">
-            <div class="analytics-legend-item"><span class="analytics-legend-dot" style="background:#f59e0b;"></span>Loan outstanding</div>
-            <div class="analytics-legend-item"><span class="analytics-legend-dot" style="background:#16a34a;"></span>Available</div>
-          </div>
+        <div class="card-body" style="padding:8px 14px 14px;">
+          ${rows.map(r => {
+            const pct = Math.min(100, Math.round((r.outstanding / maxLoan) * 100));
+            const barColor = pct >= 90
+              ? "linear-gradient(90deg,#ef4444,#dc2626)"
+              : pct >= 60
+              ? "linear-gradient(90deg,#f59e0b,#d97706)"
+              : "linear-gradient(90deg,#3b82f6,#2563eb)";
+            return `
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;color:var(--ink);">${escapeHtml(r.name)}</span>
+                <span style="font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);">${money(r.outstanding)} <strong style="color:var(--ink);">(${pct}%)</strong></span>
+              </div>
+              <div style="height:8px;background:var(--line,#e5e7eb);border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.5s;"></div>
+              </div>
+            </div>`;
+          }).join("")}
+          <p style="font-size:11px;color:var(--muted);margin-top:4px;">🔵 &lt;60% · 🟡 60–90% · 🔴 &gt;90% of ₹${(maxLoan/100000).toFixed(1)}L limit</p>
         </div>
       </div>`;
     })()}
@@ -3854,6 +3861,10 @@ function renderAdmin() {
             <label class="field">
               <span>Monthly Deposit Amount (₹ per member)</span>
               <input type="number" name="monthlyDeposit" value="${state.settings.monthlyDeposit}" min="0" required />
+            </label>
+            <label class="field">
+              <span>Max Loan Per Member (₹)</span>
+              <input type="number" name="maxLoanPerMember" value="${state.settings.maxLoanPerMember || 300000}" min="0" required />
             </label>
             <div style="margin-bottom:12px;">
               <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Member Exits (if any)</p>
@@ -6564,6 +6575,14 @@ async function startNewYear(data) {
       updated_at: new Date().toISOString(),
     }));
   }
+  const newMaxLoan = Number(data.maxLoanPerMember || state.settings.maxLoanPerMember || 300000);
+  if (newMaxLoan !== (state.settings.maxLoanPerMember || 300000)) {
+    await liveQuery(supabaseClient.from("settings").upsert({
+      id: "loan_settings",
+      value: { ...(state.settings.loanSettings || {}), maxLoanPerMember: newMaxLoan },
+      updated_at: new Date().toISOString(),
+    }));
+  }
 
   for (const exit of exits) {
     if (exit.memberId) {
@@ -6779,10 +6798,26 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
           emis_paid: newEmisPaid,
           ...(allPaid ? { status: "clear", principal_paid: loan.amount, closed_at: today() } : {}),
         }).eq("id", loan.id));
-        if (allPaid) showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
+        if (allPaid) {
+          showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
+          await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${loan.tenureMonths} EMI payments. Your loan is now closed. Thank you!`);
+        }
       }
     }
     if (emiLoans.length > 0) await loadLiveState();
+    // Auto-close legacy emi_entry loan when all months are paid
+    const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
+    if (legacyEmiLoan) {
+      const prog = appannaEmiProgress();
+      if (prog.paid >= prog.totalMonths) {
+        await liveQuery(supabaseClient.from("current_loans").update({
+          status: "clear", principal_paid: legacyEmiLoan.amount, emis_paid: prog.totalMonths, closed_at: today(),
+        }).eq("id", legacyEmiLoan.id));
+        await loadLiveState();
+        showToast(`${member.name} — all EMIs paid, loan closed!`);
+        await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${prog.totalMonths} EMI payments. Your loan is now closed. Thank you!`);
+      }
+    }
     await insertStatement("credit", amount, `${member.name} credited`);
     await notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`);
   } else {
