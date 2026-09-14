@@ -1228,7 +1228,8 @@ function render() {
         ${navButton("deposits", "₹", t("deposits"))}
         ${navButton("loans", "⇄", t("loans"))}
         ${navButton("members", "☷", t("members"))}
-        ${isAdmin() ? navButton("admin", "⚙", t("admin")) : navButton("history", "📅", "Meetings")}
+        ${navButton("history", "📅", "Meetings")}
+        ${isAdmin() ? navButton("admin", "⚙", t("admin")) : ""}
       </nav>
     </div>
   `;
