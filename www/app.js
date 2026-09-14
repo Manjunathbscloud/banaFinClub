@@ -1360,7 +1360,9 @@ function showMeetingWelcome() {
     <p class="mo-tap">Tap anywhere to continue</p>
   `;
 
-  document.body.appendChild(el);
+  // Delay append so the MPIN keypad click event finishes bubbling before
+  // we attach the dismiss listener — otherwise the same tap dismisses instantly.
+  setTimeout(() => document.body.appendChild(el), 80);
 
   // Canvas particles
   const canvas = el.querySelector("#moCanvas");
