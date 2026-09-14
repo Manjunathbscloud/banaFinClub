@@ -1583,7 +1583,7 @@ function renderHome() {
         <div class="dash-summary-brand">
           <span class="dash-summary-dot">●</span>
           <div>
-            <p class="dash-summary-label">Banakar FinClub · Year 6 of 10</p>
+            <p class="dash-summary-label">Banakar FinClub · Year ${state.settings.activeYearNumber || 6} of 10</p>
             <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
           </div>
         </div>
@@ -1637,7 +1637,7 @@ function renderHome() {
             <div class="row-item"><div><strong>Founded</strong><span>February 2021</span></div></div>
             <div class="row-item"><div><strong>Active members</strong><span>7 (after 1 exit in Year 5)</span></div></div>
             <div class="row-item"><div><strong>Monthly deposit</strong><span>₹2,000 per member · ₹14,000 total</span></div></div>
-            <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year 6 of 10</span></div></div>
+            <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year ${state.settings.activeYearNumber || 6} of 10</span></div></div>
           </div>
         </div>
       </div>
