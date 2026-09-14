@@ -2195,7 +2195,7 @@ tr:hover td { background: rgba(249,115,22,0.025); }
   align-items: flex-end;
   gap: 6px;
   height: 180px;
-  padding-bottom: 28px;
+  padding-bottom: 52px;
   position: relative;
 }
 
@@ -2224,13 +2224,14 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 
 .fund-bar-label {
   position: absolute;
-  bottom: -22px;
+  bottom: -48px;
   font-size: 10px;
+  font-weight: 600;
   color: var(--muted);
-  text-align: center;
   white-space: nowrap;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(-40deg);
+  transform-origin: top center;
 }
 
 /* ── Payment return popup ───────────────────── */
