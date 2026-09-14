@@ -1192,6 +1192,7 @@ function render() {
     return;
   }
   resetIdleTimer();
+  showMeetingWelcome();
 
   const openDetails = new Set(
     [...document.querySelectorAll("details.collapsible[open]")].map((el) => el.querySelector("h3")?.textContent?.trim())
@@ -1327,6 +1328,97 @@ async function handleAvatarUpload(file) {
 
 function navButton(tab, icon, label) {
   return `<button class="${state.activeTab === tab ? "active" : ""}" type="button" data-tab="${tab}"><span>${icon}</span><span>${label}</span></button>`;
+}
+
+function showMeetingWelcome() {
+  // Show only between now and Oct 4 2026, and only once per login session
+  const meetingEnd = new Date("2026-10-05T00:00:00");
+  if (new Date() > meetingEnd) return;
+  const key = "meetingWelcomeShown_6";
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, "1");
+
+  const el = document.createElement("div");
+  el.className = "meeting-overlay";
+  el.innerHTML = `
+    <canvas class="mo-canvas" id="moCanvas"></canvas>
+    <div class="mo-waves">
+      <svg class="mo-wave mo-wave2" viewBox="0 0 1440 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,30 C360,65 720,0 1080,35 C1260,52 1350,28 1440,30 L1440,80 L0,80 Z" fill="#0a3a4e" opacity="0.7"/>
+      </svg>
+      <svg class="mo-wave mo-wave1" viewBox="0 0 1440 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,50 C180,20 360,70 540,45 C720,20 900,65 1080,45 C1260,25 1350,55 1440,50 L1440,80 L0,80 Z" fill="#0D2D42"/>
+      </svg>
+    </div>
+    <div class="mo-body">
+      <p class="mo-eyebrow">Banakar FinClub · Sri Mukkanneshwara Associate</p>
+      <span class="mo-numeral">VI</span>
+      <h2 class="mo-title">Welcome to the<br>6th Annual Meeting</h2>
+      <p class="mo-sub">Oct 2 – 4, 2026 · Goa</p>
+      <div class="mo-pill">🌴 Year 6 of 10 · Family · Finance · Celebration</div>
+    </div>
+    <p class="mo-tap">Tap anywhere to continue</p>
+  `;
+
+  document.body.appendChild(el);
+
+  // Canvas particles
+  const canvas = el.querySelector("#moCanvas");
+  const ctx = canvas.getContext("2d");
+  let rafId;
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  const stars = Array.from({ length: 120 }, () => ({
+    x: Math.random(), y: Math.random() * 0.8,
+    r: Math.random() * 1.3 + 0.3, phase: Math.random() * Math.PI * 2, speed: Math.random() * 0.4 + 0.2,
+  }));
+  const flies = Array.from({ length: 18 }, (_, i) => ({
+    x: Math.random() * window.innerWidth, y: window.innerHeight * (0.3 + Math.random() * 0.6),
+    vx: (Math.random() - 0.5) * 0.4, vy: -(Math.random() * 0.5 + 0.2),
+    age: 0, maxLife: Math.random() * 180 + 100, r: Math.random() * 2 + 1, phase: i * 0.7,
+  }));
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const now = t * 0.008;
+    for (const s of stars) {
+      const a = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(now * s.speed + s.phase));
+      ctx.beginPath();
+      ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(247,237,216,${a})`;
+      ctx.fill();
+    }
+    for (const f of flies) {
+      f.x += f.vx + Math.sin(t * 0.01 + f.phase) * 0.3;
+      f.y += f.vy;
+      f.age++;
+      const lr = f.age / f.maxLife;
+      const a = lr < 0.2 ? lr / 0.2 : lr > 0.8 ? 1 - (lr - 0.8) / 0.2 : 1;
+      if (f.age > f.maxLife || f.y < 0) {
+        f.x = Math.random() * canvas.width;
+        f.y = canvas.height * (0.4 + Math.random() * 0.5);
+        f.vy = -(Math.random() * 0.5 + 0.2); f.vx = (Math.random() - 0.5) * 0.4;
+        f.age = 0; f.maxLife = Math.random() * 180 + 100;
+      }
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 4);
+      g.addColorStop(0, `rgba(240,192,80,${a * 0.9})`);
+      g.addColorStop(1, "rgba(240,192,80,0)");
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 4, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill();
+    }
+    t++;
+    rafId = requestAnimationFrame(draw);
+  }
+  draw();
+
+  function dismiss() {
+    cancelAnimationFrame(rafId);
+    el.classList.add("mo-exit");
+    el.addEventListener("animationend", () => el.remove(), { once: true });
+  }
+
+  el.addEventListener("click", dismiss);
+  setTimeout(dismiss, 4000);
 }
 
 function renderAuth(mode) {
