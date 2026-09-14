@@ -1329,13 +1329,12 @@ function navButton(tab, icon, label) {
   return `<button class="${state.activeTab === tab ? "active" : ""}" type="button" data-tab="${tab}"><span>${icon}</span><span>${label}</span></button>`;
 }
 
+let _meetingWelcomeShown = false;
 function showMeetingWelcome() {
-  // Show only between now and Oct 4 2026, and only once per login session
-  const meetingEnd = new Date("2026-10-05T00:00:00");
-  if (new Date() > meetingEnd) return;
-  const key = "meetingWelcomeShown_6";
-  if (sessionStorage.getItem(key)) return;
-  sessionStorage.setItem(key, "1");
+  // Show only between now and Oct 4 2026, and only once per page load
+  if (new Date() > new Date("2026-10-05T00:00:00")) return;
+  if (_meetingWelcomeShown) return;
+  _meetingWelcomeShown = true;
 
   const el = document.createElement("div");
   el.className = "meeting-overlay";

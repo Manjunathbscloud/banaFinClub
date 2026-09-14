@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Banakar FinClub Annual Meet</title>
+  <meta name="description" content="6th Annual Meeting — Oct 2–4, 2026 · Goa · Sri Mukkanneshwara Associate">
+  <meta property="og:title" content="Banakar FinClub · 6th Annual Meeting">
+  <meta property="og:description" content="Oct 2–4, 2026 · Goa · Year 6 of 10">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:  #060E1A;
+      --gold:  #C99A3A;
+      --gold2: #F0C050;
+      --cream: #F7EDD8;
+      --sand:  #C4A882;
+      --mist:  #5C8DAA;
+      --rule:  rgba(201,154,58,0.28);
+    }
+
+    body {
+      background: var(--navy);
+      color: var(--cream);
+      font-family: 'EB Garamond', Georgia, serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    #sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    .waves-wrap {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 120px; z-index: 1; pointer-events: none; overflow: hidden;
+    }
+    .wave { position: absolute; bottom: 0; width: 220%; left: -10%; }
+    .wave1 { animation: drift1 7s linear infinite; opacity: 0.55; }
+    .wave2 { animation: drift2 10s linear infinite; opacity: 0.35; bottom: 8px; }
+    .wave3 { animation: drift1 14s linear infinite reverse; opacity: 0.2; bottom: 16px; }
+    @keyframes drift1 { to { transform: translateX(-45.5%); } }
+    @keyframes drift2 { from { transform: translateX(-45.5%); } to { transform: translateX(0); } }
+
+    .palms {
+      position: fixed; bottom: 80px; width: 100%; z-index: 2;
+      pointer-events: none; display: flex; justify-content: space-between;
+    }
+    .palm { opacity: 0.18; }
+
+    .page {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 44px 16px 160px;
+    }
+
+    .frame {
+      width: 100%; max-width: 540px;
+      border: 1px solid var(--rule); border-radius: 2px; padding: 4px;
+      background: linear-gradient(160deg, rgba(13,31,51,0.96) 0%, rgba(6,14,26,0.98) 100%);
+      backdrop-filter: blur(8px);
+      animation: rise 1.1s cubic-bezier(0.22,1,0.36,1) both;
+      box-shadow: 0 0 60px rgba(201,154,58,0.08), 0 30px 80px rgba(0,0,0,0.6);
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(40px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .frame-inner { border: 1px solid var(--rule); padding: 40px 32px 36px; position: relative; }
+    .frame-inner::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .frame-inner::after  { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+    .frame-inner::before, .frame-inner::after {
+      content: ''; position: absolute; width: 20px; height: 20px;
+      border-color: var(--gold); border-style: solid; opacity: 0.7;
+    }
+
+    .inner-wrap { position: relative; }
+    .inner-wrap::before { bottom: -5px; left: -5px; border-width: 0 0 2px 2px; }
+    .inner-wrap::after  { bottom: -5px; right: -5px; border-width: 0 2px 2px 0; }
+    .inner-wrap::before, .inner-wrap::after {
+      content: ''; position: absolute; width: 20px; height: 20px;
+      border-color: var(--gold); border-style: solid; opacity: 0.7;
+    }
+
+    .eyebrow {
+      text-align: center; font-size: 10px; letter-spacing: 3px;
+      text-transform: uppercase; color: var(--gold); opacity: 0.8;
+      margin-bottom: 24px; animation: fade-in 1.4s 0.4s both;
+    }
+
+    .hero { text-align: center; margin-bottom: 4px; animation: fade-in 1.2s 0.2s both; }
+    .numeral {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(80px, 20vw, 120px); font-weight: 900; line-height: 1;
+      color: var(--gold); letter-spacing: -3px; display: block;
+      text-shadow: 0 0 40px rgba(201,154,58,0.6), 0 0 80px rgba(201,154,58,0.3);
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%,100% { text-shadow: 0 0 40px rgba(201,154,58,0.6), 0 0 80px rgba(201,154,58,0.3); }
+      50%      { text-shadow: 0 0 60px rgba(240,192,80,0.9), 0 0 110px rgba(201,154,58,0.5); }
+    }
+    .hero-sub {
+      font-size: 11px; letter-spacing: 5px; text-transform: uppercase;
+      color: var(--sand); margin-top: 2px; display: block;
+    }
+
+    .divider { display: flex; align-items: center; gap: 12px; margin: 22px 0; }
+    .divider-line {
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      background-size: 200% 1px; animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer { to { background-position: 200% 0; } }
+    .divider-diamond {
+      width: 7px; height: 7px; background: var(--gold);
+      transform: rotate(45deg); flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(201,154,58,0.8);
+    }
+
+    .title-block { text-align: center; margin-bottom: 26px; animation: fade-in 1s 0.5s both; }
+    .title-main {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(21px, 5.5vw, 28px); font-weight: 700; line-height: 1.25;
+      color: var(--cream); text-wrap: balance;
+    }
+    .title-assoc { font-size: 14px; color: var(--sand); margin-top: 6px; font-style: italic; }
+
+    .details {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px 24px; margin-bottom: 26px; animation: fade-in 1s 0.7s both;
+    }
+    .detail-item { display: flex; flex-direction: column; gap: 3px; }
+    .detail-label { font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold); opacity: 0.75; }
+    .detail-value { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--cream); line-height: 1.3; }
+    .detail-sub { font-size: 12px; color: var(--sand); font-style: italic; margin-top: 1px; }
+
+    .agenda-section { animation: fade-in 1s 0.9s both; }
+    .agenda-head { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: var(--gold); opacity: 0.75; margin-bottom: 14px; }
+    .agenda-list { list-style: none; display: flex; flex-direction: column; }
+    .agenda-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 14px; color: var(--cream); line-height: 1.5;
+      padding: 9px 0; border-bottom: 1px solid rgba(201,154,58,0.1); transition: color 0.2s;
+    }
+    .agenda-item:last-child { border-bottom: none; }
+    .agenda-item:hover { color: var(--gold2); }
+    .agenda-num {
+      font-family: 'Playfair Display', serif; font-size: 11px;
+      color: var(--gold); opacity: 0.6; flex-shrink: 0; width: 16px;
+      text-align: right; margin-top: 2px;
+    }
+
+    .countdown {
+      display: flex; justify-content: center; gap: 0;
+      margin: 28px 0 0; background: rgba(201,154,58,0.06);
+      border: 1px solid var(--rule); border-radius: 2px;
+      padding: 16px 0 14px; animation: fade-in 1s 1.1s both;
+    }
+    .cd-block { text-align: center; flex: 1; }
+    .cd-num {
+      font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 900;
+      color: var(--gold2); line-height: 1; font-variant-numeric: tabular-nums;
+      display: block; text-shadow: 0 0 20px rgba(240,192,80,0.4);
+    }
+    .cd-label { font-size: 8.5px; letter-spacing: 2px; text-transform: uppercase; color: var(--sand); margin-top: 4px; display: block; }
+    .cd-divider { width: 1px; background: var(--rule); align-self: stretch; margin: 4px 0; }
+    .countdown-label {
+      text-align: center; font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--mist); margin-top: 10px;
+    }
+
+    .share-wrap { text-align: center; margin-top: 22px; animation: fade-in 1s 1.15s both; }
+    .share-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #25D366; color: #fff; border: none; border-radius: 3px;
+      padding: 11px 22px; font-size: 13px; font-weight: 700;
+      font-family: 'EB Garamond', Georgia, serif; letter-spacing: 0.5px;
+      cursor: pointer; transition: background 0.2s, transform 0.15s; text-decoration: none;
+    }
+    .share-btn:hover { background: #1ebe5d; transform: translateY(-1px); }
+    .share-btn:active { transform: translateY(0); }
+    .share-toast { display: none; font-size: 11px; color: var(--gold); margin-top: 7px; letter-spacing: 1px; text-transform: uppercase; }
+
+    .footer {
+      text-align: center; margin-top: 20px; padding-top: 18px;
+      border-top: 1px solid var(--rule); animation: fade-in 1s 1.2s both;
+    }
+    .footer-deity { font-family: 'Playfair Display', serif; font-size: 13px; font-style: italic; color: var(--sand); }
+    .footer-note { font-size: 10.5px; color: var(--mist); margin-top: 7px; letter-spacing: 0.5px; }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 420px) {
+      .frame-inner { padding: 30px 18px 28px; }
+      .details { grid-template-columns: 1fr; gap: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="sky"></canvas>
+
+<div class="waves-wrap" aria-hidden="true">
+  <svg class="wave wave3" viewBox="0 0 1440 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,40 C240,70 480,10 720,40 C960,70 1200,10 1440,40 L1440,80 L0,80 Z" fill="#0E4B5E" opacity="0.5"/>
+  </svg>
+  <svg class="wave wave2" viewBox="0 0 1440 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,30 C360,65 720,0 1080,35 C1260,52 1350,28 1440,30 L1440,80 L0,80 Z" fill="#0a3a4e" opacity="0.7"/>
+  </svg>
+  <svg class="wave wave1" viewBox="0 0 1440 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,50 C180,20 360,70 540,45 C720,20 900,65 1080,45 C1260,25 1350,55 1440,50 L1440,80 L0,80 Z" fill="#0D2D42"/>
+  </svg>
+</div>
+
+<div class="palms" aria-hidden="true">
+  <svg class="palm" width="90" height="200" viewBox="0 0 90 200" xmlns="http://www.w3.org/2000/svg">
+    <rect x="40" y="60" width="8" height="140" rx="4" fill="#1a3a20"/>
+    <ellipse cx="44" cy="60" rx="38" ry="16" fill="#1a3a20" transform="rotate(-20 44 60)"/>
+    <ellipse cx="44" cy="55" rx="32" ry="13" fill="#1a3a20" transform="rotate(15 44 55)"/>
+    <ellipse cx="44" cy="50" rx="28" ry="11" fill="#1a3a20" transform="rotate(-30 44 50)"/>
+    <ellipse cx="44" cy="45" rx="22" ry="10" fill="#1a3a20" transform="rotate(25 44 45)"/>
+    <ellipse cx="44" cy="40" rx="18" ry="8" fill="#1a3a20" transform="rotate(-10 44 40)"/>
+  </svg>
+  <svg class="palm" width="90" height="200" viewBox="0 0 90 200" xmlns="http://www.w3.org/2000/svg" style="transform:scaleX(-1)">
+    <rect x="40" y="60" width="8" height="140" rx="4" fill="#1a3a20"/>
+    <ellipse cx="44" cy="60" rx="38" ry="16" fill="#1a3a20" transform="rotate(-20 44 60)"/>
+    <ellipse cx="44" cy="55" rx="32" ry="13" fill="#1a3a20" transform="rotate(15 44 55)"/>
+    <ellipse cx="44" cy="50" rx="28" ry="11" fill="#1a3a20" transform="rotate(-30 44 50)"/>
+    <ellipse cx="44" cy="45" rx="22" ry="10" fill="#1a3a20" transform="rotate(25 44 45)"/>
+    <ellipse cx="44" cy="40" rx="18" ry="8" fill="#1a3a20" transform="rotate(-10 44 40)"/>
+  </svg>
+</div>
+
+<div class="page">
+  <div class="frame">
+    <div class="frame-inner">
+      <div class="inner-wrap">
+
+        <p class="eyebrow">Banakar FinClub · Est. February 2021</p>
+
+        <div class="hero">
+          <span class="numeral">VI</span>
+          <span class="hero-sub">Annual Gathering</span>
+        </div>
+
+        <div class="divider">
+          <div class="divider-line"></div>
+          <div class="divider-diamond"></div>
+          <div class="divider-line"></div>
+        </div>
+
+        <div class="title-block">
+          <h1 class="title-main">Welcome to the Sixth Year<br>Annual Meeting</h1>
+          <p class="title-assoc">Sri Mukkanneshwara Associate</p>
+        </div>
+
+        <div class="details">
+          <div class="detail-item">
+            <span class="detail-label">Date</span>
+            <span class="detail-value">Oct 2 – 4</span>
+            <span class="detail-sub">2026 · Three days</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Venue</span>
+            <span class="detail-value">Goa</span>
+            <span class="detail-sub">Beach destination</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Members</span>
+            <span class="detail-value">7 Members</span>
+            <span class="detail-sub">Banakar family</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Milestone</span>
+            <span class="detail-value">Year 6 of 10</span>
+            <span class="detail-sub">Since Feb 2021</span>
+          </div>
+        </div>
+
+        <div class="divider">
+          <div class="divider-line"></div>
+          <div class="divider-diamond"></div>
+          <div class="divider-line"></div>
+        </div>
+
+        <div class="agenda-section">
+          <p class="agenda-head">Agenda</p>
+          <ul class="agenda-list">
+            <li class="agenda-item"><span class="agenda-num">1</span>Welcome &amp; opening prayer to Sri Mukkanneshwara</li>
+            <li class="agenda-item"><span class="agenda-num">2</span>Year 6 financial summary — deposits, interest &amp; loans</li>
+            <li class="agenda-item"><span class="agenda-num">3</span>Member account statements review</li>
+            <li class="agenda-item"><span class="agenda-num">4</span>Loan status, outstanding &amp; repayment discussion</li>
+            <li class="agenda-item"><span class="agenda-num">5</span>Year 7 planning — deposit amount &amp; rule changes</li>
+            <li class="agenda-item"><span class="agenda-num">6</span>New loan requests for Year 7</li>
+            <li class="agenda-item"><span class="agenda-num">7</span>Group activities &amp; celebration</li>
+            <li class="agenda-item"><span class="agenda-num">8</span>Closing &amp; vote of thanks</li>
+          </ul>
+        </div>
+
+        <div class="countdown" id="countdown">
+          <div class="cd-block"><span class="cd-num" id="cd-days">--</span><span class="cd-label">Days</span></div>
+          <div class="cd-divider"></div>
+          <div class="cd-block"><span class="cd-num" id="cd-hrs">--</span><span class="cd-label">Hours</span></div>
+          <div class="cd-divider"></div>
+          <div class="cd-block"><span class="cd-num" id="cd-min">--</span><span class="cd-label">Mins</span></div>
+          <div class="cd-divider"></div>
+          <div class="cd-block"><span class="cd-num" id="cd-sec">--</span><span class="cd-label">Secs</span></div>
+        </div>
+        <p class="countdown-label" id="countdown-sub">Counting down to Goa</p>
+
+        <div class="share-wrap">
+          <button class="share-btn" id="shareBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.553 4.118 1.522 5.848L.057 23.25a.5.5 0 0 0 .626.64l5.563-1.46A11.946 11.946 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.9 0-3.673-.524-5.19-1.433l-.372-.223-3.855 1.012 1.03-3.758-.243-.387A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+            </svg>
+            Share on WhatsApp
+          </button>
+          <p class="share-toast" id="shareToast">Link copied ✓</p>
+        </div>
+
+        <div class="footer">
+          <p class="footer-deity">🙏 United by family, strengthened by trust</p>
+          <p class="footer-note">Banakar FinClub · Sixth Annual Meeting · Goa 2026</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Stars + Fireflies ──
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d');
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const stars = Array.from({ length: 160 }, () => ({
+    x: Math.random(), y: Math.random() * 0.75,
+    r: Math.random() * 1.4 + 0.3, a: Math.random(),
+    speed: Math.random() * 0.4 + 0.2, phase: Math.random() * Math.PI * 2,
+  }));
+  const flies = Array.from({ length: 22 }, (_, i) => ({
+    x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight * 0.85,
+    vx: (Math.random() - 0.5) * 0.4, vy: -(Math.random() * 0.5 + 0.2),
+    maxLife: Math.random() * 200 + 120, age: 0, r: Math.random() * 2 + 1, phase: i * 0.7,
+  }));
+
+  let t = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, 'rgba(6,14,26,1)');
+    grad.addColorStop(0.6, 'rgba(8,18,34,1)');
+    grad.addColorStop(1, 'rgba(12,30,48,1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const now = t * 0.008;
+    for (const s of stars) {
+      const a = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(now * s.speed + s.phase));
+      ctx.beginPath();
+      ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(247,237,216,${a * s.a + 0.1})`;
+      ctx.fill();
+    }
+    for (const f of flies) {
+      f.x += f.vx + Math.sin(t * 0.01 + f.phase) * 0.3;
+      f.y += f.vy; f.age++;
+      const lr = f.age / f.maxLife;
+      const a = lr < 0.2 ? lr / 0.2 : lr > 0.8 ? 1 - (lr - 0.8) / 0.2 : 1;
+      if (f.age > f.maxLife || f.y < 0) {
+        f.x = Math.random() * canvas.width;
+        f.y = canvas.height * (0.4 + Math.random() * 0.5);
+        f.vy = -(Math.random() * 0.5 + 0.2); f.vx = (Math.random() - 0.5) * 0.4;
+        f.age = 0; f.maxLife = Math.random() * 200 + 120;
+      }
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 4);
+      g.addColorStop(0, `rgba(240,192,80,${a * 0.9})`);
+      g.addColorStop(1, 'rgba(240,192,80,0)');
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 4, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill();
+    }
+    t++;
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  // ── Countdown ──
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    const diff = new Date('2026-10-02T00:00:00') - new Date();
+    if (diff <= 0) {
+      document.getElementById('countdown').innerHTML =
+        '<p style="text-align:center;padding:16px;color:#C99A3A;font-family:\'Playfair Display\',serif;font-size:18px;font-style:italic;width:100%;">Welcome to Goa! 🎉</p>';
+      document.getElementById('countdown-sub').textContent = '';
+      return;
+    }
+    document.getElementById('cd-days').textContent = pad(Math.floor(diff / 86400000));
+    document.getElementById('cd-hrs').textContent  = pad(Math.floor((diff % 86400000) / 3600000));
+    document.getElementById('cd-min').textContent  = pad(Math.floor((diff % 3600000) / 60000));
+    document.getElementById('cd-sec').textContent  = pad(Math.floor((diff % 60000) / 1000));
+  }
+  tick(); setInterval(tick, 1000);
+
+  // ── Share ──
+  const PAGE_URL  = 'https://manjunathbscloud.github.io/banaFinClub/meet.html';
+  const SHARE_MSG = '🌴 Attending the Banakar FinClub 6th Annual Meeting — Oct 2–4, 2026 in Goa! 3 days of family, finance & celebration 🎉\n\n' + PAGE_URL;
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Banakar FinClub Annual Meet · Goa 2026', text: SHARE_MSG, url: PAGE_URL }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(SHARE_MSG); } catch (_) {}
+    const toast = document.getElementById('shareToast');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    window.open('https://wa.me/?text=' + encodeURIComponent(SHARE_MSG), '_blank');
+  });
+</script>
+</body>
+</html>
