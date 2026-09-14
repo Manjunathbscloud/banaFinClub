@@ -1416,7 +1416,6 @@ function showMeetingWelcome() {
   }
 
   el.addEventListener("click", dismiss);
-  setTimeout(dismiss, 4000);
 }
 
 function renderAuth(mode) {
