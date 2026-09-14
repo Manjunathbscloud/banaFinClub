@@ -1632,13 +1632,18 @@ function renderHome() {
           <div><h3>🏛️ About Our Association</h3><p>Sri Mukkanneshwara Associate · Est. February 2021</p></div>
         </div>
         <div class="card-body">
-          <p class="assoc-intro">A private member finance association by the Banakar family — pooling monthly deposits, earning interest, and providing low-interest loans to build a shared financial future.</p>
-          <div class="row-list" style="margin-top:10px;">
+          <p class="assoc-intro">A private member finance association by the Banakar family — pooling monthly deposits, earning interest, and providing low-interest loans to build a shared financial future together.</p>
+          <p class="assoc-intro" style="margin-top:8px;">What started as a simple idea among family members has grown into a trusted financial circle — where every rupee deposited works harder, every member has access to fair loans, and the collective fund grows year after year.</p>
+          <div class="row-list" style="margin-top:12px;">
             <div class="row-item"><div><strong>Founded</strong><span>February 2021</span></div></div>
-            <div class="row-item"><div><strong>Active members</strong><span>7 (after 1 exit in Year 5)</span></div></div>
-            <div class="row-item"><div><strong>Monthly deposit</strong><span>₹2,000 per member · ₹14,000 total</span></div></div>
+            <div class="row-item"><div><strong>Patron deity</strong><span>Sri Mukkanneshwara</span></div></div>
+            <div class="row-item"><div><strong>Active members</strong><span>${activeMembers().length} members</span></div></div>
+            <div class="row-item"><div><strong>Monthly deposit</strong><span>${money(state.settings.monthlyDeposit)} per member · ${money(state.settings.monthlyDeposit * activeMembers().length)} total</span></div></div>
+            <div class="row-item"><div><strong>Loan interest</strong><span>1.25% per month · fair & transparent</span></div></div>
             <div class="row-item"><div><strong>Duration</strong><span>10 years total · Year ${state.settings.activeYearNumber || 6} of 10</span></div></div>
+            <div class="row-item"><div><strong>Goal</strong><span>Build a strong financial future for every member by 2031</span></div></div>
           </div>
+          <p class="assoc-intro" style="margin-top:12px;font-style:italic;color:var(--muted);font-size:13px;">🙏 United by family, strengthened by trust.</p>
         </div>
       </div>
 
