@@ -1626,6 +1626,85 @@ function renderDashboard() {
       </div>
     </div>
 
+    ${(() => {
+      // ── EMI Progress card ─────────────────────────────────────────────────
+      function emiProgressBar(paid, total) {
+        const pct = Math.round((paid / Math.max(total, 1)) * 100);
+        return `
+          <div style="margin:10px 0 4px;">
+            <div style="height:10px;background:#e8edf4;border-radius:5px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f97316,#ea580c);border-radius:5px;transition:width 0.5s;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+              <span style="font-size:11px;color:var(--muted);">${paid} of ${total} months paid</span>
+              <span style="font-size:11px;font-weight:700;color:#f97316;">${total - paid} left</span>
+            </div>
+          </div>`;
+      }
+
+      if (isAdmin()) {
+        // Admin sees all members' EMI status
+        const emiRows = activeMembers().map(m => {
+          const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, m) && l.loanType === "emi" && l.status === "active");
+          if (emiLoan) {
+            return { name: m.name, paid: emiLoan.emisPaid, total: emiLoan.tenureMonths, emi: emiLoan.emiAmount, outstanding: loanOutstanding(emiLoan) };
+          }
+          const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, m) && l.status === "active");
+          if (legacyLoan) {
+            const prog = appannaEmiProgress();
+            return { name: m.name, paid: prog.paid, total: prog.totalMonths, emi: prog.monthlyEmi, outstanding: loanOutstanding(legacyLoan) };
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (!emiRows.length) return "";
+        return `
+          <section style="margin-top:14px;">
+            <div class="card">
+              <div class="card-header"><div><h3>💳 EMI Loan Overview</h3><p>Active EMI members · repayment progress</p></div></div>
+              <div class="card-body" style="padding:10px 14px;">
+                ${emiRows.map(r => `
+                  <div style="padding:10px 0;border-bottom:1px solid var(--border,#f3f4f6);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                      <span style="font-size:13px;font-weight:700;color:var(--ink);">${escapeHtml(r.name)}</span>
+                      <span style="font-size:12px;color:var(--muted);">${money(r.emi)}/mo · <span style="color:#dc2626;font-weight:600;">${money(r.outstanding)} left</span></span>
+                    </div>
+                    ${emiProgressBar(r.paid, r.total)}
+                  </div>`).join("")}
+              </div>
+            </div>
+          </section>`;
+      } else {
+        // Member sees only their own EMI
+        const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, user) && l.loanType === "emi" && l.status === "active");
+        const legacyLoan = !emiLoan && state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, user) && l.status === "active");
+        if (!emiLoan && !legacyLoan) return "";
+        const paid = emiLoan ? emiLoan.emisPaid : appannaEmiProgress().paid;
+        const total = emiLoan ? emiLoan.tenureMonths : appannaEmiProgress().totalMonths;
+        const emiAmt = emiLoan ? emiLoan.emiAmount : appannaEmiProgress().monthlyEmi;
+        const outstanding = emiLoan ? loanOutstanding(emiLoan) : loanOutstanding(legacyLoan);
+        return `
+          <section style="margin-top:14px;">
+            <div class="card">
+              <div class="card-header"><div><h3>💳 Your EMI Loan</h3><p>Monthly repayment progress</p></div></div>
+              <div class="card-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-size:22px;font-weight:800;color:var(--ink);">${money(emiAmt)}<span style="font-size:13px;font-weight:500;color:var(--muted);">/month</span></div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px;">Outstanding: <strong style="color:#dc2626;">${money(outstanding)}</strong></div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-size:28px;font-weight:900;color:#f97316;">${total - paid}</div>
+                    <div style="font-size:11px;color:var(--muted);">months left</div>
+                  </div>
+                </div>
+                ${emiProgressBar(paid, total)}
+              </div>
+            </div>
+          </section>`;
+      }
+    })()}
+
     <section style="margin-top:14px;">
       <div class="card">
         <div class="card-header">
