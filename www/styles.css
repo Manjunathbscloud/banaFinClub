@@ -1616,6 +1616,26 @@ tr:hover td { background: rgba(249,115,22,0.025); }
   font-size: 12px;
 }
 
+/* ── Loan Cards (new list style) ───────────── */
+.lc-list { display: flex; flex-direction: column; gap: 10px; }
+.lc-card {
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, #E5E7EB);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.lc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.lc-name-block { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lc-name { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+.lc-amount-block { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.lc-amount { font-size: 17px; font-weight: 800; color: #2563eb; font-variant-numeric: tabular-nums; }
+.lc-int { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lc-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--muted); }
+.lc-meta strong { color: var(--ink); font-weight: 600; }
+.lc-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--line, #E5E7EB); }
+.lc-btn { font-size: 12px !important; padding: 6px 14px !important; min-height: 0 !important; border-radius: 8px !important; }
+
 /* ── Media: medium ──────────────────────────── */
 @media (min-width: 520px) {
   .metrics    { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -3028,56 +3028,63 @@ function showLoanYearModal(yearKey) {
       window.bfcFilterLoanTable();
     };
 
-    const gridClass = isAdmin() ? "lg-admin" : "lg-member";
-    const gridRows = loans.map(loan => {
+    const loanCards = loans.map(loan => {
       const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
       const myLoan = loanBelongsToMember(loan, user);
       const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
       const rowStatus = dueThisMonth ? "due" : loan.status;
       const memberName = loanMemberName(loan);
       const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
+      const outstanding = loanOutstanding(loan);
+      const isEmiType = loan.loanType === "emi" || loan.notes === "emi_entry";
 
       const statusBadgeHtml = dueThisMonth
-        ? `<span class="badge warn" style="font-size:9px;">Due</span>`
+        ? `<span class="badge warn">Due this month</span>`
         : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
 
-      let adminAction = "";
+      let actionHtml = "";
       if (isAdmin()) {
-        const isFullLoan = loan.loanType !== "emi" && loan.notes !== "emi_entry";
+        const isFullLoan = !isEmiType;
         const partialBtn = loan.status === "active" && isFullLoan && state.settings.partialRepaymentEnabled
-          ? `<button class="secondary" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Partial</button>`
+          ? `<button class="secondary lc-btn" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button">Partial</button>`
           : "";
-        adminAction = `<div class="loan-grid-cell" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-          ${loan.status === "active" ? `<button class="primary" data-action="clear-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Clear</button>` : ""}
+        actionHtml = `<div class="lc-actions">
+          ${loan.status === "active" ? `<button class="primary lc-btn" data-action="clear-current-loan" data-id="${loan.id}" type="button">Clear</button>` : ""}
           ${partialBtn}
-          <button class="danger" data-action="delete-current-loan" data-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Del</button>
+          <button class="danger lc-btn" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
         </div>`;
       } else if (dueThisMonth && myLoan) {
-        let extHtml = "";
         if (!extInfo || extInfo.status === "rejected") {
-          extHtml = `<button class="secondary" data-action="request-extension" data-loan-id="${loan.id}" type="button" style="font-size:10px;padding:3px 7px;min-height:0;">Extend</button>`;
+          actionHtml = `<div class="lc-actions"><button class="secondary lc-btn" data-action="request-extension" data-loan-id="${loan.id}" type="button">Request Extension</button></div>`;
         } else if (extInfo.status === "pending") {
-          extHtml = `<span style="font-size:10px;color:#b45309;">⏳ Awaiting</span>`;
+          actionHtml = `<div class="lc-actions"><span style="font-size:12px;color:#b45309;">⏳ Extension awaiting approval</span></div>`;
         } else if (extInfo.status === "approved") {
-          extHtml = `<span style="font-size:10px;color:#16a34a;">✓ Extended</span>`;
+          actionHtml = `<div class="lc-actions"><span style="font-size:12px;color:#16a34a;">✓ Extension approved</span></div>`;
         }
-        if (extHtml) adminAction = `<div class="loan-grid-cell">${extHtml}</div>`;
       }
 
-      return `<div class="loan-grid-row lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
-        <div class="loan-grid-cell">
-          <strong style="font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(memberName)}</strong>
-          <span style="margin-top:2px;display:block;">${statusBadgeHtml}</span>
+      const cardBorder = dueThisMonth ? "border-left:3px solid #f59e0b;" : loan.status === "clear" ? "border-left:3px solid #16a34a;" : "border-left:3px solid #2563eb;";
+
+      return `<div class="lc-card lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}" style="${cardBorder}">
+        <div class="lc-top">
+          <div class="lc-name-block">
+            <span class="lc-name">${escapeHtml(memberName)}</span>
+            ${statusBadgeHtml}
+          </div>
+          <div class="lc-amount-block">
+            <span class="lc-amount">${money(loan.amount)}</span>
+            ${intPerMo > 0 ? `<span class="lc-int">${money(intPerMo)}/mo interest</span>` : ""}
+          </div>
         </div>
-        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loan.from)}</div>
-        <div class="loan-grid-cell" style="color:var(--muted);font-size:12px;">${fmtMonthYearShort(loanRenewalDate(loan))}</div>
-        <div class="loan-grid-cell">
-          <span style="font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;font-size:13px;">${moneyCompact(loan.amount)}</span>
-          ${intPerMo > 0 ? `<small style="display:block;color:var(--muted);font-size:10px;opacity:0.65;font-variant-numeric:tabular-nums;margin-top:1px;">${moneyCompact(intPerMo)}/mo</small>` : ""}
+        <div class="lc-meta">
+          <span>📅 From <strong>${fmtMonthYearShort(loan.from)}</strong></span>
+          <span>⏳ Due <strong>${fmtMonthYearShort(loanRenewalDate(loan))}</strong></span>
+          ${outstanding > 0 && loan.status === "active" ? `<span>💰 Outstanding <strong style="color:#dc2626;">${money(outstanding)}</strong></span>` : ""}
+          ${isEmiType && loan.emisPaid > 0 ? `<span>✓ ${loan.emisPaid}/${loan.tenureMonths} EMIs paid</span>` : ""}
         </div>
-        ${adminAction}
+        ${actionHtml}
       </div>`;
-    }).join("") || `<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No active loans.</div>`;
+    }).join("") || `<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">No active loans.</div>`;
 
     bodyHtml = `
       <div class="lm-stats">
@@ -3105,19 +3112,10 @@ function showLoanYearModal(yearKey) {
         <button class="lm-chip lm-chip-active" onclick="bfcSetLoanChip(this,'all')">All</button>
         ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
       </div>
-      <div class="lm-table-card">
-        <div class="loan-grid ${gridClass}">
-          <div class="loan-grid-head">
-            <span>Member</span>
-            <span>From</span>
-            <span>Due</span>
-            <span>Amount</span>
-            ${isAdmin() ? "<span>Action</span>" : ""}
-          </div>
-          ${gridRows}
-        </div>
+      <div class="lc-list">${loanCards}</div>
+      <div class="lm-table-card" style="margin-top:10px;">
         <div class="loan-grid-footer">
-          <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Interest</span>
+          <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Total Interest</span>
           <span style="font-weight:700;color:#059669;">${money(_totalYrInt)}</span>
         </div>
       </div>`;
