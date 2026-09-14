@@ -633,6 +633,7 @@ async function loadLiveState() {
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
+      maxLoanPerMember: Number(settingsById.loan_settings?.value?.maxLoanPerMember ?? 300000),
       annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
     currentUserId: current?.status === "active" ? current.id : null,
@@ -3395,6 +3396,7 @@ function renderDashboard() {
     </div>
 
     ${(() => {
+      const maxLoan = state.settings.maxLoanPerMember || 300000;
       const loanGroups = {};
       currentLoans()
         .filter(l => l.notes !== "emi_entry")
@@ -3402,35 +3404,33 @@ function renderDashboard() {
           const name = loanMemberName(loan);
           loanGroups[name] = (loanGroups[name] || 0) + loanOutstanding(loan);
         });
-      const availBal = expectedBankBalance();
-      const totalPool = Object.values(loanGroups).reduce((s, v) => s + v, 0) + availBal;
-      const rows = [
-        ...Object.entries(loanGroups).map(([name, amt]) => ({ label: name, amount: amt, type: "loan" })),
-        { label: "Available Balance", amount: availBal, type: "avail" },
-      ];
+      const rows = Object.entries(loanGroups).map(([name, amt]) => ({ name, outstanding: amt }));
+      if (!rows.length) return "";
       return `
       <div class="card" style="margin-top:12px;">
         <div class="card-header">
-          <div><h3>💰 Fund Allocation</h3><p>Loans outstanding + available balance</p></div>
-          <div class="fund-pool-badge">Total <span>${money(totalPool)}</span></div>
+          <div><h3>💰 Loan Utilisation</h3><p>Outstanding vs max limit of ${money(maxLoan)}</p></div>
         </div>
         <div class="card-body" style="padding:8px 14px 14px;">
           ${rows.map(r => {
-            const pct = Math.round((r.amount / Math.max(totalPool, 1)) * 100);
-            const barColor = r.type === "avail"
-              ? "linear-gradient(90deg,#34d399,#16a34a)"
-              : "linear-gradient(90deg,#fbbf24,#d97706)";
+            const pct = Math.min(100, Math.round((r.outstanding / maxLoan) * 100));
+            const barColor = pct >= 90
+              ? "linear-gradient(90deg,#ef4444,#dc2626)"
+              : pct >= 60
+              ? "linear-gradient(90deg,#f59e0b,#d97706)"
+              : "linear-gradient(90deg,#3b82f6,#2563eb)";
             return `
             <div style="margin-bottom:12px;">
               <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;color:var(--ink);">${escapeHtml(r.label)}</span>
-                <span style="font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;">${money(r.amount)} <span style="font-size:11px;font-weight:400;color:var(--muted);">${pct}%</span></span>
+                <span style="font-size:13px;font-weight:600;color:var(--ink);">${escapeHtml(r.name)}</span>
+                <span style="font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);">${money(r.outstanding)} <strong style="color:var(--ink);">(${pct}%)</strong></span>
               </div>
               <div style="height:8px;background:var(--line,#e5e7eb);border-radius:4px;overflow:hidden;">
                 <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.5s;"></div>
               </div>
             </div>`;
           }).join("")}
+          <p style="font-size:11px;color:var(--muted);margin-top:4px;">🔵 &lt;60% · 🟡 60–90% · 🔴 &gt;90% of ₹${(maxLoan/100000).toFixed(1)}L limit</p>
         </div>
       </div>`;
     })()}
@@ -3861,6 +3861,10 @@ function renderAdmin() {
             <label class="field">
               <span>Monthly Deposit Amount (₹ per member)</span>
               <input type="number" name="monthlyDeposit" value="${state.settings.monthlyDeposit}" min="0" required />
+            </label>
+            <label class="field">
+              <span>Max Loan Per Member (₹)</span>
+              <input type="number" name="maxLoanPerMember" value="${state.settings.maxLoanPerMember || 300000}" min="0" required />
             </label>
             <div style="margin-bottom:12px;">
               <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Member Exits (if any)</p>
@@ -6568,6 +6572,14 @@ async function startNewYear(data) {
     await liveQuery(supabaseClient.from("settings").upsert({
       id: "rules",
       value: { monthlyDeposit: newMonthlyDeposit },
+      updated_at: new Date().toISOString(),
+    }));
+  }
+  const newMaxLoan = Number(data.maxLoanPerMember || state.settings.maxLoanPerMember || 300000);
+  if (newMaxLoan !== (state.settings.maxLoanPerMember || 300000)) {
+    await liveQuery(supabaseClient.from("settings").upsert({
+      id: "loan_settings",
+      value: { ...(state.settings.loanSettings || {}), maxLoanPerMember: newMaxLoan },
       updated_at: new Date().toISOString(),
     }));
   }
