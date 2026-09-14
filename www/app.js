@@ -3346,36 +3346,37 @@ function renderDashboard() {
       </div>
       <div class="analytics-stat">
         <span>Year</span>
-        <strong>6 of 10</strong>
+        <strong>${state.settings.activeYearNumber || 6} of 10</strong>
         <small>Since 2021</small>
       </div>
     </div>
 
     <div class="card" style="margin-top:14px;">
-      <div class="card-header"><div><h3>📈 Deposits vs Interest</h3><p>Collective year-wise data · all members</p></div></div>
-      <div class="card-body">
-        <div class="analytics-chart">
-          ${chartData.map(d => `
-            <div class="analytics-chart-row">
-              <span class="analytics-chart-label">${escapeHtml(d.label)}${d.live ? "*" : ""}</span>
-              <div class="analytics-chart-bars">
-                <div class="analytics-bar-row">
-                  <div class="analytics-bar-track"><div class="analytics-bar-fill dep" style="width:${Math.round(d.deposits / maxVal * 100)}%"></div></div>
-                  <span class="analytics-bar-val">${compactMoney(d.deposits)}</span>
-                </div>
-                <div class="analytics-bar-row">
-                  <div class="analytics-bar-track"><div class="analytics-bar-fill int" style="width:${Math.round(d.interest / maxVal * 100)}%"></div></div>
-                  <span class="analytics-bar-val">${compactMoney(d.interest)}</span>
-                </div>
+      <div class="card-header"><div><h3>📈 Growth Story</h3><p>Deposits vs interest · year by year</p></div></div>
+      <div class="card-body" style="padding:10px 14px 14px;">
+        ${chartData.map(d => {
+          const total = d.deposits + d.interest;
+          const depPct = total > 0 ? Math.round(d.deposits / total * 100) : 100;
+          const intPct = 100 - depPct;
+          return `
+          <div class="growth-year-card">
+            <div class="growth-year-top">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="growth-year-label">${escapeHtml(d.label)}</span>
+                ${d.live ? `<span class="badge warn" style="font-size:9px;">Live</span>` : ""}
               </div>
+              <span class="growth-year-total">${compactMoney(total)}</span>
             </div>
-          `).join("")}
-        </div>
-        <div class="analytics-legend">
-          <div class="analytics-legend-item"><span class="analytics-legend-dot dep"></span>Deposits</div>
-          <div class="analytics-legend-item"><span class="analytics-legend-dot int"></span>Interest</div>
-          <small style="margin-left:auto;color:var(--muted);">* Live data</small>
-        </div>
+            <div class="growth-stacked-bar">
+              <div class="growth-bar-dep" style="width:${depPct}%"></div>
+              <div class="growth-bar-int" style="width:${intPct}%"></div>
+            </div>
+            <div class="growth-year-meta">
+              <span><span class="growth-dot dep"></span>${compactMoney(d.deposits)} deposits</span>
+              <span><span class="growth-dot int"></span>${compactMoney(d.interest)} interest <strong style="color:#f59e0b;">(${intPct}%)</strong></span>
+            </div>
+          </div>`;
+        }).join("")}
       </div>
     </div>
 

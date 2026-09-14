@@ -1989,57 +1989,67 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .analytics-stat strong { display: block; font-size: 19px; color: var(--ink); line-height: 1.2; font-weight: 800; }
 .analytics-stat small  { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
 
-.analytics-chart      { display: flex; flex-direction: column; gap: 10px; }
+/* ── Growth story year cards ────────────────── */
+.growth-year-card {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+}
+.growth-year-card:last-child { border-bottom: none; }
 
-.analytics-chart-row  { display: flex; align-items: flex-start; gap: 8px; }
-
-.analytics-chart-label {
-  font-size: 11px;
+.growth-year-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+}
+.growth-year-label {
+  font-size: 13px;
   font-weight: 700;
-  color: var(--muted);
-  width: 34px;
-  min-width: 34px;
-  padding-top: 5px;
-  text-align: center;
+  color: var(--ink);
 }
-
-.analytics-chart-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-
-.analytics-bar-row { display: flex; align-items: center; gap: 6px; }
-
-.analytics-bar-track {
-  flex: 1;
+.growth-year-total {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.growth-stacked-bar {
+  display: flex;
   height: 10px;
-  background: #EEEEEE;
-  border-radius: 5px;
+  border-radius: 6px;
   overflow: hidden;
+  background: var(--line, #e5e7eb);
+  margin-bottom: 6px;
 }
-
-.analytics-bar-fill {
-  height: 100%;
-  border-radius: 5px;
-  transition: width 0.65s cubic-bezier(0.34,1,0.64,1);
-  min-width: 2px;
+.growth-bar-dep {
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  transition: width 0.6s cubic-bezier(0.34,1,0.64,1);
 }
-
-.analytics-bar-fill.dep { background: linear-gradient(90deg, var(--saffron), var(--saffron-mid)); }
-.analytics-bar-fill.int { background: linear-gradient(90deg, var(--gold), #FBBF24); }
-
-.analytics-bar-val {
+.growth-bar-int {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  transition: width 0.6s cubic-bezier(0.34,1,0.64,1);
+}
+.growth-year-meta {
+  display: flex;
+  justify-content: space-between;
   font-size: 11px;
   color: var(--muted);
-  width: 52px;
-  min-width: 52px;
-  text-align: right;
 }
+.growth-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.growth-dot.dep { background: #2563eb; }
+.growth-dot.int { background: #f59e0b; }
 
 .analytics-legend { display: flex; align-items: center; gap: 16px; margin-top: 10px; }
-
 .analytics-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
-
 .analytics-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.analytics-legend-dot.dep { background: var(--saffron); }
-.analytics-legend-dot.int { background: var(--gold); }
+.analytics-legend-dot.dep { background: #2563eb; }
+.analytics-legend-dot.int { background: #f59e0b; }
 
 /* ── Meeting photos ─────────────────────────── */
 .photos-btn {
