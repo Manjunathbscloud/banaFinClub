@@ -6777,10 +6777,26 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
           emis_paid: newEmisPaid,
           ...(allPaid ? { status: "clear", principal_paid: loan.amount, closed_at: today() } : {}),
         }).eq("id", loan.id));
-        if (allPaid) showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
+        if (allPaid) {
+          showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
+          await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${loan.tenureMonths} EMI payments. Your loan is now closed. Thank you!`);
+        }
       }
     }
     if (emiLoans.length > 0) await loadLiveState();
+    // Auto-close legacy emi_entry loan when all months are paid
+    const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
+    if (legacyEmiLoan) {
+      const prog = appannaEmiProgress();
+      if (prog.paid >= prog.totalMonths) {
+        await liveQuery(supabaseClient.from("current_loans").update({
+          status: "clear", principal_paid: legacyEmiLoan.amount, emis_paid: prog.totalMonths, closed_at: today(),
+        }).eq("id", legacyEmiLoan.id));
+        await loadLiveState();
+        showToast(`${member.name} — all EMIs paid, loan closed!`);
+        await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${prog.totalMonths} EMI payments. Your loan is now closed. Thank you!`);
+      }
+    }
     await insertStatement("credit", amount, `${member.name} credited`);
     await notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`);
   } else {
