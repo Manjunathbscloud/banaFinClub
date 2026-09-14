@@ -1192,7 +1192,6 @@ function render() {
     return;
   }
   resetIdleTimer();
-  showMeetingWelcome();
 
   const openDetails = new Set(
     [...document.querySelectorAll("details.collapsible[open]")].map((el) => el.querySelector("h3")?.textContent?.trim())
@@ -1360,9 +1359,7 @@ function showMeetingWelcome() {
     <p class="mo-tap">Tap anywhere to continue</p>
   `;
 
-  // Delay append so the MPIN keypad click event finishes bubbling before
-  // we attach the dismiss listener — otherwise the same tap dismisses instantly.
-  setTimeout(() => document.body.appendChild(el), 80);
+  document.body.appendChild(el);
 
   // Canvas particles
   const canvas = el.querySelector("#moCanvas");
@@ -4832,6 +4829,7 @@ async function handleMpinKey(key) {
       if (!liveBackendReady || state.currentUserId) {
         mpinPending = false;
         render();
+        setTimeout(showMeetingWelcome, 600);
       } else {
         // Refresh token is truly dead — password is required to re-authenticate.
         // Keep it painless: drop to login with the phone pre-filled.
@@ -5094,6 +5092,7 @@ async function login(data) {
   state.audit.push({ id: uid("a"), date: today(), text: `${member.name} logged in.` });
   saveState();
   render();
+  setTimeout(showMeetingWelcome, 600);
 }
 
 async function signup(data) {
