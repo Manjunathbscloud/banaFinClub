@@ -1470,21 +1470,21 @@ function renderSetNewPassword() {
 
 function renderTab() {
   const tabs = {
-    dashboard: renderDashboard,
+    dashboard: renderHome,
     deposits: renderDeposits,
     loans: renderLoans,
     members: renderMembers,
-    meetings: renderMeetings,
+    meetings: renderDashboard,
     admin: renderAdmin,
     statement: renderStatement,
-    history: renderHistory,
+    history: renderMeetings,
     profile: renderProfile,
     gallery: renderGallery,
   };
-  return (tabs[state.activeTab] || renderDashboard)();
+  return (tabs[state.activeTab] || renderHome)();
 }
 
-function renderDashboard() {
+function renderHome() {
   const user = currentUser();
   const monthlyDue = memberMonthlyDue(user);
   const monthlyPayment = currentMonthPayment(user.id);
@@ -1980,7 +1980,7 @@ async function saveNominee(data) {
   render();
 }
 
-function renderHistory() {
+function renderMeetings() {
   const activeYearNum = state.settings.activeYearNumber || 6;
   const STATIC_PHOTOS = [4, 3, 3, 3, 5];
 
@@ -3251,7 +3251,7 @@ function renderMembers() {
   `;
 }
 
-function renderMeetings() {
+function renderDashboard() {
   const now = new Date();
   const activeYearNum = state.settings.activeYearNumber || 6;
   const activeYearDbYear = 2020 + activeYearNum;
