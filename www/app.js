@@ -5839,14 +5839,15 @@ function showPartialRepaymentRequestModal(loanId) {
   if (existing) existing.remove();
   const modal = document.createElement("div");
   modal.id = "partial-req-modal";
-  modal.className = "modal-overlay";
+  modal.className = "rules-modal-overlay";
+  modal.style.zIndex = "2000";
   modal.innerHTML = `
-    <div class="modal-sheet">
-      <div class="modal-header">
+    <div class="rules-modal-sheet">
+      <div class="rules-modal-header">
         <h3 style="margin:0;">Request Partial Repayment</h3>
         <button class="rules-modal-close" data-action="close-partial-req-modal">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="rules-modal-body">
         <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Outstanding balance: <strong style="color:var(--ink);">${money(outstanding)}</strong></p>
         <label class="field">
           <span>Amount to repay (₹)</span>
@@ -5857,7 +5858,8 @@ function showPartialRepaymentRequestModal(loanId) {
         <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">Send for Approval</button>
         <button class="secondary" data-action="close-partial-req-modal" type="button" style="width:100%;">Cancel</button>
       </div>
-    </div>`;
+    </div>
+  `;
   document.body.appendChild(modal);
   document.body.style.overflow = "hidden";
   document.getElementById("partial-req-amount")?.focus();
