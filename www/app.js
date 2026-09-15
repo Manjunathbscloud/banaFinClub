@@ -1354,11 +1354,37 @@ function showMeetingWelcome() {
       <h2 class="mo-title">Welcome to the<br>6th Annual Meeting</h2>
       <p class="mo-sub">Oct 2 – 4, 2026 · Goa</p>
       <div class="mo-pill">🌴 Year 6 of 10 · Family · Finance · Celebration</div>
+      <div class="mo-countdown" id="moCountdown">
+        <div class="mo-cd-block"><span class="mo-cd-num" id="mo-days">--</span><span class="mo-cd-label">Days</span></div>
+        <div class="mo-cd-sep"></div>
+        <div class="mo-cd-block"><span class="mo-cd-num" id="mo-hrs">--</span><span class="mo-cd-label">Hours</span></div>
+        <div class="mo-cd-sep"></div>
+        <div class="mo-cd-block"><span class="mo-cd-num" id="mo-min">--</span><span class="mo-cd-label">Mins</span></div>
+        <div class="mo-cd-sep"></div>
+        <div class="mo-cd-block"><span class="mo-cd-num" id="mo-sec">--</span><span class="mo-cd-label">Secs</span></div>
+      </div>
     </div>
     <p class="mo-tap">Tap anywhere to continue</p>
   `;
 
   document.body.appendChild(el);
+
+  // Countdown
+  function moPad(n) { return String(n).padStart(2, "0"); }
+  function moTick() {
+    const diff = new Date("2026-10-02T00:00:00") - new Date();
+    if (diff <= 0) {
+      const cd = document.getElementById("moCountdown");
+      if (cd) cd.innerHTML = '<span style="color:#F0C050;font-size:14px;font-family:Georgia,serif;font-style:italic;">We are in Goa! 🎉</span>';
+      return;
+    }
+    const d = document.getElementById("mo-days"); if (d) d.textContent = moPad(Math.floor(diff / 86400000));
+    const h = document.getElementById("mo-hrs");  if (h) h.textContent = moPad(Math.floor((diff % 86400000) / 3600000));
+    const m = document.getElementById("mo-min");  if (m) m.textContent = moPad(Math.floor((diff % 3600000) / 60000));
+    const s = document.getElementById("mo-sec");  if (s) s.textContent = moPad(Math.floor((diff % 60000) / 1000));
+  }
+  moTick();
+  const moTimer = setInterval(moTick, 1000);
 
   // Canvas particles
   const canvas = el.querySelector("#moCanvas");
@@ -1411,6 +1437,7 @@ function showMeetingWelcome() {
 
   function dismiss() {
     cancelAnimationFrame(rafId);
+    clearInterval(moTimer);
     el.classList.add("mo-exit");
     el.addEventListener("animationend", () => el.remove(), { once: true });
   }

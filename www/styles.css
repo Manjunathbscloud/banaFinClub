@@ -2991,3 +2991,41 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 }
 .mo-wave1 { animation: drift1 7s linear infinite; opacity: 0.5; }
 .mo-wave2 { animation: drift2 10s linear infinite; opacity: 0.3; bottom: 6px; }
+
+/* ── Meeting overlay countdown ── */
+.mo-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
+  background: rgba(201,154,58,0.08);
+  border: 1px solid rgba(201,154,58,0.25);
+  border-radius: 3px;
+  padding: 12px 0 10px;
+  gap: 0;
+}
+.mo-cd-block { text-align: center; flex: 1; }
+.mo-cd-num {
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 900;
+  color: #F0C050;
+  line-height: 1;
+  display: block;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 16px rgba(240,192,80,0.5);
+}
+.mo-cd-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #C4A882;
+  margin-top: 4px;
+  display: block;
+}
+.mo-cd-sep {
+  width: 1px;
+  height: 36px;
+  background: rgba(201,154,58,0.2);
+  flex-shrink: 0;
+}
