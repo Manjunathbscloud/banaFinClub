@@ -21,6 +21,9 @@ const THEMES: Record<string, { icon: string; accent: string; bg: string; label: 
   loan_extension_rejected:   { icon: "🚫", accent: "#dc2626", bg: "#fef2f2", label: "Loan Extension" },
   payment_confirmed:         { icon: "💚", accent: "#15803d", bg: "#dcfce7", label: "Payment" },
   emi_completed:             { icon: "🏆", accent: "#15803d", bg: "#dcfce7", label: "EMI Completed" },
+  partial_repayment_requested: { icon: "💳", accent: "#7c3aed", bg: "#f5f3ff", label: "Loan Repayment" },
+  partial_repayment_approved:  { icon: "✅", accent: "#15803d", bg: "#dcfce7", label: "Loan Repayment" },
+  partial_repayment_rejected:  { icon: "🚫", accent: "#dc2626", bg: "#fef2f2", label: "Loan Repayment" },
   signoff_request:           { icon: "✍️",  accent: "#b45309", bg: "#fef3c7", label: "Action Required" },
   nominee_added:             { icon: "👤", accent: "#0891b2", bg: "#ecfeff", label: "Profile" },
 };
