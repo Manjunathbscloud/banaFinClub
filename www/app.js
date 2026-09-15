@@ -243,6 +243,7 @@ const initialState = {
   meetingAcknowledgements: [],
   galleryPhotos: [],
   loanPartialPayments: [],
+  partialRepaymentRequests: [],
   meetings: [
     {
       id: "meet5", year: 5, label: "5th Annual Meeting (2025)",
@@ -582,7 +583,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, galleryPhotosData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, galleryPhotosData, partialRepaymentRequestsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -600,6 +601,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("meeting_records").select("*").order("year", { ascending: true })),
     liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,acknowledged_at")),
     liveOptionalList(supabaseClient.from("loan_partial_payments").select("*").order("paid_on", { ascending: false })),
+    liveOptionalList(supabaseClient.from("partial_repayment_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("gallery_photos").select("*").order("created_at", { ascending: false }).limit(300)),
   ]);
 
@@ -667,6 +669,11 @@ async function loadLiveState() {
       paidOn: r.paid_on, recordedBy: r.recorded_by,
     })),
     extensionRequests: extensionRequests.map(liveExtensionToLocal),
+    partialRepaymentRequests: partialRepaymentRequestsData.map(r => ({
+      id: r.id, loanId: r.loan_id, profileId: r.profile_id,
+      amount: Number(r.amount || 0), status: r.status,
+      requestedAt: r.requested_at, decidedAt: r.decided_at || null,
+    })),
     messages: messages.map(liveMessageToLocal),
     loanHistory: loanHistory.map(liveLoanHistoryToLocal),
     notifications: notifications.map(liveNotificationToLocal),
@@ -2446,6 +2453,12 @@ function showLoansModal() {
           <span class="badge ${isActive ? "good" : "info"}">${statusText(loan.status)}</span>
         </div>
         ${extHtml}
+        ${(() => {
+          if (!isActive || loan.loanType === "emi" || !state.settings.partialRepaymentEnabled) return "";
+          const pendingReq = (state.partialRepaymentRequests || []).find(r => r.loanId === loan.id && r.status === "pending");
+          if (pendingReq) return `<div style="margin-top:10px;text-align:center;font-size:13px;color:#b45309;">⏳ Partial repayment of ${money(pendingReq.amount)} requested · Awaiting admin approval</div>`;
+          return `<button class="secondary" data-action="request-partial-repayment" data-loan-id="${loan.id}" type="button" style="margin-top:10px;width:100%;">💳 Request Partial Repayment</button>`;
+        })()}
       </div>`;
   }).join("");
 
@@ -3717,11 +3730,12 @@ function renderAdmin() {
 
       ${(() => {
         const pendingExtensions = (state.extensionRequests || []).filter((e) => e.status === "pending");
-        const pendingCount = state.signupRequests.length + pendingLoanRequests.length + pendingExtensions.length;
+        const pendingPartialRequests = (state.partialRepaymentRequests || []).filter(r => r.status === "pending");
+        const pendingCount = state.signupRequests.length + pendingLoanRequests.length + pendingExtensions.length + pendingPartialRequests.length;
         return `
       <details class="card collapsible">
         <summary class="card-header">
-          <div><h3>Pending Approvals</h3><p>Signups · Loans · Extensions</p></div>
+          <div><h3>Pending Approvals</h3><p>Signups · Loans · Extensions · Repayments</p></div>
           ${pendingCount > 0 ? `<span class="badge bad" style="margin-left:auto;margin-right:8px;">${pendingCount}</span>` : ""}
           <span class="collapse-icon">⌄</span>
         </summary>
@@ -3753,7 +3767,7 @@ function renderAdmin() {
             }).join("") || `<div class="empty">No loan requests.</div>`}
           </div>
           <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Loan Extensions</p>
-          <div class="row-list">
+          <div class="row-list" style="margin-bottom:16px;">
             ${pendingExtensions.length === 0 ? `<div class="empty">No pending extension requests.</div>` : pendingExtensions.map((ext) => {
               const loan = state.loans.find((l) => l.id === ext.loanId);
               const memberName = loan ? loanMemberName(loan) : memberById(ext.profileId)?.name || "-";
@@ -3768,6 +3782,25 @@ function renderAdmin() {
                   <div class="actions">
                     <button class="primary" data-action="approve-extension" data-id="${ext.id}" data-loan-id="${ext.loanId}" data-profile-id="${ext.profileId}" type="button">${t("approve")}</button>
                     <button class="danger" data-action="reject-extension" data-id="${ext.id}" data-profile-id="${ext.profileId}" type="button">${t("reject")}</button>
+                  </div>
+                </div>`;
+            }).join("")}
+          </div>
+          <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Partial Repayments</p>
+          <div class="row-list">
+            ${pendingPartialRequests.length === 0 ? `<div class="empty">No pending partial repayment requests.</div>` : pendingPartialRequests.map((req) => {
+              const loan = state.loans.find(l => l.id === req.loanId);
+              const memberName = loan ? loanMemberName(loan) : memberById(req.profileId)?.name || "-";
+              const outstanding = loan ? money(loanOutstanding(loan)) : "-";
+              return `
+                <div class="row-item">
+                  <div>
+                    <strong>${escapeHtml(memberName)} · wants to repay ${money(req.amount)}</strong>
+                    <span>Loan outstanding: ${outstanding} · Requested: ${String(req.requestedAt || "").slice(0, 10)}</span>
+                  </div>
+                  <div class="actions">
+                    <button class="primary" data-action="approve-partial-repayment" data-id="${req.id}" type="button">${t("approve")}</button>
+                    <button class="danger" data-action="reject-partial-repayment" data-id="${req.id}" type="button">${t("reject")}</button>
                   </div>
                 </div>`;
             }).join("")}
@@ -4618,6 +4651,21 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
+    if (action.dataset.action === "request-partial-repayment") showPartialRepaymentRequestModal(action.dataset.loanId);
+    if (action.dataset.action === "approve-partial-repayment") await approvePartialRepaymentRequest(action.dataset.id);
+    if (action.dataset.action === "reject-partial-repayment") await rejectPartialRepaymentRequest(action.dataset.id);
+    if (action.dataset.action === "submit-partial-repayment-request") {
+      const loanId = action.dataset.loanId;
+      const amountInput = document.getElementById("partial-req-amount");
+      const amount = Number(amountInput?.value);
+      if (!amount || amount <= 0) { showToast("Enter a valid amount."); return; }
+      action.disabled = true;
+      await requestPartialRepayment(loanId, amount);
+    }
+    if (action.dataset.action === "close-partial-req-modal") {
+      document.getElementById("partial-req-modal")?.remove();
+      document.body.style.overflow = "";
+    }
     if (action.dataset.action === "close-current-year") {
       const _signoffOn = state.settings.signoffEnabled === true;
       const _yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
@@ -5347,6 +5395,7 @@ async function recordPartialPayment(loanId, amount, date) {
   await liveQuery(supabaseClient.from("loan_partial_payments").insert({
     loan_id: loanId, amount, paid_on: date, recorded_by: currentProfileId(),
   }));
+  await insertStatement("credit", amount, `Partial loan repayment — ${loanMemberName(loan)}`, loanId);
   await addLiveAudit(`Partial repayment ${money(amount)} recorded for ${loanMemberName(loan)}.`, "partial_repayment_recorded");
   document.getElementById("partial-payment-modal")?.remove();
   document.body.style.overflow = "";
@@ -5777,6 +5826,145 @@ async function rejectExtension(id, profileId) {
   await addLiveAudit(`Rejected loan extension request ${id}.`, "loan_extension_rejected");
   await loadLiveState();
   showToast("Extension request rejected.");
+  render();
+}
+
+// ── Partial Repayment Request Flow ────────────────────────────────────────────
+
+function showPartialRepaymentRequestModal(loanId) {
+  const loan = state.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  const outstanding = loanOutstanding(loan);
+  const existing = document.getElementById("partial-req-modal");
+  if (existing) existing.remove();
+  const modal = document.createElement("div");
+  modal.id = "partial-req-modal";
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h3 style="margin:0;">Request Partial Repayment</h3>
+        <button class="rules-modal-close" data-action="close-partial-req-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Outstanding balance: <strong style="color:var(--ink);">${money(outstanding)}</strong></p>
+        <label class="field">
+          <span>Amount to repay (₹)</span>
+          <input id="partial-req-amount" type="number" min="1" max="${outstanding - 1}" step="1"
+            placeholder="Enter amount less than ${money(outstanding)}" style="font-size:16px;" />
+          <span style="font-size:11px;color:var(--muted);">Must be less than outstanding. To fully close the loan, contact admin.</span>
+        </label>
+        <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">Send for Approval</button>
+        <button class="secondary" data-action="close-partial-req-modal" type="button" style="width:100%;">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+  document.getElementById("partial-req-amount")?.focus();
+}
+
+async function requestPartialRepayment(loanId, amount) {
+  const loan = state.loans.find(l => l.id === loanId);
+  if (!loan) { showToast("Loan not found."); return; }
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const outstanding = loanOutstanding(loan);
+  if (amount <= 0 || amount >= outstanding) {
+    showToast(`Amount must be between ₹1 and ${money(outstanding - 1)}.`);
+    const btn = document.querySelector("[data-action='submit-partial-repayment-request']");
+    if (btn) btn.disabled = false;
+    return;
+  }
+  const existing = (state.partialRepaymentRequests || []).find(r => r.loanId === loanId && r.status === "pending");
+  if (existing) { showToast("You already have a pending request for this loan."); return; }
+
+  await liveQuery(supabaseClient.from("partial_repayment_requests").insert({
+    loan_id: loanId, profile_id: currentProfileId(), amount, status: "pending",
+  }));
+
+  const memberName = loanMemberName(loan);
+  await notifyAllActiveMembers(
+    "partial_repayment_requested",
+    "Partial Repayment Request",
+    `${memberName} has requested to partially repay ${money(amount)} on their loan (outstanding: ${money(outstanding)}).`
+  );
+
+  document.getElementById("partial-req-modal")?.remove();
+  document.body.style.overflow = "";
+  await loadLiveState();
+  showToast("Request sent! Admin will review it shortly.");
+  render();
+}
+
+async function approvePartialRepaymentRequest(requestId) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const req = (state.partialRepaymentRequests || []).find(r => r.id === requestId);
+  if (!req) { showToast("Request not found."); return; }
+  const loan = state.loans.find(l => l.id === req.loanId);
+  if (!loan) { showToast("Loan not found."); return; }
+  const outstanding = loanOutstanding(loan);
+  if (req.amount >= outstanding) {
+    showToast(`Amount ${money(req.amount)} exceeds outstanding ${money(outstanding)}. Use Clear Loan instead.`);
+    return;
+  }
+
+  // Apply repayment
+  const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
+  const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
+  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid }).eq("id", req.loanId));
+  await liveQuery(supabaseClient.from("loan_partial_payments").insert({
+    loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
+  }));
+  await insertStatement("credit", req.amount, `Partial loan repayment — ${loanMemberName(loan)}`, req.loanId);
+
+  // Mark request approved
+  await liveQuery(supabaseClient.from("partial_repayment_requests").update({
+    status: "approved", decided_at: new Date().toISOString(),
+  }).eq("id", requestId));
+
+  const memberName = loanMemberName(loan);
+
+  // Notify the member
+  await notifyMember(
+    req.profileId,
+    "partial_repayment_approved",
+    "Partial Repayment Approved ✅",
+    `Your partial repayment of ${money(req.amount)} has been approved and recorded. Your new outstanding balance is ${money(outstanding - req.amount)}.`,
+    requestId
+  );
+
+  // Notify all members
+  await notifyAllActiveMembers(
+    "partial_repayment_approved",
+    "Loan Partial Repayment",
+    `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
+  );
+
+  await addLiveAudit(`Approved partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
+  await loadLiveState();
+  showToast(`✓ Partial repayment of ${money(req.amount)} approved and recorded.`);
+  render();
+}
+
+async function rejectPartialRepaymentRequest(requestId) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const req = (state.partialRepaymentRequests || []).find(r => r.id === requestId);
+  if (!req) { showToast("Request not found."); return; }
+
+  await liveQuery(supabaseClient.from("partial_repayment_requests").update({
+    status: "rejected", decided_at: new Date().toISOString(),
+  }).eq("id", requestId));
+
+  await notifyMember(
+    req.profileId,
+    "partial_repayment_rejected",
+    "Partial Repayment Request Rejected",
+    `Your request to partially repay ${money(req.amount)} has been rejected by the admin. Please contact the president for details.`,
+    requestId
+  );
+
+  await addLiveAudit(`Rejected partial repayment request of ${money(req.amount)}.`, "partial_repayment_rejected");
+  await loadLiveState();
+  showToast("Partial repayment request rejected.");
   render();
 }
 
