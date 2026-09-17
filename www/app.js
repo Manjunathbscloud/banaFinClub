@@ -5923,11 +5923,14 @@ async function approvePartialRepaymentRequest(requestId) {
   // Apply repayment — clear fixed interest so dynamic calculation takes over
   const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
   const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
-  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: null }).eq("id", req.loanId));
+  const newOutstanding = Math.max(0, Number(loan.amount) - newPrincipalPaid);
+  const rate = Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly || 1.25);
+  const newMonthlyInterest = Math.round((newOutstanding * rate) / 100);
+  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: newMonthlyInterest }).eq("id", req.loanId));
   await liveQuery(supabaseClient.from("loan_partial_payments").insert({
     loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
   }));
-  await insertStatement("credit", req.amount, `Partial loan repayment — ${loanMemberName(loan)}`, req.loanId);
+  await insertStatement("credit", req.amount, `${loanMemberName(loan).split(" ")[0]} Partial Payment`, req.loanId);
 
   // Mark request approved
   await liveQuery(supabaseClient.from("partial_repayment_requests").update({
