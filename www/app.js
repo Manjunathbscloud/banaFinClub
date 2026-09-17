@@ -5727,8 +5727,11 @@ async function rejectLoan(id) {
   render();
 }
 
+const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
+
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   if (!liveBackendReady) return;
+  if (TEST_MODE_SUPPRESS_BROADCAST) return; // TEST MODE: skip all-member notifications
   const active = state.members.filter((m) => m.status === "active");
   const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
   await liveQuery(supabaseClient.from("notifications").insert(rows));
