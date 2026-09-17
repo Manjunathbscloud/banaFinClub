@@ -583,7 +583,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, galleryPhotosData, partialRepaymentRequestsData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, partialRepaymentRequestsData, galleryPhotosData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -2456,8 +2456,8 @@ function showLoansModal() {
         ${(() => {
           if (!isActive || loan.loanType === "emi" || !state.settings.partialRepaymentEnabled) return "";
           const pendingReq = (state.partialRepaymentRequests || []).find(r => r.loanId === loan.id && r.status === "pending");
-          if (pendingReq) return `<div style="margin-top:10px;text-align:center;font-size:13px;color:#b45309;">⏳ Partial repayment of ${money(pendingReq.amount)} requested · Awaiting admin approval</div>`;
-          return `<button class="secondary" data-action="request-partial-repayment" data-loan-id="${loan.id}" type="button" style="margin-top:10px;width:100%;">💳 Request Partial Repayment</button>`;
+          if (pendingReq) return `<div style="margin-top:10px;text-align:center;font-size:13px;color:#b45309;">⏳ Admin notified of ${money(pendingReq.amount)} payment · Pending recording</div>`;
+          return `<button class="secondary" data-action="request-partial-repayment" data-loan-id="${loan.id}" type="button" style="margin-top:10px;width:100%;">💳 Notify Partial Payment</button>`;
         })()}
       </div>`;
   }).join("");
@@ -3788,19 +3788,19 @@ function renderAdmin() {
           </div>
           <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Partial Repayments</p>
           <div class="row-list">
-            ${pendingPartialRequests.length === 0 ? `<div class="empty">No pending partial repayment requests.</div>` : pendingPartialRequests.map((req) => {
+            ${pendingPartialRequests.length === 0 ? `<div class="empty">No pending partial payment notifications.</div>` : pendingPartialRequests.map((req) => {
               const loan = state.loans.find(l => l.id === req.loanId);
               const memberName = loan ? loanMemberName(loan) : memberById(req.profileId)?.name || "-";
               const outstanding = loan ? money(loanOutstanding(loan)) : "-";
               return `
                 <div class="row-item">
                   <div>
-                    <strong>${escapeHtml(memberName)} · wants to repay ${money(req.amount)}</strong>
-                    <span>Loan outstanding: ${outstanding} · Requested: ${String(req.requestedAt || "").slice(0, 10)}</span>
+                    <strong>${escapeHtml(memberName)} · has paid ${money(req.amount)} — please record</strong>
+                    <span>Loan outstanding: ${outstanding} · Notified: ${String(req.requestedAt || "").slice(0, 10)}</span>
                   </div>
                   <div class="actions">
-                    <button class="primary" data-action="approve-partial-repayment" data-id="${req.id}" type="button">${t("approve")}</button>
-                    <button class="danger" data-action="reject-partial-repayment" data-id="${req.id}" type="button">${t("reject")}</button>
+                    <button class="primary" data-action="approve-partial-repayment" data-id="${req.id}" type="button">Record</button>
+                    <button class="danger" data-action="reject-partial-repayment" data-id="${req.id}" type="button">Not Received</button>
                   </div>
                 </div>`;
             }).join("")}
@@ -4652,8 +4652,8 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "approve-extension") await approveExtension(action.dataset.id, action.dataset.loanId);
     if (action.dataset.action === "reject-extension") await rejectExtension(action.dataset.id, action.dataset.profileId);
     if (action.dataset.action === "request-partial-repayment") showPartialRepaymentRequestModal(action.dataset.loanId);
-    if (action.dataset.action === "approve-partial-repayment") await approvePartialRepaymentRequest(action.dataset.id);
-    if (action.dataset.action === "reject-partial-repayment") await rejectPartialRepaymentRequest(action.dataset.id);
+    if (action.dataset.action === "approve-partial-repayment") { action.disabled = true; await approvePartialRepaymentRequest(action.dataset.id); }
+    if (action.dataset.action === "reject-partial-repayment") { action.disabled = true; await rejectPartialRepaymentRequest(action.dataset.id); }
     if (action.dataset.action === "submit-partial-repayment-request") {
       const loanId = action.dataset.loanId;
       const amountInput = document.getElementById("partial-req-amount");
@@ -5844,7 +5844,7 @@ function showPartialRepaymentRequestModal(loanId) {
   modal.innerHTML = `
     <div class="rules-modal-sheet">
       <div class="rules-modal-header">
-        <h3 style="margin:0;">Request Partial Repayment</h3>
+        <h3 style="margin:0;">Notify Partial Payment</h3>
         <button class="rules-modal-close" data-action="close-partial-req-modal">✕</button>
       </div>
       <div class="rules-modal-body">
@@ -5855,7 +5855,7 @@ function showPartialRepaymentRequestModal(loanId) {
             placeholder="Enter amount less than ${money(outstanding)}" style="font-size:16px;" />
           <span style="font-size:11px;color:var(--muted);">Must be less than outstanding. To fully close the loan, contact admin.</span>
         </label>
-        <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">Send for Approval</button>
+        <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">Notify Admin</button>
         <button class="secondary" data-action="close-partial-req-modal" type="button" style="width:100%;">Cancel</button>
       </div>
     </div>
@@ -5877,23 +5877,34 @@ async function requestPartialRepayment(loanId, amount) {
     return;
   }
   const existing = (state.partialRepaymentRequests || []).find(r => r.loanId === loanId && r.status === "pending");
-  if (existing) { showToast("You already have a pending request for this loan."); return; }
+  if (existing) { showToast("You already have a pending notification for this loan."); return; }
 
   await liveQuery(supabaseClient.from("partial_repayment_requests").insert({
     loan_id: loanId, profile_id: currentProfileId(), amount, status: "pending",
   }));
 
   const memberName = loanMemberName(loan);
-  await notifyAllActiveMembers(
-    "partial_repayment_requested",
-    "Partial Repayment Request",
-    `${memberName} has requested to partially repay ${money(amount)} on their loan (outstanding: ${money(outstanding)}).`
-  );
+  // Notify admin
+  const adminMember = state.members.find(m => m.role === "admin");
+  if (adminMember) {
+    await notifyMember(
+      adminMember.id,
+      "partial_repayment_requested",
+      "Loan Payment Notification",
+      `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Please record it.`
+    );
+  }
+  // TEST MODE: notifyAllActiveMembers disabled — remove comment to re-enable
+  // await notifyAllActiveMembers(
+  //   "partial_repayment_requested",
+  //   "Loan Payment Notification",
+  //   `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Awaiting admin recording.`
+  // );
 
   document.getElementById("partial-req-modal")?.remove();
   document.body.style.overflow = "";
   await loadLiveState();
-  showToast("Request sent! Admin will review it shortly.");
+  showToast("Admin notified! Your payment will be recorded shortly.");
   render();
 }
 
@@ -5909,10 +5920,10 @@ async function approvePartialRepaymentRequest(requestId) {
     return;
   }
 
-  // Apply repayment
+  // Apply repayment — clear fixed interest so dynamic calculation takes over
   const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
   const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
-  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid }).eq("id", req.loanId));
+  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: null }).eq("id", req.loanId));
   await liveQuery(supabaseClient.from("loan_partial_payments").insert({
     loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
   }));
@@ -5929,21 +5940,21 @@ async function approvePartialRepaymentRequest(requestId) {
   await notifyMember(
     req.profileId,
     "partial_repayment_approved",
-    "Partial Repayment Approved ✅",
-    `Your partial repayment of ${money(req.amount)} has been approved and recorded. Your new outstanding balance is ${money(outstanding - req.amount)}.`,
+    "Payment Recorded ✅",
+    `Your payment of ${money(req.amount)} has been recorded. Your new outstanding balance is ${money(outstanding - req.amount)}.`,
     requestId
   );
 
-  // Notify all members
-  await notifyAllActiveMembers(
-    "partial_repayment_approved",
-    "Loan Partial Repayment",
-    `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
-  );
+  // TEST MODE: notifyAllActiveMembers disabled — remove comment to re-enable
+  // await notifyAllActiveMembers(
+  //   "partial_repayment_approved",
+  //   "Loan Partial Repayment",
+  //   `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
+  // );
 
-  await addLiveAudit(`Approved partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
+  await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
   await loadLiveState();
-  showToast(`✓ Partial repayment of ${money(req.amount)} approved and recorded.`);
+  showToast(`✓ Payment of ${money(req.amount)} recorded for ${memberName}.`);
   render();
 }
 
@@ -5959,14 +5970,14 @@ async function rejectPartialRepaymentRequest(requestId) {
   await notifyMember(
     req.profileId,
     "partial_repayment_rejected",
-    "Partial Repayment Request Rejected",
-    `Your request to partially repay ${money(req.amount)} has been rejected by the admin. Please contact the president for details.`,
+    "Payment Not Received",
+    `Your payment notification of ${money(req.amount)} was marked as not received by admin. Please contact the president for details.`,
     requestId
   );
 
-  await addLiveAudit(`Rejected partial repayment request of ${money(req.amount)}.`, "partial_repayment_rejected");
+  await addLiveAudit(`Marked partial repayment of ${money(req.amount)} as not received.`, "partial_repayment_rejected");
   await loadLiveState();
-  showToast("Partial repayment request rejected.");
+  showToast("Marked as not received.");
   render();
 }
 
