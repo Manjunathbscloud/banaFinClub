@@ -5930,7 +5930,7 @@ async function approvePartialRepaymentRequest(requestId) {
   await liveQuery(supabaseClient.from("loan_partial_payments").insert({
     loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
   }));
-  await insertStatement("credit", req.amount, `Partial loan repayment — ${loanMemberName(loan)}`, req.loanId);
+  await insertStatement("credit", req.amount, `${loanMemberName(loan).split(" ")[0]} Partial Payment`, req.loanId);
 
   // Mark request approved
   await liveQuery(supabaseClient.from("partial_repayment_requests").update({
