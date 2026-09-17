@@ -6376,7 +6376,7 @@ async function sendAnnualReport(yearNum) {
   const yearLabel = ORDINALS[yearNum - 1] || `Year ${yearNum}`;
   try {
     showToast("Sending Year " + yearNum + " Annual Report…");
-    const _arLoansOut = state.currentLoans.reduce((s, l) => s + loanOutstanding(l), 0);
+    const _arLoansOut = (state.loans || []).reduce((s, l) => s + loanOutstanding(l), 0);
     const _arBalance  = Number(depRow?.balance || 0);
     const { error } = await supabaseClient.functions.invoke("send-meeting-summary", {
       body: {
