@@ -4421,7 +4421,12 @@ document.addEventListener("click", async (event) => {
   if (action.dataset.action === "send-annual-report") {
     const yearNum = Number(action.dataset.year);
     if (!yearNum) return;
-    if (!confirm(`Send Year ${yearNum} Annual Report to all members?`)) return;
+    if (action.dataset.confirmed !== "yes") {
+      action.dataset.confirmed = "yes";
+      action.textContent = "Tap again to confirm";
+      setTimeout(() => { action.dataset.confirmed = ""; action.textContent = `📧 Send Year ${yearNum} Annual Report to All Members`; }, 3000);
+      return;
+    }
     action.disabled = true;
     action.textContent = "Sending…";
     await sendAnnualReport(yearNum);
