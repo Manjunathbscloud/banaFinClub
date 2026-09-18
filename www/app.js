@@ -114,8 +114,11 @@ const initialState = {
     activeYearStart: "2026-07",
     activeYearLabel: "Sixth Year",
     activeYearRenewalFee: 0,
+    activeYearRenewalFeePerMember: 0,
     activeYearExits: [],
     yearClosed: false,
+    financialSignoffEnabled: false,
+    meetingSignoffEnabled: false,
     emiEnabled: false,
     emiLoanInterestRateMonthly: 1.5,
     partialRepaymentEnabled: false,
@@ -658,7 +661,7 @@ async function loadLiveState() {
       photos: Array.isArray(r.photos) ? r.photos : [],
     })),
     meetingAcknowledgements: acknowledgementsData.map(a => ({
-      id: a.id, profileId: a.profile_id, year: a.year, acknowledgedAt: a.acknowledged_at,
+      id: a.id, profileId: a.profile_id, year: a.year, type: a.type || "meeting", acknowledgedAt: a.acknowledged_at,
     })),
     monthlyPayments: payments.map(livePaymentToLocal),
     loanRequests: loanRequests.map(liveLoanRequestToLocal),
@@ -1252,6 +1255,7 @@ function render() {
   // renderChatFab();
   // renderAiFab();
   requestAnimationFrame(runPageAnimations);
+  requestAnimationFrame(maybeShowSignoffModal);
 }
 
 function runPageAnimations() {
@@ -3924,6 +3928,109 @@ function renderAdmin() {
         </div>
       </details>
 
+      ${(() => {
+        const yearNum = state.settings.activeYearNumber || 6;
+        const yearDbYear = 2020 + yearNum;
+        const allActive = activeMembers();
+        const financialEnabled = state.settings.financialSignoffEnabled === true;
+        const financialAcks = state.meetingAcknowledgements.filter(a => a.year === yearDbYear && a.type === "financial");
+        const meetingEnabled = state.settings.meetingSignoffEnabled === true;
+        const meetingAcks = state.meetingAcknowledgements.filter(a => a.year === yearDbYear && a.type === "meeting");
+        return `
+      <details class="card collapsible">
+        <summary class="card-header">
+          <div><h3>Financial Signoff</h3><p>Members confirm Year ${yearNum} records · ${financialAcks.length}/${allActive.length} signed</p></div>
+          ${financialAcks.length > 0 && financialAcks.length < allActive.length ? `<span class="badge warn" style="margin-left:auto;margin-right:8px;">${allActive.length - financialAcks.length} pending</span>` : ""}
+          ${financialAcks.length === allActive.length && allActive.length > 0 ? `<span class="badge good" style="margin-left:auto;margin-right:8px;">All signed</span>` : ""}
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0 12px;">
+            <div>
+              <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, members see a prompt to review and confirm the year's financial records — deposits, interest, bank balance and outstanding loans.</p>
+              <p style="font-size:13px;color:var(--muted);margin:0;">Each member can confirm only once.</p>
+            </div>
+            <label class="toggle-switch" aria-label="Enable financial signoff">
+              <input type="checkbox" data-action="toggle-financial-signoff" ${financialEnabled ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
+          </div>
+          ${allActive.map(m => {
+            const ack = financialAcks.find(a => a.profileId === m.id);
+            return `<div class="row-item"><div><strong>${escapeHtml(m.name)}</strong><span>${ack ? "✓ Confirmed · " + String(ack.acknowledgedAt || "").slice(0, 10) : "Pending"}</span></div></div>`;
+          }).join("")}
+        </div>
+      </details>
+
+      <details class="card collapsible">
+        <summary class="card-header">
+          <div><h3>Annual Meeting Decisions</h3><p>Record decisions · enable member acknowledgement · ${meetingAcks.length}/${allActive.length} signed</p></div>
+          ${meetingAcks.length > 0 && meetingAcks.length < allActive.length ? `<span class="badge warn" style="margin-left:auto;margin-right:8px;">${allActive.length - meetingAcks.length} pending</span>` : ""}
+          ${meetingAcks.length === allActive.length && allActive.length > 0 ? `<span class="badge good" style="margin-left:auto;margin-right:8px;">All signed</span>` : ""}
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          ${(() => {
+            const mr = state.meetingRecords.find(r => r.year === yearDbYear);
+            return `
+            <form id="meeting-decisions-form" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Meeting Date</label>
+                  <input class="input" type="date" name="meetingDate" value="${escapeHtml(mr?.date || "")}" />
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Venue</label>
+                  <input class="input" type="text" name="venue" placeholder="e.g. Goa" value="${escapeHtml(mr?.venue || "")}" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Monthly Deposit (₹)</label>
+                  <input class="input" type="number" name="monthlyDeposit" value="${state.settings.monthlyDeposit || 2000}" min="0" step="50" />
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Renewal Fee/Member (₹)</label>
+                  <input class="input" type="number" name="renewalFee" value="${state.settings.activeYearRenewalFeePerMember || 0}" min="0" step="100" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Max Loan/Member (₹)</label>
+                  <input class="input" type="number" name="maxLoan" value="${state.settings.maxLoanPerMember || 300000}" min="0" step="10000" />
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Loan Interest Rate (%/mo)</label>
+                  <input class="input" type="number" name="loanInterestRate" value="${state.settings.loanInterestRateMonthly || 1.25}" min="0" step="0.25" />
+                </div>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">Meeting Expense (₹) — debited from bank</label>
+                <input class="input" type="number" name="meetingExpense" value="0" min="0" step="100" placeholder="0" />
+              </div>
+              <button class="primary" data-action="save-meeting-decisions" type="button" style="width:100%;">Save Decisions</button>
+            </form>
+            <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+                <div>
+                  <p style="font-size:13px;font-weight:600;margin:0 0 2px;">Member Acknowledgement</p>
+                  <p style="font-size:12px;color:var(--muted);margin:0;">Enable after saving decisions — members will see a prompt to acknowledge.</p>
+                </div>
+                <label class="toggle-switch" aria-label="Enable meeting signoff">
+                  <input type="checkbox" data-action="toggle-meeting-signoff" ${meetingEnabled ? "checked" : ""} />
+                  <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                </label>
+              </div>
+              ${allActive.map(m => {
+                const ack = meetingAcks.find(a => a.profileId === m.id);
+                return `<div class="row-item"><div><strong>${escapeHtml(m.name)}</strong><span>${ack ? "✓ Acknowledged · " + String(ack.acknowledgedAt || "").slice(0, 10) : "Pending"}</span></div></div>`;
+              }).join("")}
+            </div>`;
+          })()}
+        </div>
+      </details>`;
+      })()}
+
           <details class="card collapsible" id="storage-usage-card">
             <summary class="card-header" data-action="load-storage-usage">
               <div><h3>Storage Usage</h3><p>Supabase free tier · 1 GB limit</p></div>
@@ -4152,6 +4259,43 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "acknowledge-financial") {
+    action.disabled = true;
+    action.textContent = "Confirming…";
+    try {
+      await acknowledgeFinancialRecords();
+    } catch (e) {
+      action.disabled = false;
+      action.textContent = "Records Look Good ✓";
+      showToast(typeof e?.message === "string" ? e.message : "Failed to confirm. Please try again.");
+    }
+    return;
+  }
+
+  if (action.dataset.action === "save-meeting-decisions") {
+    const form = document.getElementById("meeting-decisions-form");
+    if (!form) return;
+    const data = {
+      meetingDate: form.querySelector('[name="meetingDate"]').value,
+      venue: form.querySelector('[name="venue"]').value.trim(),
+      monthlyDeposit: Number(form.querySelector('[name="monthlyDeposit"]').value) || 0,
+      renewalFee: Number(form.querySelector('[name="renewalFee"]').value) || 0,
+      maxLoan: Number(form.querySelector('[name="maxLoan"]').value) || 0,
+      loanInterestRate: Number(form.querySelector('[name="loanInterestRate"]').value) || 0,
+      meetingExpense: Number(form.querySelector('[name="meetingExpense"]').value) || 0,
+    };
+    action.disabled = true;
+    action.textContent = "Saving…";
+    try {
+      await saveAnnualMeetingDecisions(data);
+    } catch (e) {
+      showToast(typeof e?.message === "string" ? e.message : "Failed to save.");
+    }
+    action.disabled = false;
+    action.textContent = "Save Decisions";
+    return;
+  }
+
   if (action.dataset.action === "open-photo") {
     if (action.dataset.gallery) {
       openPhotoLightbox(JSON.parse(action.dataset.gallery), Number(action.dataset.index || 0));
@@ -4363,6 +4507,10 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-emi") { event.preventDefault(); await toggleEmiEnabled(); }
 
     if (action.dataset.action === "toggle-partial-repayment") { event.preventDefault(); await togglePartialRepaymentEnabled(); }
+
+    if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
+
+    if (action.dataset.action === "toggle-meeting-signoff") { event.preventDefault(); await toggleMeetingSignoff(action.checked); }
 
     if (action.dataset.action === "record-partial-payment") {
       const loanId = action.dataset.loanId;
@@ -5731,23 +5879,257 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 }
 
 
+function maybeShowSignoffModal() {
+  if (!liveBackendReady || !state.currentUserId) return;
+  if (document.getElementById("signoff-modal")) return; // already open
+  const pid = state.currentUserId;
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+
+  // Financial signoff takes priority
+  if (state.settings.financialSignoffEnabled) {
+    const alreadyDone = state.meetingAcknowledgements.some(
+      a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
+    );
+    if (!alreadyDone) { showFinancialSignoffModal(); return; }
+  }
+
+  // Meeting signoff next
+  if (state.settings.meetingSignoffEnabled) {
+    const alreadyDone = state.meetingAcknowledgements.some(
+      a => a.profileId === pid && a.year === yearDbYear && a.type === "meeting"
+    );
+    if (!alreadyDone) { showMeetingSignoffModal(); return; }
+  }
+}
+
+function showFinancialSignoffModal() {
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
+  const dep = state.deposits.find(d => d.year === yearDbYear);
+  const bankBal = state.settings.bankBalance || 0;
+  const loanOutstandingTotal = currentLoans().reduce((s, l) => s + loanOutstanding(l), 0);
+
+  const html = `
+    <div id="signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
+      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 36px;box-shadow:0 -4px 32px rgba(0,0,0,0.18);">
+        <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;"></div>
+        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">Year ${yearNum} Financial Records</h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">Please review the ${yearLabel} summary below and confirm everything looks correct.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
+            <span style="font-size:13px;color:var(--muted);">Total Deposits</span>
+            <strong style="font-size:13px;">${money(dep?.principal || 0)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
+            <span style="font-size:13px;color:var(--muted);">Total Interest Collected</span>
+            <strong style="font-size:13px;">${money(dep?.interest || 0)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
+            <span style="font-size:13px;color:var(--muted);">Bank Balance</span>
+            <strong style="font-size:13px;">${money(bankBal)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
+            <span style="font-size:13px;color:var(--muted);">Loans Outstanding</span>
+            <strong style="font-size:13px;">${money(loanOutstandingTotal)}</strong>
+          </div>
+        </div>
+        <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;padding:14px;">Records Look Good ✓</button>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+}
+
+function showMeetingSignoffModal() {
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
+  const mr = state.meetingRecords.find(r => r.year === yearDbYear);
+
+  const rows = [
+    ["Monthly Deposit", money(state.settings.monthlyDeposit || 0)],
+    ["Renewal Fee / Member", money(state.settings.activeYearRenewalFeePerMember || 0)],
+    ["Max Loan / Member", money(state.settings.maxLoanPerMember || 0)],
+    ["Loan Interest Rate", `${state.settings.loanInterestRateMonthly || 0}% per month`],
+    mr?.date ? ["Meeting Date", mr.date] : null,
+    mr?.venue ? ["Venue", mr.venue] : null,
+  ].filter(Boolean);
+
+  const decisions = mr?.decisions || [];
+
+  const html = `
+    <div id="signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
+      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 36px;box-shadow:0 -4px 32px rgba(0,0,0,0.18);max-height:85vh;overflow-y:auto;">
+        <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;"></div>
+        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">${yearLabel} Annual Meeting</h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">Decisions and changes agreed upon at the annual meeting. Please review and acknowledge.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:${decisions.length > 0 ? "16px" : "20px"};">
+          ${rows.map(([label, val]) => `
+            <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
+              <span style="font-size:13px;color:var(--muted);">${escapeHtml(label)}</span>
+              <strong style="font-size:13px;">${escapeHtml(val)}</strong>
+            </div>`).join("")}
+        </div>
+        ${decisions.length > 0 ? `
+        <div style="margin-bottom:20px;">
+          <p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Decisions Taken</p>
+          ${decisions.map(d => `<div style="font-size:13px;padding:8px 14px;background:var(--surface2,var(--bg));border-radius:8px;margin-bottom:6px;">• ${escapeHtml(d)}</div>`).join("")}
+        </div>` : ""}
+        <button class="primary" data-action="acknowledge-records" type="button" style="width:100%;padding:14px;">I Acknowledge ✓</button>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  document.body.style.overflow = "hidden";
+}
+
+async function toggleFinancialSignoff(enabled) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber || 6,
+      activeYearStart: current.activeYearStart || currentMonth(),
+      activeYearLabel: current.activeYearLabel || "",
+      yearClosed: current.yearClosed || false,
+      activeYearRenewalFee: current.activeYearRenewalFee || 0,
+      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: Boolean(enabled),
+      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
+    },
+  }));
+  await loadLiveState();
+  showToast(enabled ? "Financial signoff enabled — members will now see the prompt." : "Financial signoff disabled.");
+  render();
+}
+
+async function toggleMeetingSignoff(enabled) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber || 6,
+      activeYearStart: current.activeYearStart || currentMonth(),
+      activeYearLabel: current.activeYearLabel || "",
+      yearClosed: current.yearClosed || false,
+      activeYearRenewalFee: current.activeYearRenewalFee || 0,
+      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: current.financialSignoffEnabled || false,
+      meetingSignoffEnabled: Boolean(enabled),
+    },
+  }));
+  await loadLiveState();
+  showToast(enabled ? "Meeting signoff enabled — members will now see the prompt." : "Meeting signoff disabled.");
+  render();
+}
+
+async function saveAnnualMeetingDecisions(data) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+
+  // Update meeting_records
+  const existing = state.meetingRecords.find(r => r.year === yearDbYear);
+  if (existing) {
+    await liveQuery(supabaseClient.from("meeting_records")
+      .update({ date: data.meetingDate || null, venue: data.venue || null })
+      .eq("id", existing.id));
+  } else {
+    await liveQuery(supabaseClient.from("meeting_records")
+      .insert({ year: yearDbYear, date: data.meetingDate || null, venue: data.venue || null, decisions: [], photos: [] }));
+  }
+
+  // Update rules settings (monthly deposit, interest rate)
+  const existingRules = (await liveQuery(supabaseClient.from("settings").select("value").eq("id", "rules").single()))?.data;
+  const rulesVal = existingRules?.value || {};
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "rules",
+    value: {
+      ...rulesVal,
+      monthlyDeposit: data.monthlyDeposit,
+      loanInterestRateMonthly: data.loanInterestRate,
+    },
+  }));
+
+  // Update loan settings (max loan)
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "loan_settings",
+    value: { maxLoanPerMember: data.maxLoan },
+  }));
+
+  // Update active_year_info with renewal fee
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber || yearNum,
+      activeYearStart: current.activeYearStart || currentMonth(),
+      activeYearLabel: current.activeYearLabel || "",
+      yearClosed: current.yearClosed || false,
+      activeYearRenewalFee: data.renewalFee * (activeMembers().length),
+      activeYearRenewalFeePerMember: data.renewalFee,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: current.financialSignoffEnabled || false,
+      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
+    },
+  }));
+
+  // Debit meeting expense from bank + statement
+  if (data.meetingExpense > 0) {
+    await saveMeetingExpense(data.meetingExpense);
+  } else {
+    await loadLiveState();
+    render();
+  }
+
+  showToast("Meeting decisions saved.");
+}
+
+async function acknowledgeFinancialRecords() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const pid = currentProfileId();
+  if (!pid) { showToast("Not logged in."); return; }
+  const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
+  await liveQuery(supabaseClient.from("meeting_acknowledgements")
+    .delete().eq("profile_id", pid).eq("year", yearDbYear).eq("type", "financial"));
+  await liveQuery(supabaseClient.from("meeting_acknowledgements")
+    .insert({ profile_id: pid, year: yearDbYear, type: "financial", acknowledged_at: new Date().toISOString() }));
+  state.meetingAcknowledgements = state.meetingAcknowledgements.filter(
+    a => !(a.profileId === pid && a.year === yearDbYear && a.type === "financial")
+  );
+  state.meetingAcknowledgements.push({ id: `local-${pid}-f`, profileId: pid, year: yearDbYear, type: "financial", acknowledgedAt: new Date().toISOString() });
+  document.getElementById("signoff-modal")?.remove();
+  document.body.style.overflow = "";
+  render();
+  showToast("✓ Financial records confirmed.");
+  await loadLiveState();
+  render();
+}
+
 async function acknowledgeMeetingRecords() {
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const pid = currentProfileId();
   if (!pid) { showToast("Not logged in."); return; }
   const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
-  // Delete any existing ack first, then insert — avoids relying on a unique constraint
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .delete().eq("profile_id", pid).eq("year", yearDbYear));
+    .delete().eq("profile_id", pid).eq("year", yearDbYear).eq("type", "meeting"));
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .insert({ profile_id: pid, year: yearDbYear, acknowledged_at: new Date().toISOString() }));
-  // Optimistically update local state so the banner clears immediately regardless of SELECT RLS
-  state.meetingAcknowledgements = state.meetingAcknowledgements.filter(a => !(a.profileId === pid && a.year === yearDbYear));
-  state.meetingAcknowledgements.push({ id: `local-${pid}`, profileId: pid, year: yearDbYear, acknowledgedAt: new Date().toISOString() });
+    .insert({ profile_id: pid, year: yearDbYear, type: "meeting", acknowledged_at: new Date().toISOString() }));
+  state.meetingAcknowledgements = state.meetingAcknowledgements.filter(
+    a => !(a.profileId === pid && a.year === yearDbYear && a.type === "meeting")
+  );
+  state.meetingAcknowledgements.push({ id: `local-${pid}-m`, profileId: pid, year: yearDbYear, type: "meeting", acknowledgedAt: new Date().toISOString() });
   document.getElementById("signoff-modal")?.remove();
   document.body.style.overflow = "";
   render();
-  showToast("✓ Records confirmed.");
+  showToast("✓ Meeting decisions acknowledged.");
   await loadLiveState();
   render();
 }
