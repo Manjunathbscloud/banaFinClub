@@ -602,7 +602,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("statements").select("*").order("created_at", { ascending: false }).limit(200)),
     liveOptionalList(supabaseClient.from("loan_emis").select("*").order("loan_id").order("emi_number")),
     liveOptionalList(supabaseClient.from("meeting_records").select("*").order("year", { ascending: true })),
-    liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,acknowledged_at")),
+    liveOptionalList(supabaseClient.from("meeting_acknowledgements").select("id,profile_id,year,type,acknowledged_at")),
     liveOptionalList(supabaseClient.from("loan_partial_payments").select("*").order("paid_on", { ascending: false })),
     liveOptionalList(supabaseClient.from("partial_repayment_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("gallery_photos").select("*").order("created_at", { ascending: false }).limit(300)),
@@ -1255,7 +1255,6 @@ function render() {
   // renderChatFab();
   // renderAiFab();
   requestAnimationFrame(runPageAnimations);
-  requestAnimationFrame(maybeShowSignoffModal);
 }
 
 function runPageAnimations() {
@@ -1687,6 +1686,47 @@ function renderHome() {
           <span class="tile-chevron">›</span>
         </div>`).join("")}
     </section>
+
+    ${(() => {
+      const pid = state.currentUserId;
+      const yearNum = state.settings.activeYearNumber || 6;
+      const yearDbYear = 2020 + yearNum;
+      const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+      const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
+      const banners = [];
+
+      if (state.settings.financialSignoffEnabled) {
+        const done = state.meetingAcknowledgements.some(
+          a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
+        );
+        if (!done) banners.push(`
+          <div data-action="open-financial-signoff" style="display:flex;align-items:center;gap:12px;background:var(--accent,#2563eb);color:#fff;border-radius:14px;padding:14px 16px;cursor:pointer;margin-bottom:10px;">
+            <span style="font-size:22px;flex-shrink:0;">📋</span>
+            <div style="flex:1;min-width:0;">
+              <p style="font-size:13px;font-weight:700;margin:0 0 2px;">Year ${yearNum} Records — Action Required</p>
+              <p style="font-size:12px;margin:0;opacity:0.88;">Please review the ${yearLabel} financial summary and confirm.</p>
+            </div>
+            <span style="font-size:18px;opacity:0.8;">›</span>
+          </div>`);
+      }
+
+      if (state.settings.meetingSignoffEnabled) {
+        const done = state.meetingAcknowledgements.some(
+          a => a.profileId === pid && a.year === yearDbYear && a.type === "meeting"
+        );
+        if (!done) banners.push(`
+          <div data-action="open-meeting-signoff" style="display:flex;align-items:center;gap:12px;background:#0f766e;color:#fff;border-radius:14px;padding:14px 16px;cursor:pointer;margin-bottom:10px;">
+            <span style="font-size:22px;flex-shrink:0;">🤝</span>
+            <div style="flex:1;min-width:0;">
+              <p style="font-size:13px;font-weight:700;margin:0 0 2px;">Annual Meeting Decisions — Acknowledge</p>
+              <p style="font-size:12px;margin:0;opacity:0.88;">Review this year's decisions and confirm you've seen them.</p>
+            </div>
+            <span style="font-size:18px;opacity:0.8;">›</span>
+          </div>`);
+      }
+
+      return banners.length > 0 ? `<div style="padding:0 16px 4px;">${banners.join("")}</div>` : "";
+    })()}
 
     <div class="dash-summary-card">
       <div class="dash-summary-top">
@@ -2593,6 +2633,11 @@ function lightboxShow(index) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("signoff-modal")) {
+    document.getElementById("signoff-modal").remove();
+    document.body.style.overflow = "";
+    return;
+  }
   if (document.getElementById("gallery-lightbox")) {
     const n = state.galleryPhotos.length || 1;
     if (e.key === "ArrowRight") { galleryLbIndex = (galleryLbIndex + 1) % n; renderGalleryLightbox(); }
@@ -2738,7 +2783,8 @@ function renderDeposits() {
       label: activeYearLabel,
       sub: `${activeYearNum === 6 ? "Nov 2025" : `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()}`} – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`,
       balance: activeBalance,
-      active: true,
+      active: !state.settings.yearClosed,
+      closed: state.settings.yearClosed === true,
     },
   ];
 
@@ -2751,7 +2797,7 @@ function renderDeposits() {
             <span class="tile-icon">🐷</span>
             <div>
               <strong>${y.label}</strong>
-              <p>${y.sub}${y.active ? ' · <span class="badge warn" style="font-size:10px;">Active</span>' : ""}</p>
+              <p>${y.sub}${y.active ? ' · <span class="badge warn" style="font-size:10px;">Active</span>' : ""}${y.closed ? ' · <span class="badge good" style="font-size:10px;">Closed</span>' : ""}</p>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
@@ -3959,6 +4005,20 @@ function renderAdmin() {
             const ack = financialAcks.find(a => a.profileId === m.id);
             return `<div class="row-item"><div><strong>${escapeHtml(m.name)}</strong><span>${ack ? "✓ Confirmed · " + String(ack.acknowledgedAt || "").slice(0, 10) : "Pending"}</span></div></div>`;
           }).join("")}
+          ${financialAcks.length === allActive.length && allActive.length > 0 && !state.settings.yearClosed ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+            <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">All members have confirmed. You can now close Year ${yearNum} — this will consolidate the year's records and mark active loans as Carried Forward.</p>
+            <button class="primary" data-action="close-current-year" type="button" style="width:100%;">Close Year ${yearNum}</button>
+          </div>` : ""}
+          ${financialAcks.length < allActive.length && !state.settings.yearClosed ? `
+          <div style="margin-top:12px;text-align:center;">
+            <button data-action="close-current-year" type="button" style="background:none;border:none;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer;padding:4px;">Admin: force close without waiting for all confirmations</button>
+          </div>` : ""}
+          ${state.settings.yearClosed ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">✅</span>
+            <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} is closed. Deposits consolidated and loans carried forward.</p>
+          </div>` : ""}
         </div>
       </details>
 
@@ -4246,6 +4306,24 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "open-financial-signoff") {
+    showFinancialSignoffModal();
+    return;
+  }
+
+  if (action.dataset.action === "open-meeting-signoff") {
+    showMeetingSignoffModal();
+    return;
+  }
+
+  if (action.dataset.action === "close-signoff-modal") {
+    // Only close via backdrop click if the backdrop itself was clicked (not a child)
+    if (action.id === "signoff-modal" && event.target !== action) return;
+    document.getElementById("signoff-modal")?.remove();
+    document.body.style.overflow = "";
+    return;
+  }
+
   if (action.dataset.action === "acknowledge-records") {
     action.disabled = true;
     action.textContent = "Confirming…";
@@ -4511,6 +4589,19 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
 
     if (action.dataset.action === "toggle-meeting-signoff") { event.preventDefault(); await toggleMeetingSignoff(action.checked); }
+
+    if (action.dataset.action === "close-current-year") {
+      if (!isAdmin()) { showToast("Admin access required."); return; }
+      action.disabled = true;
+      action.textContent = "Closing…";
+      try {
+        await closeCurrentYear();
+      } catch (e) {
+        action.disabled = false;
+        action.textContent = `Close Year ${state.settings.activeYearNumber || 6}`;
+        showToast(typeof e?.message === "string" ? e.message : "Failed to close year. Please try again.");
+      }
+    }
 
     if (action.dataset.action === "record-partial-payment") {
       const loanId = action.dataset.loanId;
@@ -5879,62 +5970,156 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 }
 
 
-function maybeShowSignoffModal() {
-  if (!liveBackendReady || !state.currentUserId) return;
-  if (document.getElementById("signoff-modal")) return; // already open
-  const pid = state.currentUserId;
-  const yearNum = state.settings.activeYearNumber || 6;
-  const yearDbYear = 2020 + yearNum;
-
-  // Financial signoff takes priority
-  if (state.settings.financialSignoffEnabled) {
-    const alreadyDone = state.meetingAcknowledgements.some(
-      a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
-    );
-    if (!alreadyDone) { showFinancialSignoffModal(); return; }
-  }
-
-  // Meeting signoff next
-  if (state.settings.meetingSignoffEnabled) {
-    const alreadyDone = state.meetingAcknowledgements.some(
-      a => a.profileId === pid && a.year === yearDbYear && a.type === "meeting"
-    );
-    if (!alreadyDone) { showMeetingSignoffModal(); return; }
-  }
-}
-
-function showFinancialSignoffModal() {
+async function closeCurrentYear() {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const yearNum = state.settings.activeYearNumber || 6;
   const yearDbYear = 2020 + yearNum;
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
-  const dep = state.deposits.find(d => d.year === yearDbYear);
-  const bankBal = state.settings.bankBalance || 0;
-  const loanOutstandingTotal = currentLoans().reduce((s, l) => s + loanOutstanding(l), 0);
+
+  // ── 1. Compute consolidated figures (same as signoff modal) ─────────────
+  const activeYearStart = activeYearCutoffMonth();
+  const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
+  let liveTotalDeposit = 0, liveTotalInterest = 0;
+  livePayments.forEach(p => {
+    const mem = memberById(p.memberId);
+    if (!mem) return;
+    const paid = Number(p.paidAmount || p.amount || 0);
+    const split = paymentSplit(mem, p.month, paid);
+    liveTotalDeposit += split.dep;
+    liveTotalInterest += split.interest;
+  });
+
+  let totalDeposits, totalInterest, runningBalance, exitPayouts;
+  if (yearNum === 6) {
+    const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672;
+    const histInterest = 65546 + 11171;
+    exitPayouts = 121834;
+    totalDeposits  = histDeposits + liveTotalDeposit;
+    totalInterest  = histInterest + liveTotalInterest;
+    const yr6HistFixed = histDeposits + histInterest - exitPayouts;
+    runningBalance = yr6HistFixed + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+  } else {
+    const activeYearExits = state.settings.activeYearExits || [];
+    exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
+    totalDeposits  = liveTotalDeposit;
+    totalInterest  = liveTotalInterest;
+    const histBase = Number(state.deposits.find(d => d.year === yearDbYear)?.balance || 0);
+    runningBalance = histBase - exitPayouts + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+  }
+
+  // ── 2. Consolidate deposit_summaries row ──────────────────────────────
+  const depRow = state.deposits.find(d => d.year === yearDbYear);
+  await liveQuery(supabaseClient.from("deposit_summaries").upsert({
+    id: depRow?.id || crypto.randomUUID(),
+    year: yearDbYear,
+    label: yearLabel,
+    principal: totalDeposits,
+    interest: totalInterest,
+    balance: runningBalance,
+    exit_payouts: exitPayouts,
+    expenditure: depRow?.expenditure || 0,
+  }, { onConflict: "id" }));
+
+  // ── 3. Mark active loans as carried_forward ───────────────────────────
+  const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
+  for (const loan of activeLoans) {
+    await liveQuery(supabaseClient.from("current_loans").update({ status: "carried_forward" }).eq("id", loan.id));
+  }
+
+  // ── 4. Mark year as closed in settings ───────────────────────────────
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber || 6,
+      activeYearStart: current.activeYearStart || currentMonth(),
+      activeYearLabel: current.activeYearLabel || "",
+      yearClosed: true,
+      activeYearRenewalFee: current.activeYearRenewalFee || 0,
+      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: current.financialSignoffEnabled || false,
+      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
+    },
+  }));
+
+  await loadLiveState();
+  render();
+  showToast(`✓ Year ${yearNum} closed. Records consolidated.`);
+}
+
+function showFinancialSignoffModal() {
+  if (document.getElementById("signoff-modal")) return;
+  const yearNum = state.settings.activeYearNumber || 6;
+  const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
+
+  // Compute year-to-date totals the same way the Deposits tab does
+  const activeYearStart = activeYearCutoffMonth();
+  const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
+  let liveTotalDeposit = 0, liveTotalInterest = 0;
+  livePayments.forEach(p => {
+    const mem = memberById(p.memberId);
+    if (!mem) return;
+    const paid = Number(p.paidAmount || p.amount || 0);
+    const split = paymentSplit(mem, p.month, paid);
+    liveTotalDeposit += split.dep;
+    liveTotalInterest += split.interest;
+  });
+
+  let totalDeposits, totalInterest, runningBalance;
+  if (yearNum === 6) {
+    const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672; // Nov 2025 – Jun 2026
+    const histInterest = 65546 + 11171;
+    totalDeposits  = histDeposits + liveTotalDeposit;
+    totalInterest  = histInterest + liveTotalInterest;
+    const yr6HistFixed = histDeposits + histInterest - 121834; // member exit payout
+    runningBalance = yr6HistFixed + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+  } else {
+    totalDeposits  = liveTotalDeposit;
+    totalInterest  = liveTotalInterest;
+    const activeYearExits = state.settings.activeYearExits || [];
+    const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
+    runningBalance = Number(state.deposits.find(d => d.year === 2020 + yearNum)?.balance || 0) - exitPayouts + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+  }
+
+  const bankBal = expectedBankBalance();
+  const loanOutstandingTotal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark"
+    || (!document.documentElement.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme:dark)").matches);
+  const sheetBg = isDark ? "#1e2535" : "#ffffff";
+  const rowBg   = isDark ? "#252d3d" : "#f3f4f6";
+  const textCol  = isDark ? "#e2e8f0" : "#111827";
+  const mutedCol = isDark ? "#94a3b8" : "#6b7280";
+
+  // Member exits for this year
+  const exits = yearNum === 6
+    ? [{ name: "Sarpabhushana Banakar", payout: 121834 }]
+    : (state.settings.activeYearExits || []);
+
+  const row = (label, val, red = false) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:${rowBg};border-radius:10px;">
+      <span style="font-size:13px;color:${mutedCol};">${label}</span>
+      <strong style="font-size:13px;color:${red ? "#dc2626" : textCol};">${val}</strong>
+    </div>`;
 
   const html = `
-    <div id="signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
-      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 36px;box-shadow:0 -4px 32px rgba(0,0,0,0.18);">
-        <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;"></div>
-        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">Year ${yearNum} Financial Records</h3>
-        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">Please review the ${yearLabel} summary below and confirm everything looks correct.</p>
-        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
-          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
-            <span style="font-size:13px;color:var(--muted);">Total Deposits</span>
-            <strong style="font-size:13px;">${money(dep?.principal || 0)}</strong>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
-            <span style="font-size:13px;color:var(--muted);">Total Interest Collected</span>
-            <strong style="font-size:13px;">${money(dep?.interest || 0)}</strong>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
-            <span style="font-size:13px;color:var(--muted);">Bank Balance</span>
-            <strong style="font-size:13px;">${money(bankBal)}</strong>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
-            <span style="font-size:13px;color:var(--muted);">Loans Outstanding</span>
-            <strong style="font-size:13px;">${money(loanOutstandingTotal)}</strong>
-          </div>
+    <div id="signoff-modal" data-action="close-signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:flex-end;justify-content:center;">
+      <div style="background:${sheetBg};border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 40px;box-shadow:0 -4px 32px rgba(0,0,0,0.25);max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <div style="width:36px;height:4px;background:${rowBg};border-radius:2px;flex:1;margin-right:auto;margin-left:auto;max-width:36px;"></div>
+          <button data-action="close-signoff-modal" type="button" style="background:${rowBg};border:none;color:${mutedCol};font-size:18px;line-height:1;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+        </div>
+        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;color:${textCol};">Year ${yearNum} Financial Records</h3>
+        <p style="font-size:13px;color:${mutedCol};margin:0 0 20px;">Please review the ${yearLabel} summary below and confirm everything looks correct.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">
+          ${row("Total Deposits", money(totalDeposits))}
+          ${row("Total Interest Collected", money(totalInterest))}
+          ${exits.map(e => row(`${escapeHtml(e.name)} — Exit Payout`, `−${money(Number(e.payout || 0))}`, true)).join("")}
+          ${row("Corpus / Running Balance", money(runningBalance))}
+          ${row("Bank Balance", money(bankBal))}
+          ${row("Loans Outstanding", money(loanOutstandingTotal))}
         </div>
         <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;padding:14px;">Records Look Good ✓</button>
       </div>
@@ -5944,11 +6129,18 @@ function showFinancialSignoffModal() {
 }
 
 function showMeetingSignoffModal() {
+  if (document.getElementById("signoff-modal")) return;
   const yearNum = state.settings.activeYearNumber || 6;
   const yearDbYear = 2020 + yearNum;
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
   const mr = state.meetingRecords.find(r => r.year === yearDbYear);
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark"
+    || (!document.documentElement.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme:dark)").matches);
+  const sheetBg = isDark ? "#1e2535" : "#ffffff";
+  const rowBg   = isDark ? "#252d3d" : "#f3f4f6";
+  const textCol  = isDark ? "#e2e8f0" : "#111827";
+  const mutedCol = isDark ? "#94a3b8" : "#6b7280";
 
   const rows = [
     ["Monthly Deposit", money(state.settings.monthlyDeposit || 0)],
@@ -5961,23 +6153,28 @@ function showMeetingSignoffModal() {
 
   const decisions = mr?.decisions || [];
 
+  const row = (label, val) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:${rowBg};border-radius:10px;">
+      <span style="font-size:13px;color:${mutedCol};">${escapeHtml(label)}</span>
+      <strong style="font-size:13px;color:${textCol};">${escapeHtml(val)}</strong>
+    </div>`;
+
   const html = `
-    <div id="signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
-      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 36px;box-shadow:0 -4px 32px rgba(0,0,0,0.18);max-height:85vh;overflow-y:auto;">
-        <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;"></div>
-        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">${yearLabel} Annual Meeting</h3>
-        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">Decisions and changes agreed upon at the annual meeting. Please review and acknowledge.</p>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:${decisions.length > 0 ? "16px" : "20px"};">
-          ${rows.map(([label, val]) => `
-            <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface2,var(--bg));border-radius:10px;">
-              <span style="font-size:13px;color:var(--muted);">${escapeHtml(label)}</span>
-              <strong style="font-size:13px;">${escapeHtml(val)}</strong>
-            </div>`).join("")}
+    <div id="signoff-modal" data-action="close-signoff-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:flex-end;justify-content:center;">
+      <div style="background:${sheetBg};border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 40px;box-shadow:0 -4px 32px rgba(0,0,0,0.25);max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+          <div style="width:36px;height:4px;background:${rowBg};border-radius:2px;flex:1;margin-right:auto;margin-left:auto;max-width:36px;"></div>
+          <button data-action="close-signoff-modal" type="button" style="background:${rowBg};border:none;color:${mutedCol};font-size:18px;line-height:1;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+        </div>
+        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;color:${textCol};">${yearLabel} Annual Meeting</h3>
+        <p style="font-size:13px;color:${mutedCol};margin:0 0 20px;">Decisions and changes agreed upon at the annual meeting. Please review and acknowledge.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:${decisions.length > 0 ? "16px" : "24px"};">
+          ${rows.map(([label, val]) => row(label, val)).join("")}
         </div>
         ${decisions.length > 0 ? `
-        <div style="margin-bottom:20px;">
-          <p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Decisions Taken</p>
-          ${decisions.map(d => `<div style="font-size:13px;padding:8px 14px;background:var(--surface2,var(--bg));border-radius:8px;margin-bottom:6px;">• ${escapeHtml(d)}</div>`).join("")}
+        <div style="margin-bottom:24px;">
+          <p style="font-size:11px;font-weight:700;color:${mutedCol};text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Decisions Taken</p>
+          ${decisions.map(d => `<div style="font-size:13px;color:${textCol};padding:8px 14px;background:${rowBg};border-radius:8px;margin-bottom:6px;">• ${escapeHtml(d)}</div>`).join("")}
         </div>` : ""}
         <button class="primary" data-action="acknowledge-records" type="button" style="width:100%;padding:14px;">I Acknowledge ✓</button>
       </div>
@@ -6098,9 +6295,8 @@ async function acknowledgeFinancialRecords() {
   if (!pid) { showToast("Not logged in."); return; }
   const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .delete().eq("profile_id", pid).eq("year", yearDbYear).eq("type", "financial"));
-  await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .insert({ profile_id: pid, year: yearDbYear, type: "financial", acknowledged_at: new Date().toISOString() }));
+    .upsert({ profile_id: pid, year: yearDbYear, type: "financial", acknowledged_at: new Date().toISOString() },
+             { onConflict: "profile_id,year,type" }));
   state.meetingAcknowledgements = state.meetingAcknowledgements.filter(
     a => !(a.profileId === pid && a.year === yearDbYear && a.type === "financial")
   );
@@ -6119,9 +6315,8 @@ async function acknowledgeMeetingRecords() {
   if (!pid) { showToast("Not logged in."); return; }
   const yearDbYear = 2020 + (state.settings.activeYearNumber || 6);
   await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .delete().eq("profile_id", pid).eq("year", yearDbYear).eq("type", "meeting"));
-  await liveQuery(supabaseClient.from("meeting_acknowledgements")
-    .insert({ profile_id: pid, year: yearDbYear, type: "meeting", acknowledged_at: new Date().toISOString() }));
+    .upsert({ profile_id: pid, year: yearDbYear, type: "meeting", acknowledged_at: new Date().toISOString() },
+             { onConflict: "profile_id,year,type" }));
   state.meetingAcknowledgements = state.meetingAcknowledgements.filter(
     a => !(a.profileId === pid && a.year === yearDbYear && a.type === "meeting")
   );
