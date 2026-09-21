@@ -6040,6 +6040,7 @@ async function closeCurrentYear() {
   // ── 2. Consolidate deposit_summaries row (with breakdown for detail view) ─
   const depRow = state.deposits.find(d => d.year === yearDbYear);
   const expenditure = depRow?.expenditure || 0;
+  runningBalance = runningBalance - expenditure;
 
   // Build a breakdown array matching the style of previous years
   const breakdown = [];
