@@ -6074,13 +6074,7 @@ async function closeCurrentYear() {
     breakdown,
   }, { onConflict: "id" }));
 
-  // ── 3. Mark active loans as carried_forward ───────────────────────────
-  const activeLoans = currentLoans().filter(l => l.notes !== "emi_entry");
-  for (const loan of activeLoans) {
-    await liveQuery(supabaseClient.from("current_loans").update({ status: "carried_forward" }).eq("id", loan.id));
-  }
-
-  // ── 4. Mark year as closed in settings ───────────────────────────────
+  // ── 3. Mark year as closed in settings ───────────────────────────────
   const current = state.settings;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
