@@ -3823,23 +3823,19 @@ function renderAdmin() {
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0 16px;border-bottom:1px solid var(--border);">
-            <div>
-              <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Member Signoff</p>
-              <p style="font-size:13px;color:var(--muted);margin:0;">When enabled, all members receive an SMS and see an in-app banner to review and acknowledge the year's financial records.</p>
-            </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 14px;border-bottom:1px solid var(--border);">
+            <p style="font-size:14px;font-weight:600;margin:0;">Member Signoff</p>
             <label class="toggle-switch" aria-label="Enable member signoff">
               <input type="checkbox" data-action="toggle-financial-signoff" ${signoffEnabled ? "checked" : ""} />
               <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
             </label>
           </div>
-          <div style="margin-top:14px;">
-            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;">Member Status</p>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
             ${allActive.map(m => {
               const ack = acks.find(a => a.profileId === m.id);
-              return `<div class="row-item">
-                <div><strong>${escapeHtml(m.name)}</strong><span>${ack ? "✓ Acknowledged · " + String(ack.acknowledgedAt || "").slice(0, 10) : "Pending"}</span></div>
-                ${ack ? `<span class="badge good" style="font-size:11px;">Done</span>` : `<span class="badge warn" style="font-size:11px;">Pending</span>`}
+              return `<div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:13px;">${escapeHtml(m.name)}</span>
+                ${ack ? `<span class="badge good" style="font-size:11px;">✓ Done</span>` : `<span class="badge warn" style="font-size:11px;">Pending</span>`}
               </div>`;
             }).join("")}
           </div>
