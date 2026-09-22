@@ -1695,6 +1695,73 @@ function renderHome() {
       const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
       const banners = [];
 
+      if (state.settings.financialSignoffEnabled) {
+        const alreadyAcknowledged = state.meetingAcknowledgements.some(
+          a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
+        );
+        if (!alreadyAcknowledged) {
+          // Compute summary figures for the banner
+          const activeYearStart = activeYearCutoffMonth();
+          const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
+          let liveDep = 0, liveInt = 0;
+          livePayments.forEach(p => {
+            const mem = memberById(p.memberId);
+            if (!mem) return;
+            const { dep, interest } = paymentSplit(mem, p.month, Number(p.paidAmount || p.amount || 0));
+            liveDep += dep; liveInt += interest;
+          });
+          let totalDep, totalInt, poolBal;
+          if (yearNum === 6) {
+            totalDep = 21000 + 14000 + 11250 + 84000 + 44672 + liveDep;
+            totalInt = 65546 + 11171 + liveInt;
+            poolBal = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834 + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+          } else {
+            totalDep = liveDep; totalInt = liveInt;
+            const exits = (state.settings.activeYearExits || []).reduce((s, e) => s + Number(e.payout || 0), 0);
+            poolBal = liveDep + liveInt - exits;
+          }
+          const exits = yearNum === 6
+            ? [{ name: "Sarpabhushana Banakar", payout: 121834 }]
+            : (state.settings.activeYearExits || []);
+          const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
+
+          banners.push(`
+            <div style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;padding:16px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <span style="font-size:20px;">📋</span>
+                <div>
+                  <p style="font-size:14px;font-weight:700;margin:0;color:var(--accent,#2563eb);">Year ${yearNum} — Records Review</p>
+                  <p style="font-size:12px;color:var(--muted);margin:0;">Please review and acknowledge the financial records</p>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Total Deposits</p>
+                  <strong style="font-size:15px;color:#16a34a;">${money(totalDep)}</strong>
+                </div>
+                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
+                  <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
+                </div>
+                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Loans Outstanding</p>
+                  <strong style="font-size:15px;color:#dc2626;">${money(loansOutstanding)}</strong>
+                </div>
+                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Pool Balance</p>
+                  <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
+                </div>
+              </div>
+              ${exits.length > 0 ? `
+              <div style="background:#fef2f2;border-radius:8px;padding:10px;margin-bottom:12px;">
+                <p style="font-size:11px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.4px;">Member Exit</p>
+                ${exits.map(e => `<p style="font-size:13px;margin:0;color:#dc2626;">${escapeHtml(e.name)} · −${money(e.payout)}</p>`).join("")}
+              </div>` : ""}
+              <button class="primary" data-action="acknowledge-financial-records" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
+            </div>`);
+        }
+      }
+
       return banners.length > 0 ? `<div style="padding:0 16px 4px;">${banners.join("")}</div>` : "";
     })()}
 
@@ -3739,6 +3806,55 @@ function renderAdmin() {
         </div>
       </details>
 
+
+      ${(() => {
+        const yearNum = state.settings.activeYearNumber || 6;
+        const yearDbYear = 2020 + yearNum;
+        const allActive = activeMembers();
+        const signoffEnabled = state.settings.financialSignoffEnabled === true;
+        const acks = state.meetingAcknowledgements.filter(a => a.year === yearDbYear && a.type === "financial");
+        const pendingCount = allActive.length - acks.length;
+        return `
+      <details class="card collapsible">
+        <summary class="card-header">
+          <div><h3>Year End Management</h3><p>Year ${yearNum} close · member signoff · ${acks.length}/${allActive.length} acknowledged</p></div>
+          ${acks.length > 0 && pendingCount > 0 ? `<span class="badge warn" style="margin-left:auto;margin-right:8px;">${pendingCount} pending</span>` : ""}
+          ${acks.length === allActive.length && allActive.length > 0 ? `<span class="badge good" style="margin-left:auto;margin-right:8px;">All acknowledged</span>` : ""}
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0 16px;border-bottom:1px solid var(--border);">
+            <div>
+              <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Member Signoff</p>
+              <p style="font-size:13px;color:var(--muted);margin:0;">When enabled, all members receive an SMS and see an in-app banner to review and acknowledge the year's financial records.</p>
+            </div>
+            <label class="toggle-switch" aria-label="Enable member signoff">
+              <input type="checkbox" data-action="toggle-financial-signoff" ${signoffEnabled ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
+          </div>
+          <div style="margin-top:14px;">
+            <p style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;">Member Status</p>
+            ${allActive.map(m => {
+              const ack = acks.find(a => a.profileId === m.id);
+              return `<div class="row-item">
+                <div><strong>${escapeHtml(m.name)}</strong><span>${ack ? "✓ Acknowledged · " + String(ack.acknowledgedAt || "").slice(0, 10) : "Pending"}</span></div>
+                ${ack ? `<span class="badge good" style="font-size:11px;">Done</span>` : `<span class="badge warn" style="font-size:11px;">Pending</span>`}
+              </div>`;
+            }).join("")}
+          </div>
+          ${state.settings.yearClosed ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">✅</span>
+            <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} is closed. Deposits consolidated.</p>
+          </div>` : acks.length === allActive.length && allActive.length > 0 ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+            <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">All members have acknowledged. You can now close Year ${yearNum}.</p>
+            <button class="primary" data-action="close-current-year" type="button" style="width:100%;">Close Year ${yearNum}</button>
+          </div>` : ""}
+        </div>
+      </details>`;
+      })()}
 
       ${(() => {
         const pendingExtensions = (state.extensionRequests || []).filter((e) => e.status === "pending");
@@ -6084,7 +6200,18 @@ async function toggleFinancialSignoff(enabled) {
     },
   }));
   await loadLiveState();
-  showToast(enabled ? "Financial signoff enabled — members will now see the prompt." : "Financial signoff disabled.");
+
+  if (enabled) {
+    // Notify all active members via in-app + SMS
+    const yearNum = current.activeYearNumber || 6;
+    const msg = `Hi, please open the Banakar FinClub app and acknowledge the Year ${yearNum} financial records. Your confirmation is required to close the year.`;
+    for (const member of activeMembers()) {
+      await notifyMember(member.id, "year_end_signoff", `Year ${yearNum} — Records Review`, msg);
+    }
+    showToast("Member signoff enabled — all members notified via SMS & in-app.");
+  } else {
+    showToast("Member signoff disabled.");
+  }
   render();
 }
 
