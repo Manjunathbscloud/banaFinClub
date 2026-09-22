@@ -5195,18 +5195,7 @@ async function sendPaymentReminder() {
     `${unpaidNames} ${unpaid.length === 1 ? "has" : "have"} not paid their monthly deposit for ${monthLabel}. Please ensure timely payments.`
   );
 
-  // SMS → unpaid members only
-  for (const member of unpaid) {
-    const due = money(memberMonthlyDue(member));
-    await supabaseClient.functions.invoke("send-sms", {
-      body: {
-        profile_id: member.id,
-        message: `Hi ${member.name.split(" ")[0]}, your monthly deposit of ${due} for ${monthLabel} is still pending. Please pay at the earliest.`,
-      },
-    }).catch(console.error);
-  }
-
-  showToast(`Reminder sent — ${unpaid.length} member${unpaid.length !== 1 ? "s" : ""} notified via SMS.`);
+  showToast(`Reminder noted — ${unpaid.length} member${unpaid.length !== 1 ? "s" : ""} yet to pay. (SMS disabled)`);
 }
 
 async function togglePartialRepaymentEnabled() {
@@ -5311,13 +5300,7 @@ async function requestLoan(data) {
     await addLiveAudit(`${user.name} requested loan ${money(data.amount)}${loanType === "emi" ? ` (EMI ${tenureMonths}mo)` : ""}.`, "loan_requested");
     const admins = state.members.filter(m => m.role === "president" && m.status === "active");
     for (const admin of admins) {
-      await notifyMember(admin.id, "loan_requested", "New loan request", `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the admin panel.`);
-      await supabaseClient.functions.invoke("send-sms", {
-        body: {
-          profile_id: admin.id,
-          message: `${user.name} has requested a ${loanType === "emi" ? `EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months` : `loan of ${money(Number(data.amount))}`}. Please review it in the app.`,
-        },
-      }).catch(console.error);
+      // Notifications disabled — re-enable when ready
     }
     const allMemberBody = loanType === "emi"
       ? `${user.name} has applied for an EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months. Pending admin approval.`
@@ -5620,22 +5603,11 @@ async function rejectLoan(id) {
 const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
-  if (!liveBackendReady) return;
-  if (TEST_MODE_SUPPRESS_BROADCAST) return; // TEST MODE: skip all-member notifications
-  const active = state.members.filter((m) => m.status === "active");
-  const rows = active.map((m) => ({ profile_id: m.id, type, title, body, related_id: relatedId }));
-  await liveQuery(supabaseClient.from("notifications").insert(rows));
-  for (const m of active) {
-    supabaseClient.functions.invoke("send-push", { body: { profile_id: m.id, title, body } }).catch(() => {});
-    supabaseClient.functions.invoke("send-sms", { body: { profile_id: m.id, message: body } }).catch(() => {});
-  }
+  // Notifications disabled — re-enable when ready
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
-  if (!liveBackendReady || !profileId) return;
-  await liveQuery(supabaseClient.from("notifications").insert({ profile_id: profileId, type, title, body, related_id: relatedId }));
-  supabaseClient.functions.invoke("send-push", { body: { profile_id: profileId, title, body } }).catch(() => {});
-  supabaseClient.functions.invoke("send-sms", { body: { profile_id: profileId, message: body } }).catch(() => {});
+  // Notifications disabled — re-enable when ready
 }
 
 async function requestExtension(loanId) {
