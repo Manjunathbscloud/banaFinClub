@@ -1726,39 +1726,42 @@ function renderHome() {
           const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
 
           banners.push(`
-            <div style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;padding:16px;margin-bottom:10px;">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <details style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
+              <summary style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;list-style:none;">
                 <span style="font-size:20px;">📋</span>
-                <div>
+                <div style="flex:1;">
                   <p style="font-size:14px;font-weight:700;margin:0;color:var(--accent,#2563eb);">Year ${yearNum} — Records Review</p>
-                  <p style="font-size:12px;color:var(--muted);margin:0;">Please review and acknowledge the financial records</p>
+                  <p style="font-size:12px;color:var(--muted);margin:0;">Tap to review and acknowledge</p>
                 </div>
+                <span style="font-size:18px;color:var(--muted);">›</span>
+              </summary>
+              <div style="padding:0 16px 16px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Total Deposits</p>
+                    <strong style="font-size:15px;color:#16a34a;">${money(totalDep)}</strong>
+                  </div>
+                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
+                    <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
+                  </div>
+                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Loans Outstanding</p>
+                    <strong style="font-size:15px;color:#dc2626;">${money(loansOutstanding)}</strong>
+                  </div>
+                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Pool Balance</p>
+                    <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
+                  </div>
+                </div>
+                ${exits.length > 0 ? `
+                <div style="background:#fef2f2;border-radius:8px;padding:10px;margin-bottom:12px;">
+                  <p style="font-size:11px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.4px;">Member Exit</p>
+                  ${exits.map(e => `<p style="font-size:13px;margin:0;color:#dc2626;">${escapeHtml(e.name)} · −${money(e.payout)}</p>`).join("")}
+                </div>` : ""}
+                <button class="primary" data-action="acknowledge-financial-records" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Total Deposits</p>
-                  <strong style="font-size:15px;color:#16a34a;">${money(totalDep)}</strong>
-                </div>
-                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
-                  <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
-                </div>
-                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Loans Outstanding</p>
-                  <strong style="font-size:15px;color:#dc2626;">${money(loansOutstanding)}</strong>
-                </div>
-                <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                  <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Pool Balance</p>
-                  <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
-                </div>
-              </div>
-              ${exits.length > 0 ? `
-              <div style="background:#fef2f2;border-radius:8px;padding:10px;margin-bottom:12px;">
-                <p style="font-size:11px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.4px;">Member Exit</p>
-                ${exits.map(e => `<p style="font-size:13px;margin:0;color:#dc2626;">${escapeHtml(e.name)} · −${money(e.payout)}</p>`).join("")}
-              </div>` : ""}
-              <button class="primary" data-action="acknowledge-financial-records" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
-            </div>`);
+            </details>`);
         }
       }
 
