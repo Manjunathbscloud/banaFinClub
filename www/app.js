@@ -6198,13 +6198,7 @@ async function toggleFinancialSignoff(enabled) {
   await loadLiveState();
 
   if (enabled) {
-    // Notify all active members via in-app + SMS
-    const yearNum = current.activeYearNumber || 6;
-    const msg = `Hi, please open the Banakar FinClub app and acknowledge the Year ${yearNum} financial records. Your confirmation is required to close the year.`;
-    for (const member of activeMembers()) {
-      await notifyMember(member.id, "year_end_signoff", `Year ${yearNum} — Records Review`, msg);
-    }
-    showToast("Member signoff enabled — all members notified via SMS & in-app.");
+    showToast("Member signoff enabled.");
   } else {
     showToast("Member signoff disabled.");
   }
