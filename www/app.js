@@ -3830,7 +3830,7 @@ function renderAdmin() {
               <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
             </label>
           </div>
-          <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+          ${signoffEnabled ? `<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
             ${allActive.map(m => {
               const ack = acks.find(a => a.profileId === m.id);
               return `<div style="display:flex;align-items:center;justify-content:space-between;">
@@ -3838,7 +3838,7 @@ function renderAdmin() {
                 ${ack ? `<span class="badge good" style="font-size:11px;">✓ Done</span>` : `<span class="badge warn" style="font-size:11px;">Pending</span>`}
               </div>`;
             }).join("")}
-          </div>
+          </div>` : ""}
           ${state.settings.yearClosed ? `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
             <span style="font-size:18px;">✅</span>
