@@ -6019,6 +6019,8 @@ async function closeCurrentYear() {
   if (allLoansForSnapshot.length > 0) {
     const historyRows = allLoansForSnapshot.map(loan => {
       const isCleared = loan.status === "clear" || loan.status === "cleared";
+      const yearInterestStart = yearNum === 6 ? "2025-11-01" : (activeYearStart + "-01");
+      const yearInterest = yearBoundedInterest(loan, yearInterestStart, today());
       return {
         id: crypto.randomUUID(),
         year: yearLabel,
@@ -6030,7 +6032,7 @@ async function closeCurrentYear() {
         interest_text: loan.interestText || "",
         renewal_or_return: loan.renewalOrReturn || "",
         status: isCleared ? "Cleared" : "Carried Forward",
-        total_paid: loan.totalPaid || 0,
+        total_paid: yearInterest,
         is_interest_free: Boolean(loan.isInterestFree),
         notes: loan.notes || "",
       };
