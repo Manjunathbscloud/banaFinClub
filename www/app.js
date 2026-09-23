@@ -1759,7 +1759,7 @@ function renderHome() {
                   <p style="font-size:11px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.4px;">Member Exit</p>
                   ${exits.map(e => `<p style="font-size:13px;margin:0;color:#dc2626;">${escapeHtml(e.name)} · −${money(e.payout)}</p>`).join("")}
                 </div>` : ""}
-                <button class="primary" data-action="acknowledge-financial-records" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
+                <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
               </div>
             </details>`);
         }
