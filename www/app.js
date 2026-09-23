@@ -3846,11 +3846,10 @@ function renderAdmin() {
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
             <span style="font-size:18px;">✅</span>
             <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} closed. Year ${yearNum + 1} started.</p>
-          </div>` : acks.length === allActive.length && allActive.length > 0 ? `
+          </div>` : `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-            <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">All members have acknowledged. Ready to close.</p>
             <button class="primary" data-action="close-current-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;">Close ${yearDbYear} Year</button>
-          </div>` : ""}
+          </div>`}
         </div>
       </details>`;
       })()}
