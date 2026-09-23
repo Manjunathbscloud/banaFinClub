@@ -6051,7 +6051,7 @@ async function closeCurrentYear() {
       label: nextYearLabel,
       principal: 0,
       interest: 0,
-      balance: runningBalance,
+      balance: 0,
       exit_payouts: 0,
       expenditure: 0,
       breakdown: [],
