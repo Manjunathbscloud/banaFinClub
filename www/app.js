@@ -6034,9 +6034,7 @@ async function closeCurrentYear() {
     }));
     await liveQuery(supabaseClient.from("loan_history").insert(historyRows));
   }
-  for (const loan of activeLoans) {
-    await liveQuery(supabaseClient.from("current_loans").update({ status: "carried_forward" }).eq("id", loan.id));
-  }
+  // Leave current_loans status as "active" so they appear normally in Year 7
 
   // ── 4. Advance settings to next year ─────────────────────────────────
   const ORDINALS_NEXT = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
