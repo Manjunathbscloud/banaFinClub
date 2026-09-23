@@ -5999,7 +5999,9 @@ async function closeCurrentYear() {
 
   // ── 1. Compute consolidated figures (same as signoff modal) ─────────────
   const activeYearStart = activeYearCutoffMonth();
-  const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
+  // Year 6: hardcode cutoff to "2026-07" regardless of activeYearStart in settings
+  const livePaymentsCutoff = yearNum === 6 ? "2026-07" : activeYearStart;
+  const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= livePaymentsCutoff);
   let liveTotalDeposit = 0, liveTotalInterest = 0;
   livePayments.forEach(p => {
     const mem = memberById(p.memberId);
