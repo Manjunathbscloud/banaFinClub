@@ -6014,27 +6014,36 @@ async function closeCurrentYear() {
     breakdown,
   }, { onConflict: "id" }));
 
-  // ── 3. Snapshot active loans to loan_history for closed year, then mark carried_forward ──
-  const activeLoans = state.loans.filter(l => l.status === "active" || l.status === "outstanding");
-  if (activeLoans.length > 0) {
-    const historyRows = activeLoans.map(loan => ({
-      id: crypto.randomUUID(),
-      year: yearLabel,
-      profile_id: loan.memberId,
-      member_name: loanMemberName(loan),
-      from_date: loan.date || null,
-      principal: loan.amount || 0,
-      monthly_interest: loan.interest || 0,
-      interest_text: loan.interestText || "",
-      renewal_or_return: loan.renewalOrReturn || "",
-      status: "Carried Forward",
-      total_paid: loan.totalPaid || 0,
-      is_interest_free: Boolean(loan.isInterestFree),
-      notes: loan.notes || "",
-    }));
+  // ── 3. Snapshot all loans to loan_history for the closed year ────────
+  const allLoansForSnapshot = state.loans.filter(l => !l.notes?.includes("emi_entry") || l.loanType === "emi");
+  if (allLoansForSnapshot.length > 0) {
+    const historyRows = allLoansForSnapshot.map(loan => {
+      const isCleared = loan.status === "clear" || loan.status === "cleared";
+      return {
+        id: crypto.randomUUID(),
+        year: yearLabel,
+        profile_id: loan.memberId,
+        member_name: loanMemberName(loan),
+        from_date: loan.date || null,
+        principal: loan.amount || 0,
+        monthly_interest: loan.interest || 0,
+        interest_text: loan.interestText || "",
+        renewal_or_return: loan.renewalOrReturn || "",
+        status: isCleared ? "Cleared" : "Carried Forward",
+        total_paid: loan.totalPaid || 0,
+        is_interest_free: Boolean(loan.isInterestFree),
+        notes: loan.notes || "",
+      };
+    });
     await liveQuery(supabaseClient.from("loan_history").insert(historyRows));
   }
-  // Leave current_loans status as "active" so they appear normally in Year 7
+
+  // Delete cleared loans from current_loans — they stay in history only
+  const clearedLoans = state.loans.filter(l => l.status === "clear" || l.status === "cleared");
+  for (const loan of clearedLoans) {
+    await liveQuery(supabaseClient.from("current_loans").delete().eq("id", loan.id));
+  }
+  // Active loans stay in current_loans as-is (still "active") for Year 7
 
   // ── 4. Advance settings to next year ─────────────────────────────────
   const ORDINALS_NEXT = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
