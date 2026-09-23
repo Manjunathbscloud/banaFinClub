@@ -3809,9 +3809,32 @@ function renderAdmin() {
         const yearNum = state.settings.activeYearNumber || 6;
         const yearDbYear = 2020 + yearNum;
         const allActive = activeMembers();
+        const yearStarted = state.settings.yearStarted !== false;
         const signoffEnabled = state.settings.financialSignoffEnabled === true;
         const acks = state.meetingAcknowledgements.filter(a => a.year === yearDbYear && a.type === "financial");
         const pendingCount = allActive.length - acks.length;
+
+        if (!yearStarted) {
+          // Year just created from close — show Start Next Year form
+          return `
+      <details class="card collapsible" open>
+        <summary class="card-header">
+          <div><h3>Year End Management</h3><p>Configure Year ${yearNum} to begin</p></div>
+          <span class="badge warn" style="margin-left:auto;margin-right:8px;">Action needed</span>
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Year ${yearNum - 1} is closed. Set the rates for Year ${yearNum} to start collecting payments.</p>
+          <form class="form" data-form="start-next-year">
+            <label class="field"><span>Renewal Fee (per member)</span><input name="renewalFee" type="number" min="0" placeholder="e.g. 3000" required /></label>
+            <label class="field"><span>Monthly Deposit (per member)</span><input name="monthlyDeposit" type="number" min="0" placeholder="e.g. 2000" required /></label>
+            <label class="field"><span>Max Loan Per Member</span><input name="maxLoan" type="number" min="0" placeholder="e.g. 300000" required /></label>
+            <button class="primary" type="submit" style="width:100%;">Start Year ${yearNum} →</button>
+          </form>
+        </div>
+      </details>`;
+        }
+
         return `
       <details class="card collapsible">
         <summary class="card-header">
@@ -3837,14 +3860,9 @@ function renderAdmin() {
               </div>`;
             }).join("")}
           </div>` : ""}
-          ${state.settings.yearClosed ? `
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">✅</span>
-            <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} closed. Year ${yearNum + 1} started.</p>
-          </div>` : `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
             <button class="primary" data-action="close-current-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;">Close ${yearDbYear} Year</button>
-          </div>`}
+          </div>
         </div>
       </details>`;
       })()}
@@ -4950,6 +4968,7 @@ document.addEventListener("submit", async (event) => {
       showToast("MPIN updated successfully.");
       form.reset();
     }
+    if (type === "start-next-year") await startNextYear(data);
     if (type === "add-rule") {
       const section = (data.section || "").trim();
       const item = (data.item || "").trim();
@@ -5919,6 +5938,37 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 }
 
 
+async function startNextYear(data) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const renewalFeePerMember = Number(data.renewalFee) || 0;
+  const monthlyDeposit = Number(data.monthlyDeposit) || 0;
+  const maxLoan = Number(data.maxLoan) || 0;
+  const totalRenewalFee = renewalFeePerMember * activeMembers().length;
+
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber,
+      activeYearStart: current.activeYearStart,
+      activeYearLabel: current.activeYearLabel,
+      yearClosed: false,
+      yearStarted: true,
+      activeYearRenewalFee: totalRenewalFee,
+      activeYearRenewalFeePerMember: renewalFeePerMember,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: false,
+      meetingSignoffEnabled: false,
+    },
+  }));
+  await liveQuery(supabaseClient.from("settings").upsert({ id: "monthly_deposit", value: { amount: monthlyDeposit } }));
+  await liveQuery(supabaseClient.from("settings").upsert({ id: "loan_settings", value: { maxLoanPerMember: maxLoan } }));
+
+  await loadLiveState();
+  render();
+  showToast(`✓ Year ${current.activeYearNumber} started — ₹${monthlyDeposit}/month · ₹${renewalFeePerMember} renewal`);
+}
+
 function showCloseYearConfirmModal() {
   if (document.getElementById("close-year-confirm-modal")) return;
   const yearNum = state.settings.activeYearNumber || 6;
@@ -6060,6 +6110,7 @@ async function closeCurrentYear() {
       activeYearStart: nextMonthStart,
       activeYearLabel: nextYearLabel,
       yearClosed: false,
+      yearStarted: false,
       activeYearRenewalFee: 0,
       activeYearRenewalFeePerMember: 0,
       activeYearExits: [],
