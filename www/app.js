@@ -3373,15 +3373,15 @@ function showLoanYearModal(yearKey) {
       </li>`;
     }).join("");
     const totalPrincipal = loans.reduce((s, l) => s + l.amount, 0);
-    const totalInterestPaid = loans
-      .filter(l => l.notes !== "emi_entry" && !l.status.toLowerCase().includes("emi"))
-      .reduce((s, l) => s + l.totalPaid, 0);
+    // Pull interest total from deposit_summaries (same figure shown in deposits section)
+    const depRow = state.deposits.find(d => d.label === yearLabel);
+    const totalInterestPaid = depRow ? Number(depRow.interest || 0) : 0;
     bodyHtml = `
       <ul class="year-modal-list">${rows}</ul>
       <div class="year-modal-total" style="margin-top:10px;">
         <div style="display:flex;flex-direction:column;gap:2px;">
           <span>Total Outstanding</span>
-          <small style="font-weight:400;color:#6b7280;">Year interest paid: ${money(totalInterestPaid)}</small>
+          <small style="font-weight:400;color:#6b7280;">Interest collected: ${money(totalInterestPaid)}</small>
         </div>
         <strong>${money(totalPrincipal)}</strong>
       </div>`;
@@ -6019,8 +6019,6 @@ async function closeCurrentYear() {
   if (allLoansForSnapshot.length > 0) {
     const historyRows = allLoansForSnapshot.map(loan => {
       const isCleared = loan.status === "clear" || loan.status === "cleared";
-      const yearInterestStart = yearNum === 6 ? "2025-11-01" : (activeYearStart + "-01");
-      const yearInterest = yearBoundedInterest(loan, yearInterestStart, today());
       return {
         id: crypto.randomUUID(),
         year: yearLabel,
@@ -6032,7 +6030,7 @@ async function closeCurrentYear() {
         interest_text: loan.interestText || "",
         renewal_or_return: loan.renewalOrReturn || "",
         status: isCleared ? "Cleared" : "Carried Forward",
-        total_paid: yearInterest,
+        total_paid: 0,
         is_interest_free: Boolean(loan.isInterestFree),
         notes: loan.notes || "",
       };
