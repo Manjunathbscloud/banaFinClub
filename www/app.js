@@ -2845,7 +2845,7 @@ function renderDeposits() {
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-            ${y.balance !== null ? `<strong style="font-size:15px;color:#2563eb;">${money(y.balance)}</strong><small style="color:#9ca3af;font-size:11px;">closing balance</small>` : `<small style="color:#f59e0b;font-size:11px;">in progress</small>`}
+            ${y.balance !== null ? `<strong style="font-size:15px;color:#2563eb;">${money(y.balance)}</strong><small style="color:#9ca3af;font-size:11px;">${y.active ? "running balance" : "closing balance"}</small>` : `<small style="color:#f59e0b;font-size:11px;">in progress</small>`}
             <span class="tile-chevron">›</span>
           </div>
         </div>`).join("")}
@@ -6026,7 +6026,8 @@ async function closeCurrentYear() {
   const nextYearLabel = `${ORDINALS_NEXT[nextYearNum - 1] || `Year ${nextYearNum}`} Year`;
   const nextYearDbYear = 2020 + nextYearNum;
   const _now = new Date();
-  const nextMonthStart = new Date(_now.getFullYear(), _now.getMonth() + 1, 1).toISOString().slice(0, 7);
+  const _nm = new Date(_now.getFullYear(), _now.getMonth() + 1, 1);
+  const nextMonthStart = `${_nm.getFullYear()}-${String(_nm.getMonth() + 1).padStart(2, "0")}`;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
     value: {
