@@ -1750,7 +1750,7 @@ function renderHome() {
                     <strong style="font-size:15px;color:#dc2626;">${money(loansOutstanding)}</strong>
                   </div>
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Pool Balance</p>
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Closing Balance</p>
                     <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
                   </div>
                 </div>
