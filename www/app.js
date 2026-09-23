@@ -3845,11 +3845,11 @@ function renderAdmin() {
           ${state.settings.yearClosed ? `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
             <span style="font-size:18px;">✅</span>
-            <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} is closed. Deposits consolidated.</p>
+            <p style="font-size:13px;color:var(--muted);margin:0;">Year ${yearNum} closed. Year ${yearNum + 1} started.</p>
           </div>` : acks.length === allActive.length && allActive.length > 0 ? `
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-            <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">All members have acknowledged. You can now close Year ${yearNum}.</p>
-            <button class="primary" data-action="close-current-year" type="button" style="width:100%;">Close Year ${yearNum}</button>
+            <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">All members have acknowledged. Ready to close.</p>
+            <button class="primary" data-action="close-current-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;">Close ${yearDbYear} Year</button>
           </div>` : ""}
         </div>
       </details>`;
@@ -4571,13 +4571,17 @@ document.addEventListener("click", async (event) => {
 
     if (action.dataset.action === "close-current-year") {
       if (!isAdmin()) { showToast("Admin access required."); return; }
-      action.disabled = true;
-      action.textContent = "Closing…";
+      showCloseYearConfirmModal();
+    }
+
+    if (action.dataset.action === "confirm-close-year") {
+      const modal = document.getElementById("close-year-confirm-modal");
+      if (modal) modal.remove();
+      const btn = document.querySelector("[data-action='close-current-year']");
       try {
         await closeCurrentYear();
       } catch (e) {
-        action.disabled = false;
-        action.textContent = `Close Year ${state.settings.activeYearNumber || 6}`;
+        if (btn) { btn.disabled = false; btn.textContent = `Close ${(2020 + (state.settings.activeYearNumber || 6))} Year`; }
         showToast(typeof e?.message === "string" ? e.message : "Failed to close year. Please try again.");
       }
     }
@@ -5921,6 +5925,27 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 }
 
 
+function showCloseYearConfirmModal() {
+  if (document.getElementById("close-year-confirm-modal")) return;
+  const yearNum = state.settings.activeYearNumber || 6;
+  const yearDbYear = 2020 + yearNum;
+  const modal = document.createElement("div");
+  modal.id = "close-year-confirm-modal";
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:360px;">
+      <div style="text-align:center;padding:8px 0 16px;">
+        <span style="font-size:36px;">⚠️</span>
+        <h3 style="margin:10px 0 6px;">Close ${yearDbYear} Year?</h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">This will consolidate deposits, carry loans forward, and start Year ${yearNum + 1}. This cannot be undone.</p>
+        <button class="primary" data-action="confirm-close-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;margin-bottom:10px;">Yes, Close ${yearDbYear} Year</button>
+        <button class="secondary" data-action="dismiss-close-year-modal" type="button" style="width:100%;">Cancel</button>
+      </div>
+    </div>`;
+  modal.addEventListener("click", e => { if (e.target === modal || e.target.dataset.action === "dismiss-close-year-modal") modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 async function closeCurrentYear() {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const yearNum = state.settings.activeYearNumber || 6;
@@ -5997,26 +6022,51 @@ async function closeCurrentYear() {
     breakdown,
   }, { onConflict: "id" }));
 
-  // ── 3. Mark year as closed in settings ───────────────────────────────
-  const current = state.settings;
+  // ── 3. Mark active loans as carried_forward ──────────────────────────
+  const activeLoans = state.loans.filter(l => l.status === "active" || l.status === "outstanding");
+  for (const loan of activeLoans) {
+    await liveQuery(supabaseClient.from("current_loans").update({ status: "carried_forward" }).eq("id", loan.id));
+  }
+
+  // ── 4. Advance settings to next year ─────────────────────────────────
+  const ORDINALS_NEXT = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+  const nextYearNum = yearNum + 1;
+  const nextYearLabel = `${ORDINALS_NEXT[nextYearNum - 1] || `Year ${nextYearNum}`} Year`;
+  const nextYearDbYear = 2020 + nextYearNum;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
     value: {
-      activeYearNumber: current.activeYearNumber || 6,
-      activeYearStart: current.activeYearStart || currentMonth(),
-      activeYearLabel: current.activeYearLabel || "",
-      yearClosed: true,
-      activeYearRenewalFee: current.activeYearRenewalFee || 0,
-      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: current.financialSignoffEnabled || false,
-      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
+      activeYearNumber: nextYearNum,
+      activeYearStart: currentMonth(),
+      activeYearLabel: nextYearLabel,
+      yearClosed: false,
+      activeYearRenewalFee: 0,
+      activeYearRenewalFeePerMember: 0,
+      activeYearExits: [],
+      financialSignoffEnabled: false,
+      meetingSignoffEnabled: false,
     },
   }));
 
+  // ── 5. Create blank deposit_summaries stub for next year ─────────────
+  const existingNext = state.deposits.find(d => d.year === nextYearDbYear);
+  if (!existingNext) {
+    await liveQuery(supabaseClient.from("deposit_summaries").insert({
+      id: crypto.randomUUID(),
+      year: nextYearDbYear,
+      label: nextYearLabel,
+      principal: 0,
+      interest: 0,
+      balance: runningBalance,
+      exit_payouts: 0,
+      expenditure: 0,
+      breakdown: [],
+    }));
+  }
+
   await loadLiveState();
   render();
-  showToast(`✓ Year ${yearNum} closed. Records consolidated.`);
+  showToast(`✓ Year ${yearNum} closed. Year ${nextYearNum} started.`);
 }
 
 function showFinancialSignoffModal() {
