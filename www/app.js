@@ -6014,8 +6014,26 @@ async function closeCurrentYear() {
     breakdown,
   }, { onConflict: "id" }));
 
-  // ── 3. Mark active loans as carried_forward ──────────────────────────
+  // ── 3. Snapshot active loans to loan_history for closed year, then mark carried_forward ──
   const activeLoans = state.loans.filter(l => l.status === "active" || l.status === "outstanding");
+  if (activeLoans.length > 0) {
+    const historyRows = activeLoans.map(loan => ({
+      id: crypto.randomUUID(),
+      year: yearLabel,
+      profile_id: loan.memberId,
+      member_name: loanMemberName(loan),
+      from_date: loan.date || null,
+      principal: loan.amount || 0,
+      monthly_interest: loan.interest || 0,
+      interest_text: loan.interestText || "",
+      renewal_or_return: loan.renewalOrReturn || "",
+      status: "Carried Forward",
+      total_paid: loan.totalPaid || 0,
+      is_interest_free: Boolean(loan.isInterestFree),
+      notes: loan.notes || "",
+    }));
+    await liveQuery(supabaseClient.from("loan_history").insert(historyRows));
+  }
   for (const loan of activeLoans) {
     await liveQuery(supabaseClient.from("current_loans").update({ status: "carried_forward" }).eq("id", loan.id));
   }
