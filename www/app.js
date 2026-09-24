@@ -639,6 +639,7 @@ async function loadLiveState() {
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
       maxLoanPerMember: Number(settingsById.loan_settings?.value?.maxLoanPerMember ?? 300000),
+      monthlyDeposit: Number(settingsById.monthly_deposit?.amount ?? settingsById.active_year_info?.monthlyDeposit ?? 2000),
       annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
     currentUserId: current?.status === "active" ? current.id : null,
@@ -3213,14 +3214,14 @@ function showLoanYearModal(yearKey) {
     let _totalYrInt = 0;
     if (_activeNumT === 6) {
       const _yr6LiveInt = state.monthlyPayments
-        .filter(p => p.status === "paid" && p.month >= "2026-07")
+        .filter(p => p.status === "paid" && p.month >= "2026-08")
         .reduce((s, p) => {
           const _mem = memberById(p.memberId);
           if (!_mem) return s;
           const { interest } = paymentSplit(_mem, p.month, Number(p.paidAmount || p.amount || 0));
           return s + interest;
         }, 0);
-      _totalYrInt = 65546 + _yr6LiveInt;
+      _totalYrInt = 87967 + _yr6LiveInt;
     } else {
       const _yrPayStart = activeYearCutoffMonth();
       _totalYrInt = state.monthlyPayments
