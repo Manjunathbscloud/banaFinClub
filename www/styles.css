@@ -2794,6 +2794,7 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 
 .meeting-editor-row input[type="text"],
 .meeting-editor-row input[type="date"],
+.meeting-editor-row input[type="number"],
 .meeting-editor-row textarea {
   width: 100%;
   box-sizing: border-box;
