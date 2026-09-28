@@ -297,50 +297,67 @@ interface YearRow {
 function buildYearByYearTable(allYears: YearRow[]): string {
   if (!allYears || !allYears.length) return "";
   const sorted = [...allYears].sort((a, b) => a.year - b.year);
-  const totalPrincipal  = sorted.reduce((s, r) => s + Number(r.principal    || 0), 0);
-  const totalInterest   = sorted.reduce((s, r) => s + Number(r.interest     || 0), 0);
-  const totalExpenses   = sorted.reduce((s, r) => s + Number(r.expenditure  || 0), 0);
-  const totalExitPayouts= sorted.reduce((s, r) => s + Number(r.exit_payouts || 0), 0);
-  const totalBalance    = totalPrincipal + totalInterest - totalExpenses - totalExitPayouts;
+  const totalPrincipal   = sorted.reduce((s, r) => s + Number(r.principal    || 0), 0);
+  const totalInterest    = sorted.reduce((s, r) => s + Number(r.interest     || 0), 0);
+  const totalExpenses    = sorted.reduce((s, r) => s + Number(r.expenditure  || 0), 0);
+  const totalExitPayouts = sorted.reduce((s, r) => s + Number(r.exit_payouts || 0), 0);
+  const totalBalance     = totalPrincipal + totalInterest - totalExpenses - totalExitPayouts;
 
-  const rows = sorted.map(r => `
+  function row(label: string, value: string, labelColor: string, valueColor: string): string {
+    return `
     <tr>
-      <td style="padding:10px 12px;font-size:13px;color:#374151;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${r.label || `Year ${r.year - 2020}`}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#1d4ed8;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.principal || 0))}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#15803d;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.interest || 0))}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#92400e;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${Number(r.expenditure) > 0 ? inr(Number(r.expenditure)) : "—"}</td>
-      <td style="padding:10px 12px;font-size:13px;font-weight:700;color:#1f2937;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.balance || 0))}</td>
-    </tr>`).join("");
+      <td style="padding:7px 0;font-size:11px;font-weight:600;color:${labelColor};width:50%;">${label}</td>
+      <td style="padding:7px 0;font-size:13px;font-weight:700;color:${valueColor};text-align:right;">${value}</td>
+    </tr>`;
+  }
+
+  const cards = sorted.map(r => {
+    const label = r.label || `Year ${r.year - 2020}`;
+    const principal   = Number(r.principal   || 0);
+    const interest    = Number(r.interest    || 0);
+    const expenditure = Number(r.expenditure || 0);
+    const balance     = Number(r.balance     || 0);
+    return `
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:800;color:#1a1a2e;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #f3f4f6;">${label}</div>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${row("Deposits", inr(principal), "#6b7280", "#1d4ed8")}
+        ${row("Interest Earned", inr(interest), "#6b7280", "#15803d")}
+        ${expenditure > 0 ? row("Expenses", inr(expenditure), "#6b7280", "#92400e") : ""}
+        <tr><td colspan="2" style="padding:4px 0;border-top:1px solid #f3f4f6;"></td></tr>
+        ${row("Closing Balance", inr(balance), "#374151", "#1f2937")}
+      </table>
+    </div>`;
+  }).join("");
 
   return `
   <div style="margin-bottom:24px;">
     <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">📅 Year-by-Year Record</div>
-    <div style="overflow-x:auto;border-radius:10px;border:1px solid #e5e7eb;">
-      <table style="width:100%;border-collapse:collapse;min-width:400px;">
-        <thead>
-          <tr style="background:#f9fafb;">
-            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid #e5e7eb;">Year</th>
-            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Deposits</th>
-            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Interest</th>
-            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Expenses</th>
-            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#1f2937;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-        <tfoot>
-          <tr style="background:#1a1a2e;">
-            <td style="padding:12px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);">Total</td>
-            <td style="padding:12px;font-size:13px;font-weight:700;color:#93c5fd;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalPrincipal)}</td>
-            <td style="padding:12px;font-size:13px;font-weight:700;color:#86efac;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalInterest)}</td>
-            <td style="padding:12px;font-size:13px;font-weight:700;color:#fcd34d;text-align:right;font-variant-numeric:tabular-nums;">${totalExpenses > 0 ? inr(totalExpenses) : "—"}</td>
-            <td style="padding:12px;font-size:14px;font-weight:900;color:#FF9900;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalBalance)}</td>
-          </tr>
-        </tfoot>
+    ${cards}
+    <div style="background:#1a1a2e;border-radius:10px;padding:14px 16px;margin-top:4px;">
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Overall Totals</div>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;width:50%;">Total Deposits</td>
+          <td style="font-size:13px;font-weight:700;color:#93c5fd;text-align:right;padding:5px 0;">${inr(totalPrincipal)}</td>
+        </tr>
+        <tr>
+          <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;">Total Interest</td>
+          <td style="font-size:13px;font-weight:700;color:#86efac;text-align:right;padding:5px 0;">${inr(totalInterest)}</td>
+        </tr>
+        ${totalExpenses > 0 ? `<tr>
+          <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;">Total Expenses</td>
+          <td style="font-size:13px;font-weight:700;color:#fcd34d;text-align:right;padding:5px 0;">${inr(totalExpenses)}</td>
+        </tr>` : ""}
+        <tr>
+          <td colspan="2" style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.1);"></td>
+        </tr>
+        <tr>
+          <td style="font-size:12px;font-weight:700;color:#fff;padding:4px 0;">Pool Balance</td>
+          <td style="font-size:16px;font-weight:900;color:#FF9900;text-align:right;padding:4px 0;">${inr(totalBalance)}</td>
+        </tr>
       </table>
     </div>
-    <p style="font-size:11px;color:#9ca3af;margin:6px 0 0;text-align:right;">Balance = Deposits + Interest − Expenses − Exit Payouts</p>
   </div>`;
 }
 
