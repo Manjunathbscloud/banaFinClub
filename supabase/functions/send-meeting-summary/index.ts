@@ -297,10 +297,11 @@ interface YearRow {
 function buildYearByYearTable(allYears: YearRow[]): string {
   if (!allYears || !allYears.length) return "";
   const sorted = [...allYears].sort((a, b) => a.year - b.year);
-  const totalPrincipal = sorted.reduce((s, r) => s + Number(r.principal || 0), 0);
-  const totalInterest  = sorted.reduce((s, r) => s + Number(r.interest  || 0), 0);
-  const totalExpenses  = sorted.reduce((s, r) => s + Number(r.expenditure || 0), 0);
-  const latestBalance  = Number(sorted[sorted.length - 1]?.balance || 0);
+  const totalPrincipal  = sorted.reduce((s, r) => s + Number(r.principal    || 0), 0);
+  const totalInterest   = sorted.reduce((s, r) => s + Number(r.interest     || 0), 0);
+  const totalExpenses   = sorted.reduce((s, r) => s + Number(r.expenditure  || 0), 0);
+  const totalExitPayouts= sorted.reduce((s, r) => s + Number(r.exit_payouts || 0), 0);
+  const totalBalance    = totalPrincipal + totalInterest - totalExpenses - totalExitPayouts;
 
   const rows = sorted.map(r => `
     <tr>
@@ -334,7 +335,7 @@ function buildYearByYearTable(allYears: YearRow[]): string {
             <td style="padding:12px;font-size:13px;font-weight:700;color:#93c5fd;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalPrincipal)}</td>
             <td style="padding:12px;font-size:13px;font-weight:700;color:#86efac;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalInterest)}</td>
             <td style="padding:12px;font-size:13px;font-weight:700;color:#fcd34d;text-align:right;font-variant-numeric:tabular-nums;">${totalExpenses > 0 ? inr(totalExpenses) : "—"}</td>
-            <td style="padding:12px;font-size:14px;font-weight:900;color:#FF9900;text-align:right;font-variant-numeric:tabular-nums;">${inr(latestBalance)}</td>
+            <td style="padding:12px;font-size:14px;font-weight:900;color:#FF9900;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalBalance)}</td>
           </tr>
         </tfoot>
       </table>
