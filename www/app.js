@@ -3887,6 +3887,26 @@ function renderAdmin() {
       </details>`;
       })()}
 
+      <details class="card collapsible">
+        <summary class="card-header">
+          <div><h3>Test Notifications</h3><p>Send sample notifications to yourself only</p></div>
+          <span class="collapse-icon">⌄</span>
+        </summary>
+        <div class="card-body">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Each button fires that notification type to your account only — inbox, email, and push. Use this to check templates before enabling for all members.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="secondary" data-action="test-notif" data-type="signup_approved" data-title="Welcome to Banakar FinClub!" data-body="Your membership has been approved! You can now log in to the app." type="button">✅ Signup Approved</button>
+            <button class="secondary" data-action="test-notif" data-type="loan_approved" data-title="Loan Approved ✓" data-body="Your loan of ₹1,00,000 has been approved and will be disbursed shortly." type="button">✅ Loan Approved</button>
+            <button class="secondary" data-action="test-notif" data-type="loan_disbursed" data-title="Loan Disbursed 💰" data-body="₹1,00,000 has been disbursed to you. Monthly interest: ₹1,250 at 1.25%." type="button">💰 Loan Disbursed</button>
+            <button class="secondary" data-action="test-notif" data-type="payment_confirmed" data-title="Payment confirmed ✓" data-body="Your payment of ₹2,000 for October 2026 has been recorded. Thank you!" type="button">💚 Payment Confirmed</button>
+            <button class="secondary" data-action="test-notif" data-type="loan_extension_approved" data-title="Extension Approved ✓" data-body="Your loan extension request has been approved. New due date: Oct 2027." type="button">📅 Extension Approved</button>
+            <button class="secondary" data-action="test-notif" data-type="partial_repayment_approved" data-title="Payment Recorded ✅" data-body="Your partial repayment of ₹25,000 has been recorded. Outstanding: ₹75,000." type="button">💳 Partial Repayment Recorded</button>
+            <button class="secondary" data-action="test-notif" data-type="emi_completed" data-title="EMI Loan fully paid! 🏆" data-body="Congratulations! You have completed all 12 EMI payments. Your loan is now closed." type="button">🏆 EMI Completed</button>
+            <button class="secondary" data-action="test-notif" data-type="signoff_request" data-title="Action Required ✍️" data-body="Please review and sign off on your Year 6 financial records in the app." type="button">✍️ Signoff Request</button>
+          </div>
+        </div>
+      </details>
+
       ${(() => {
         const pendingExtensions = (state.extensionRequests || []).filter((e) => e.status === "pending");
         const pendingPartialRequests = (state.partialRepaymentRequests || []).filter(r => r.status === "pending");
@@ -4601,6 +4621,20 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
     if (action.dataset.action === "toggle-year-close") { event.preventDefault(); await toggleYearClose(action.checked); }
     if (action.dataset.action === "share-summary") { event.preventDefault(); await shareMeetingSummary(); }
+    if (action.dataset.action === "test-notif") {
+      event.preventDefault();
+      const type = action.dataset.type;
+      const title = action.dataset.title;
+      const body = action.dataset.body;
+      action.disabled = true;
+      action.textContent = "Sending…";
+      await sendNotificationToSelf(type, title, body);
+      showToast("Sent to your account — check inbox + email + push.");
+      action.disabled = false;
+      action.textContent = action.dataset.origLabel || action.textContent;
+      await loadLiveState();
+      render();
+    }
 
     if (action.dataset.action === "toggle-meeting-signoff") { event.preventDefault(); await toggleMeetingSignoff(action.checked); }
 
@@ -5646,21 +5680,20 @@ async function rejectLoan(id) {
 const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
-  if (!liveBackendReady) return;
-  const members = activeMembers();
-  await Promise.allSettled(members.map(m => notifyMember(m.id, type, title, body, relatedId)));
+  // Notifications disabled — re-enable when ready
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
-  if (!liveBackendReady || !profileId) return;
+  // Notifications disabled — re-enable when ready
+}
+
+async function sendNotificationToSelf(type, title, body) {
+  if (!liveBackendReady) return;
+  const profileId = currentProfileId();
+  if (!profileId) return;
   try {
     await supabaseClient.from("notifications").insert({
-      profile_id: profileId,
-      type,
-      title,
-      body,
-      related_id: relatedId || null,
-      is_read: false,
+      profile_id: profileId, type, title, body, related_id: null, is_read: false,
     });
   } catch (_) {}
   try {
@@ -5826,11 +5859,11 @@ async function requestPartialRepayment(loanId, amount) {
       `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Please record it.`
     );
   }
-  await notifyAllActiveMembers(
-    "partial_repayment_requested",
-    "Loan Payment Notification",
-    `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Awaiting admin recording.`
-  );
+  // await notifyAllActiveMembers(
+  //   "partial_repayment_requested",
+  //   "Loan Payment Notification",
+  //   `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Awaiting admin recording.`
+  // );
 
   document.getElementById("partial-req-modal")?.remove();
   document.body.style.overflow = "";
@@ -5879,11 +5912,11 @@ async function approvePartialRepaymentRequest(requestId) {
     requestId
   );
 
-  await notifyAllActiveMembers(
-    "partial_repayment_approved",
-    "Loan Partial Repayment",
-    `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
-  );
+  // await notifyAllActiveMembers(
+  //   "partial_repayment_approved",
+  //   "Loan Partial Repayment",
+  //   `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
+  // );
 
   await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
   await loadLiveState();
