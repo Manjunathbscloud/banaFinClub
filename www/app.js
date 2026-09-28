@@ -3903,6 +3903,7 @@ function renderAdmin() {
             <button class="secondary" data-action="test-notif" data-type="partial_repayment_approved" data-title="Payment Recorded ✅" data-body="Your partial repayment of ₹25,000 has been recorded. Outstanding: ₹75,000." type="button">💳 Partial Repayment Recorded</button>
             <button class="secondary" data-action="test-notif" data-type="emi_completed" data-title="EMI Loan fully paid! 🏆" data-body="Congratulations! You have completed all 12 EMI payments. Your loan is now closed." type="button">🏆 EMI Completed</button>
             <button class="secondary" data-action="test-notif" data-type="signoff_request" data-title="Action Required ✍️" data-body="Please review and sign off on your Year 6 financial records in the app." type="button">✍️ Signoff Request</button>
+            <button class="secondary" data-action="test-meeting-summary" type="button" style="margin-top:4px;border-color:var(--accent);color:var(--accent);">📧 Annual Meeting Summary (email + SMS to me)</button>
           </div>
         </div>
       </details>
@@ -4621,6 +4622,12 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
     if (action.dataset.action === "toggle-year-close") { event.preventDefault(); await toggleYearClose(action.checked); }
     if (action.dataset.action === "share-summary") { event.preventDefault(); await shareMeetingSummary(); }
+    if (action.dataset.action === "test-meeting-summary") {
+      event.preventDefault();
+      action.disabled = true; action.textContent = "Sending…";
+      await shareMeetingSummary({ testOnly: true });
+      action.disabled = false; action.textContent = "📧 Annual Meeting Summary (email + SMS to me)";
+    }
     if (action.dataset.action === "test-notif") {
       event.preventDefault();
       const type = action.dataset.type;
@@ -6465,10 +6472,10 @@ async function toggleYearClose(enabled) {
   render();
 }
 
-async function shareMeetingSummary() {
+async function shareMeetingSummary({ testOnly = false } = {}) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const btn = document.querySelector("[data-action='share-summary']");
-  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  if (!testOnly && btn) { btn.disabled = true; btn.textContent = "Sending…"; }
 
   try {
     const activeYearNum = state.settings.activeYearNumber || 7;
@@ -6500,6 +6507,8 @@ async function shareMeetingSummary() {
 
     const payload = {
       type: "annual_meeting",
+      test_only: testOnly,
+      test_profile_id: testOnly ? currentProfileId() : undefined,
       yearNum: closedYearNum,
       yearLabel: closedYearLabel,
       date: mr.date || "",
@@ -6543,7 +6552,7 @@ async function shareMeetingSummary() {
     showToast("Failed to send summary. Please try again.");
     console.error("shareMeetingSummary error:", err);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Share Summary →"; }
+    if (!testOnly && btn) { btn.disabled = false; btn.textContent = "Share Summary →"; }
   }
 }
 

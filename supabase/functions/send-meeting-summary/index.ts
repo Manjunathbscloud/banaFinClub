@@ -566,13 +566,14 @@ serve(async (req) => {
   try {
     const data = await req.json();
     const type = String(data.type || "annual_meeting");
+    const testOnly = Boolean(data.test_only);
+    const testProfileId = String(data.test_profile_id || "");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Active members with email and phone
-    const { data: members, error: membErr } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, phone")
-      .eq("status", "active");
+    // Active members with email and phone (test_only = only the requesting admin)
+    let membersQuery = supabase.from("profiles").select("id, full_name, email, phone").eq("status", "active");
+    if (testOnly && testProfileId) membersQuery = membersQuery.eq("id", testProfileId);
+    const { data: members, error: membErr } = await membersQuery;
     if (membErr) throw membErr;
 
     const client = new SMTPClient({
