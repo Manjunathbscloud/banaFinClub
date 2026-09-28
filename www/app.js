@@ -638,7 +638,7 @@ async function loadLiveState() {
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
       emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
-      maxLoanPerMember: Number(settingsById.loan_settings?.value?.maxLoanPerMember ?? 300000),
+      maxLoanPerMember: Number(settingsById.loan_settings?.maxLoanPerMember ?? 300000),
       monthlyDeposit: Number(settingsById.monthly_deposit?.amount ?? settingsById.active_year_info?.monthlyDeposit ?? 2000),
       annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
@@ -1020,7 +1020,8 @@ function memberEmiMonthly(member) {
 }
 
 function memberMonthlyDue(member) {
-  return expectedMonthlyDeposit(member) + memberMonthlyInterest(member.id) + memberEmiMonthly(member);
+  const dueMonth = currentMonth() < activeYearCutoffMonth() ? activeYearCutoffMonth() : currentMonth();
+  return expectedMonthlyDeposit(member, dueMonth) + memberMonthlyInterest(member.id) + memberEmiMonthly(member);
 }
 
 // Splits a member's paid amount into deposit (principal) and interest correctly.
@@ -3532,8 +3533,7 @@ function renderDashboard() {
         activeLiveDeposits += dep;
         activeLiveInterest += interest;
       });
-    const activeRenewalFee = Number(state.settings.activeYearRenewalFee || 0);
-    activeChartDeposits = Math.max(0, activeRenewalFee + activeLiveDeposits - currentExpenditure);
+    activeChartDeposits = Math.max(0, activeLiveDeposits - currentExpenditure);
     activeChartInterest = activeLiveInterest;
   }
 
