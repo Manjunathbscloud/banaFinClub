@@ -2827,7 +2827,11 @@ function renderDeposits() {
     {
       key: "active",
       label: activeYearLabel,
-      sub: `${activeYearNum === 6 ? "Nov 2025" : `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()}`} – ${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`,
+      sub: (() => {
+        const startLabel = activeYearNum === 6 ? "Nov 2025" : `${MONTH_SHORT[new Date(activeYearStart + "-01").getMonth()]} ${new Date(activeYearStart + "-01").getFullYear()}`;
+        const nowLabel = `${MONTH_SHORT[_now.getMonth()]} ${_now.getFullYear()}`;
+        return currentMonth() < activeYearStart ? startLabel : `${startLabel} – ${nowLabel}`;
+      })(),
       balance: activeBalance,
       active: !state.settings.yearClosed,
       closed: state.settings.yearClosed === true,
