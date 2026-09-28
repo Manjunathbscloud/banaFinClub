@@ -6524,8 +6524,9 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       poolBalance,
       allYears,
       nextYearNum: activeYearNum,
-      nextYearRenewalFee: Number(state.settings.activeYearRenewalFeePerMember || 0),
+      nextYearRenewalFee: Number(state.settings.activeYearRenewalFeePerMember || state.settings.activeYearRenewalFee || 0),
       nextYearMonthlyDeposit: Number(state.settings.monthlyDeposit || 0),
+      nextYearMaxLoan: Number(state.settings.maxLoanPerMember || 0),
     };
 
     const { data: { session } } = await supabaseClient.auth.getSession();

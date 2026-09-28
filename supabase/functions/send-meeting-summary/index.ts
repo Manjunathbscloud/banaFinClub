@@ -344,20 +344,24 @@ function buildYearByYearTable(allYears: YearRow[]): string {
   </div>`;
 }
 
-function buildNextYearSection(renewalFee: number, monthlyDeposit: number, yearNum: number): string {
-  if (!renewalFee && !monthlyDeposit) return "";
+function buildNextYearSection(renewalFee: number, monthlyDeposit: number, maxLoan: number, yearNum: number): string {
+  const firstPayment = monthlyDeposit + renewalFee;
   return `
   <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
     <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">🔄 Year ${yearNum} — What to Expect</div>
     <div style="background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #bfdbfe;margin-bottom:8px;">
-      <div style="font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Monthly Deposit</div>
+      <div style="font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Monthly Deposit</div>
       <div style="font-size:18px;font-weight:800;color:#1e40af;">${inr(monthlyDeposit)}</div>
     </div>
-    ${renewalFee > 0 ? `<div style="background:#fffbeb;border-radius:10px;padding:12px 14px;border:1px solid #fcd34d;margin-bottom:8px;">
-      <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Renewal Fee (one-time)</div>
-      <div style="font-size:18px;font-weight:800;color:#d97706;">${inr(renewalFee)}</div>
+    <div style="background:#fffbeb;border-radius:10px;padding:12px 14px;border:1px solid #fcd34d;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Renewal Fee (one-time)</div>
+      <div style="font-size:18px;font-weight:800;color:#d97706;">${renewalFee > 0 ? inr(renewalFee) : "—"}</div>
+    </div>
+    ${maxLoan > 0 ? `<div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;border:1px solid #86efac;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Max Loan Per Member</div>
+      <div style="font-size:18px;font-weight:800;color:#15803d;">${inr(maxLoan)}</div>
     </div>` : ""}
-    ${renewalFee > 0 ? `<p style="font-size:12px;color:#2563eb;margin:10px 0 0;line-height:1.5;">Your first payment will be <strong>${inr(monthlyDeposit + renewalFee)}</strong> (deposit + renewal fee).</p>` : ""}
+    ${renewalFee > 0 ? `<p style="font-size:12px;color:#2563eb;margin:8px 0 0;line-height:1.5;">First month payment: <strong>${inr(firstPayment)}</strong> (deposit + renewal fee).</p>` : ""}
   </div>`;
 }
 
@@ -454,9 +458,10 @@ function buildAnnualMeetingEmailHtml(
   const loansOutstanding = Number(data.loansOutstanding || 0);
   const poolBalance   = Number(data.poolBalance|| 0);
   const allYears      = Array.isArray(data.allYears) ? data.allYears as YearRow[] : [];
-  const nextYearNum   = Number(data.nextYearNum || yearNum + 1);
-  const nextYearRenewalFee    = Number(data.nextYearRenewalFee    || 0);
-  const nextYearMonthlyDeposit= Number(data.nextYearMonthlyDeposit|| 0);
+  const nextYearNum            = Number(data.nextYearNum             || yearNum + 1);
+  const nextYearRenewalFee     = Number(data.nextYearRenewalFee      || 0);
+  const nextYearMonthlyDeposit = Number(data.nextYearMonthlyDeposit  || 0);
+  const nextYearMaxLoan        = Number(data.nextYearMaxLoan         || 0);
   const firstName     = String(member.full_name || "Member").split(" ")[0];
 
   const decisionsHtml = decisions.length
@@ -524,7 +529,7 @@ function buildAnnualMeetingEmailHtml(
 
       ${buildYearByYearTable(allYears)}
 
-      ${buildNextYearSection(nextYearRenewalFee, nextYearMonthlyDeposit, nextYearNum)}
+      ${buildNextYearSection(nextYearRenewalFee, nextYearMonthlyDeposit, nextYearMaxLoan, nextYearNum)}
 
       ${buildLoanSection(loans)}
 
