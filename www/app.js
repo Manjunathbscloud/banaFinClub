@@ -5646,11 +5646,35 @@ async function rejectLoan(id) {
 const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
-  // Notifications disabled — re-enable when ready
+  if (!liveBackendReady) return;
+  const members = activeMembers();
+  await Promise.allSettled(members.map(m => notifyMember(m.id, type, title, body, relatedId)));
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
-  // Notifications disabled — re-enable when ready
+  if (!liveBackendReady || !profileId) return;
+  try {
+    await supabaseClient.from("notifications").insert({
+      profile_id: profileId,
+      type,
+      title,
+      body,
+      related_id: relatedId || null,
+      is_read: false,
+    });
+  } catch (_) {}
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    await fetch(`${appConfig.supabaseUrl}/functions/v1/send-push`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session?.access_token}`,
+        "apikey": appConfig.supabaseAnonKey,
+      },
+      body: JSON.stringify({ profile_id: profileId, title, body }),
+    });
+  } catch (_) {}
 }
 
 async function requestExtension(loanId) {
@@ -5802,12 +5826,11 @@ async function requestPartialRepayment(loanId, amount) {
       `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Please record it.`
     );
   }
-  // TEST MODE: notifyAllActiveMembers disabled — remove comment to re-enable
-  // await notifyAllActiveMembers(
-  //   "partial_repayment_requested",
-  //   "Loan Payment Notification",
-  //   `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Awaiting admin recording.`
-  // );
+  await notifyAllActiveMembers(
+    "partial_repayment_requested",
+    "Loan Payment Notification",
+    `${memberName} has paid ${money(amount)} towards their loan (outstanding: ${money(outstanding)}). Awaiting admin recording.`
+  );
 
   document.getElementById("partial-req-modal")?.remove();
   document.body.style.overflow = "";
@@ -5856,12 +5879,11 @@ async function approvePartialRepaymentRequest(requestId) {
     requestId
   );
 
-  // TEST MODE: notifyAllActiveMembers disabled — remove comment to re-enable
-  // await notifyAllActiveMembers(
-  //   "partial_repayment_approved",
-  //   "Loan Partial Repayment",
-  //   `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
-  // );
+  await notifyAllActiveMembers(
+    "partial_repayment_approved",
+    "Loan Partial Repayment",
+    `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
+  );
 
   await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
   await loadLiveState();
