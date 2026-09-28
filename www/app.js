@@ -3854,11 +3854,17 @@ function renderAdmin() {
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          <div style="padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:4px;">
+          ${(() => {
+            const savedAt = state.settings.expenditureSavedAt;
+            const withinWindow = savedAt && (Date.now() - new Date(savedAt).getTime()) < 2 * 24 * 60 * 60 * 1000;
+            return `<div style="padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:4px;">
             <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Share Meeting Summary</p>
-            <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Send Year ${yearNum - 1} annual meeting summary to all members via SMS and email.</p>
-            <button class="primary" data-action="share-summary" type="button" style="width:100%;">Share Summary →</button>
-          </div>
+            ${withinWindow
+              ? `<p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Send Year ${yearNum - 1} annual meeting summary to all members via SMS and email.</p>
+            <button class="primary" data-action="share-summary" type="button" style="width:100%;">Share Summary →</button>`
+              : `<p style="font-size:12px;color:var(--muted);margin:0;">Enter meeting expenses in the Meetings section to unlock Share Summary.</p>`}
+          </div>`;
+          })()}
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-bottom:1px solid var(--border);">
             <p style="font-size:14px;font-weight:600;margin:0;">Member Signoff</p>
             <label class="toggle-switch" aria-label="Enable member signoff">
@@ -6033,6 +6039,11 @@ async function saveMeetingNotes(yearDbYear, data) {
       await liveQuery(supabaseClient.from("deposit_summaries")
         .update({ expenditure: newExpenditure, balance: newBalance })
         .eq("year", yearDbYear));
+      // Save timestamp so Share Summary button unlocks for 2 days
+      await liveQuery(supabaseClient.from("settings").upsert({
+        id: "active_year_info",
+        value: { ...state.settings, expenditureSavedAt: new Date().toISOString() },
+      }));
       // Add statement entry for expense change
       if (newExpenditure !== prevExpenditure) {
         const diff = newExpenditure - prevExpenditure;
