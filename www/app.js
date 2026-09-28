@@ -2258,6 +2258,7 @@ function renderMeetings() {
           <div class="meeting-editor-row"><label>Venue / Location</label><input type="text" id="mn-venue-${dbYear}" value="${escapeHtml(meeting.venue)}" placeholder="e.g. Wonder Valley Resort, Dandeli" /></div>
           <div class="meeting-editor-row"><label>Notes / Highlights</label><textarea id="mn-notes-${dbYear}" placeholder="What happened at the meeting...">${escapeHtml(meeting.notes)}</textarea></div>
           <div class="meeting-editor-row"><label>Key Decisions (one per line)</label><textarea id="mn-decisions-${dbYear}" placeholder="Monthly deposit rate&#10;New loan approved...">${escapeHtml(meeting.decisions.join("\n"))}</textarea></div>
+          <div class="meeting-editor-row"><label>Meeting Expenses (₹)</label><input type="number" min="0" id="mn-expense-${dbYear}" value="${dep?.expenditure || 0}" placeholder="0" /></div>
           <div class="meeting-editor-row">
             <label>Photos</label>
             <label for="mn-photo-input-${dbYear}" class="photos-btn" style="cursor:pointer;display:inline-block;margin-bottom:8px;">+ Add Photos</label>
@@ -4285,6 +4286,7 @@ document.addEventListener("click", async (event) => {
       notes: (document.getElementById(`mn-notes-${yr}`)?.value || "").trim(),
       decisions: (document.getElementById(`mn-decisions-${yr}`)?.value || "")
         .split("\n").map(d => d.trim()).filter(Boolean),
+      expense: Number(document.getElementById(`mn-expense-${yr}`)?.value || 0),
     });
     render();
     return;
@@ -5911,6 +5913,17 @@ async function saveMeetingNotes(yearDbYear, data) {
   } else {
     await liveQuery(supabaseClient.from("meeting_records")
       .insert({ year: yearDbYear, date: data.date, venue: data.venue, notes: data.notes, decisions: data.decisions }));
+  }
+  // Update deposit_summaries expenditure + recompute closing balance
+  if (data.expense !== undefined) {
+    const depRow = state.deposits.find(d => d.year === yearDbYear);
+    if (depRow) {
+      const newExpenditure = data.expense;
+      const newBalance = depRow.principal + depRow.interest - (depRow.exit_payouts || 0) - newExpenditure;
+      await liveQuery(supabaseClient.from("deposit_summaries")
+        .update({ expenditure: newExpenditure, balance: newBalance })
+        .eq("year", yearDbYear));
+    }
   }
   await loadLiveState();
   showToast("Meeting notes saved.");
