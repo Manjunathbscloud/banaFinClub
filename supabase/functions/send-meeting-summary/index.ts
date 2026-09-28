@@ -64,12 +64,14 @@ function emailFooter(): string {
 }
 
 function statCard(label: string, value: string, bg: string, color: string): string {
-  return `<td style="width:50%;padding:4px;">
-    <div style="background:${bg};border-radius:12px;padding:14px 16px;">
-      <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.4px;opacity:0.8;margin-bottom:6px;">${label}</div>
-      <div style="font-size:17px;font-weight:800;color:${color};">${value}</div>
-    </div>
-  </td>`;
+  return `<div style="background:${bg};border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+    <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">${label}</div>
+    <div style="font-size:16px;font-weight:800;color:${color};">${value}</div>
+  </div>`;
+}
+
+function sanitize(html: string): string {
+  return html.split("\n").map(l => l.trimEnd()).join("\n");
 }
 
 function poolBalanceBanner(amount: number, label = "Total Pool Balance"): string {
@@ -346,22 +348,14 @@ function buildNextYearSection(renewalFee: number, monthlyDeposit: number, yearNu
   return `
   <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
     <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">🔄 Year ${yearNum} — What to Expect</div>
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td width="${renewalFee > 0 ? "50%" : "100%"}" style="padding-right:${renewalFee > 0 ? "6px" : "0"};">
-          <div style="background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #bfdbfe;">
-            <div style="font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Monthly Deposit</div>
-            <div style="font-size:18px;font-weight:800;color:#1e40af;">${inr(monthlyDeposit)}</div>
-          </div>
-        </td>
-        ${renewalFee > 0 ? `<td width="50%" style="padding-left:6px;">
-          <div style="background:#fffbeb;border-radius:10px;padding:12px 14px;border:1px solid #fcd34d;">
-            <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Renewal Fee (one-time)</div>
-            <div style="font-size:18px;font-weight:800;color:#d97706;">${inr(renewalFee)}</div>
-          </div>
-        </td>` : ""}
-      </tr>
-    </table>
+    <div style="background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #bfdbfe;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Monthly Deposit</div>
+      <div style="font-size:18px;font-weight:800;color:#1e40af;">${inr(monthlyDeposit)}</div>
+    </div>
+    ${renewalFee > 0 ? `<div style="background:#fffbeb;border-radius:10px;padding:12px 14px;border:1px solid #fcd34d;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Renewal Fee (one-time)</div>
+      <div style="font-size:18px;font-weight:800;color:#d97706;">${inr(renewalFee)}</div>
+    </div>` : ""}
     ${renewalFee > 0 ? `<p style="font-size:12px;color:#2563eb;margin:10px 0 0;line-height:1.5;">Your first payment will be <strong>${inr(monthlyDeposit + renewalFee)}</strong> (deposit + renewal fee).</p>` : ""}
   </div>`;
 }
@@ -412,28 +406,22 @@ function buildLoanSection(loans: LoanRow[]): string {
           <td align="right"><span style="background:#0284c7;color:#fff;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:0.4px;">Carried Forward</span></td>
         </tr>
       </table>
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td width="50%" style="padding-right:8px;padding-bottom:8px;">
-            <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Monthly Interest</div>
-            <div style="font-size:14px;font-weight:700;color:#0c4a6e;">${inr(monthlyInt)} <span style="font-size:11px;font-weight:400;color:#64748b;">/ mo (${rate}%)</span></div>
-          </td>
-          <td width="50%" style="padding-bottom:8px;">
-            <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Annual Interest</div>
-            <div style="font-size:14px;font-weight:700;color:#0c4a6e;">${inr(monthlyInt * 12)}</div>
-          </td>
-        </tr>
-        ${(fromStr || dueStr) ? `<tr>
-          ${fromStr ? `<td width="50%" style="padding-right:8px;">
-            <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Taken From</div>
-            <div style="font-size:13px;color:#0c4a6e;">${fromStr}</div>
-          </td>` : `<td width="50%"></td>`}
-          ${dueStr ? `<td width="50%">
-            <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Due / Renewal</div>
-            <div style="font-size:13px;color:#0c4a6e;">${dueStr}</div>
-          </td>` : `<td width="50%"></td>`}
-        </tr>` : ""}
-      </table>
+      <div style="margin-bottom:6px;">
+        <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Monthly Interest</div>
+        <div style="font-size:14px;font-weight:700;color:#0c4a6e;">${inr(monthlyInt)} <span style="font-size:11px;font-weight:400;color:#64748b;">/ mo (${rate}%)</span></div>
+      </div>
+      <div style="margin-bottom:6px;">
+        <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Annual Interest</div>
+        <div style="font-size:14px;font-weight:700;color:#0c4a6e;">${inr(monthlyInt * 12)}</div>
+      </div>
+      ${fromStr ? `<div style="margin-bottom:6px;">
+        <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Taken From</div>
+        <div style="font-size:13px;color:#0c4a6e;">${fromStr}</div>
+      </div>` : ""}
+      ${dueStr ? `<div>
+        <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Due / Renewal</div>
+        <div style="font-size:13px;color:#0c4a6e;">${dueStr}</div>
+      </div>` : ""}
     </div>`;
   }).join("");
 
@@ -518,11 +506,11 @@ function buildAnnualMeetingEmailHtml(
       <div style="margin-bottom:24px;">
         <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">📊 Financial Summary — ${yearLabel}</div>
 
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:0;">
-          <tr>${statCard("Total Deposits", inr(principal), "#eff6ff", "#1d4ed8")}${statCard("Interest Earned", inr(interest), "#f0fdf4", "#15803d")}</tr>
-          <tr>${statCard("Total Loans (Club)", inr(loansOutstanding), "#eef2ff", "#4338ca")}${expenditure > 0 ? statCard("Meeting Expenditure", inr(expenditure), "#fef9ec", "#92400e") : statCard("Meeting Expenditure", "Nil", "#f9fafb", "#9ca3af")}</tr>
-          ${exitPayouts > 0 ? `<tr>${statCard("Member Exit Payouts", inr(exitPayouts), "#fdf2f8", "#9d174d")}<td style="width:50%;padding:4px;"></td></tr>` : ""}
-        </table>
+        ${statCard("Total Deposits", inr(principal), "#eff6ff", "#1d4ed8")}
+        ${statCard("Interest Earned", inr(interest), "#f0fdf4", "#15803d")}
+        ${statCard("Total Loans (Club)", inr(loansOutstanding), "#eef2ff", "#4338ca")}
+        ${expenditure > 0 ? statCard("Meeting Expenditure", inr(expenditure), "#fef9ec", "#92400e") : statCard("Meeting Expenditure", "Nil", "#f9fafb", "#9ca3af")}
+        ${exitPayouts > 0 ? statCard("Member Exit Payouts", inr(exitPayouts), "#fdf2f8", "#9d174d") : ""}
 
         <div style="background:#1a1a2e;border-radius:12px;padding:14px 20px;margin:10px 0;">
           <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">Year ${yearNum} Closing Balance</div>
@@ -681,7 +669,7 @@ serve(async (req) => {
           to: member.email,
           subject,
           content: "auto",
-          html: getHtml(member),
+          html: sanitize(getHtml(member)),
         });
         sent++;
       } catch (mailErr) {

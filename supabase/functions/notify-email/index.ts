@@ -108,7 +108,8 @@ serve(async (req) => {
     }
 
     const firstName = (profile.full_name || "Member").split(" ")[0];
-    const html = buildEmailHtml(firstName, record.type || "", record.title, record.body);
+    const rawHtml = buildEmailHtml(firstName, record.type || "", record.title, record.body);
+    const html = rawHtml.split("\n").map((l: string) => l.trimEnd()).join("\n");
 
     const client = new SMTPClient({
       connection: {
