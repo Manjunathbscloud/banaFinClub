@@ -2975,9 +2975,8 @@ function showDepositYearModal(yearKey) {
       const latestPaidMonth = livePayments.map((p) => p.month).sort().pop();
       const startMo = new Date(activeYearStart + "-01");
       const startLabel = `${MNAMES[startMo.getMonth()]} ${startMo.getFullYear()}`;
-      const endDate = latestPaidMonth ? new Date(latestPaidMonth + "-01") : _now;
-      const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
-      title = `${activeYearLabel} (${startLabel} – ${endLabel})`;
+      const endLabel = latestPaidMonth ? `${MNAMES[new Date(latestPaidMonth + "-01").getMonth()]} ${new Date(latestPaidMonth + "-01").getFullYear()}` : null;
+      title = `${activeYearLabel} (${startLabel}${endLabel ? ` – ${endLabel}` : ` onwards`})`;
       const points = [
         // Renewal fee is included in each member's first-month payment row — shown via liveRows
         ...activeYearExits.map(e => ({ label: "Member Exited", detail: `${e.name} – amount paid out`, amount: -Number(e.payout || 0) })),
