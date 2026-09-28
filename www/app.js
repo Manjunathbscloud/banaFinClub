@@ -5680,11 +5680,29 @@ async function rejectLoan(id) {
 const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
-  // Notifications disabled — re-enable when ready
+  if (!liveBackendReady) return;
+  await Promise.allSettled(activeMembers().map(m => notifyMember(m.id, type, title, body, relatedId)));
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
-  // Notifications disabled — re-enable when ready
+  if (!liveBackendReady || !profileId) return;
+  try {
+    await supabaseClient.from("notifications").insert({
+      profile_id: profileId, type, title, body, related_id: relatedId || null, is_read: false,
+    });
+  } catch (_) {}
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    await fetch(`${appConfig.supabaseUrl}/functions/v1/send-push`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session?.access_token}`,
+        "apikey": appConfig.supabaseAnonKey,
+      },
+      body: JSON.stringify({ profile_id: profileId, title, body }),
+    });
+  } catch (_) {}
 }
 
 async function sendNotificationToSelf(type, title, body) {
