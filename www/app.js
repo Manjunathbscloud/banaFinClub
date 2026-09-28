@@ -5929,11 +5929,12 @@ async function saveMeetingNotes(yearDbYear, data) {
       await liveQuery(supabaseClient.from("deposit_summaries")
         .update({ expenditure: newExpenditure, balance: newBalance })
         .eq("year", yearDbYear));
-      // Add/update statement debit for the expense difference
+      // Add statement entry for expense change
       if (newExpenditure !== prevExpenditure) {
         const diff = newExpenditure - prevExpenditure;
         const yearLabel = depRow.label || `Year ${yearDbYear - 2020}`;
-        await insertStatement("debit", Math.abs(diff), `Meeting expenses — ${yearLabel}`, null);
+        const stmtType = diff > 0 ? "debit" : "credit";
+        await insertStatement(stmtType, Math.abs(diff), `Meeting expenses — ${yearLabel}`, null);
       }
     }
   }
