@@ -3893,7 +3893,17 @@ function renderAdmin() {
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Each button fires that notification type to your account only — inbox, email, and push. Use this to check templates before enabling for all members.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px;">
+            <div>
+              <p style="font-size:14px;font-weight:600;margin:0 0 2px;">Send to All Members</p>
+              <p style="font-size:12px;color:var(--muted);margin:0;">${state.settings.notificationsForAll ? "Notifications go to everyone" : "Admin only — safe for testing"}</p>
+            </div>
+            <label class="toggle-switch" aria-label="Enable notifications for all members">
+              <input type="checkbox" data-action="toggle-notifications-for-all" ${state.settings.notificationsForAll ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Test templates — each button sends to your account only regardless of the toggle above.</p>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <button class="secondary" data-action="test-notif" data-type="signup_approved" data-title="Welcome to Banakar FinClub!" data-body="Your membership has been approved! You can now log in to the app." type="button">✅ Signup Approved</button>
             <button class="secondary" data-action="test-notif" data-type="loan_approved" data-title="Loan Approved ✓" data-body="Your loan of ₹1,00,000 has been approved and will be disbursed shortly." type="button">✅ Loan Approved</button>
@@ -4622,6 +4632,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
     if (action.dataset.action === "toggle-year-close") { event.preventDefault(); await toggleYearClose(action.checked); }
     if (action.dataset.action === "share-summary") { event.preventDefault(); await shareMeetingSummary(); }
+    if (action.dataset.action === "toggle-notifications-for-all") { event.preventDefault(); await toggleNotificationsForAll(action.checked); }
     if (action.dataset.action === "test-meeting-summary") {
       event.preventDefault();
       action.disabled = true; action.textContent = "Sending…";
@@ -5688,11 +5699,18 @@ const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   if (!liveBackendReady) return;
-  await Promise.allSettled(activeMembers().map(m => notifyMember(m.id, type, title, body, relatedId)));
+  const notifForAll = state.settings.notificationsForAll === true;
+  const targets = notifForAll ? activeMembers() : activeMembers().filter(m => m.role === "president");
+  await Promise.allSettled(targets.map(m => notifyMember(m.id, type, title, body, relatedId)));
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
+  const notifForAll = state.settings.notificationsForAll === true;
+  if (!notifForAll) {
+    const target = state.members?.find(m => m.id === profileId);
+    if (target?.role !== "president") return;
+  }
   try {
     await supabaseClient.from("notifications").insert({
       profile_id: profileId, type, title, body, related_id: relatedId || null, is_read: false,
@@ -6445,6 +6463,22 @@ async function toggleMeetingSignoff(enabled) {
   }));
   await loadLiveState();
   showToast(enabled ? "Meeting signoff enabled — members will now see the prompt." : "Meeting signoff disabled.");
+  render();
+}
+
+async function toggleNotificationsForAll(enabled) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: { ...Object.fromEntries(Object.entries(current).filter(([k]) => [
+      "activeYearNumber","activeYearStart","activeYearLabel","yearClosed","yearStarted",
+      "yearCloseEnabled","activeYearRenewalFee","activeYearRenewalFeePerMember",
+      "activeYearExits","financialSignoffEnabled","meetingSignoffEnabled","notificationsForAll"
+    ].includes(k))), notificationsForAll: Boolean(enabled) },
+  }));
+  await loadLiveState();
+  showToast(enabled ? "Notifications enabled for all members." : "Notifications restricted to admin only.");
   render();
 }
 
