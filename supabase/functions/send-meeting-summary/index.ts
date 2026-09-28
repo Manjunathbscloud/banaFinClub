@@ -6,6 +6,9 @@ const GMAIL_USER = "srimukkaneshwara@gmail.com";
 const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const TEXTBEE_API_KEY = Deno.env.get("TEXTBEE_API_KEY")!;
+const TEXTBEE_DEVICE_ID = Deno.env.get("TEXTBEE_DEVICE_ID")!;
+const APP_URL = "https://manjunathbscloud.github.io/banaFinClub/";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -278,6 +281,104 @@ interface LoanRow {
   notes: string;
 }
 
+interface YearRow {
+  year: number;
+  label: string;
+  principal: number;
+  interest: number;
+  expenditure: number;
+  exit_payouts: number;
+  balance: number;
+}
+
+function buildYearByYearTable(allYears: YearRow[]): string {
+  if (!allYears || !allYears.length) return "";
+  const sorted = [...allYears].sort((a, b) => a.year - b.year);
+  const totalPrincipal = sorted.reduce((s, r) => s + Number(r.principal || 0), 0);
+  const totalInterest  = sorted.reduce((s, r) => s + Number(r.interest  || 0), 0);
+  const totalExpenses  = sorted.reduce((s, r) => s + Number(r.expenditure || 0), 0);
+  const latestBalance  = Number(sorted[sorted.length - 1]?.balance || 0);
+
+  const rows = sorted.map(r => `
+    <tr>
+      <td style="padding:10px 12px;font-size:13px;color:#374151;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${r.label || `Year ${r.year - 2020}`}</td>
+      <td style="padding:10px 12px;font-size:13px;color:#1d4ed8;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.principal || 0))}</td>
+      <td style="padding:10px 12px;font-size:13px;color:#15803d;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.interest || 0))}</td>
+      <td style="padding:10px 12px;font-size:13px;color:#92400e;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${Number(r.expenditure) > 0 ? inr(Number(r.expenditure)) : "—"}</td>
+      <td style="padding:10px 12px;font-size:13px;font-weight:700;color:#1f2937;text-align:right;border-bottom:1px solid #f3f4f6;font-variant-numeric:tabular-nums;">${inr(Number(r.balance || 0))}</td>
+    </tr>`).join("");
+
+  return `
+  <div style="margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">📅 Year-by-Year Record</div>
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid #e5e7eb;">
+      <table style="width:100%;border-collapse:collapse;min-width:400px;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;text-align:left;border-bottom:1px solid #e5e7eb;">Year</th>
+            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Deposits</th>
+            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Interest</th>
+            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Expenses</th>
+            <th style="padding:10px 12px;font-size:10px;font-weight:700;color:#1f2937;text-transform:uppercase;letter-spacing:0.5px;text-align:right;border-bottom:1px solid #e5e7eb;">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+        <tfoot>
+          <tr style="background:#1a1a2e;">
+            <td style="padding:12px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);">Total</td>
+            <td style="padding:12px;font-size:13px;font-weight:700;color:#93c5fd;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalPrincipal)}</td>
+            <td style="padding:12px;font-size:13px;font-weight:700;color:#86efac;text-align:right;font-variant-numeric:tabular-nums;">${inr(totalInterest)}</td>
+            <td style="padding:12px;font-size:13px;font-weight:700;color:#fcd34d;text-align:right;font-variant-numeric:tabular-nums;">${totalExpenses > 0 ? inr(totalExpenses) : "—"}</td>
+            <td style="padding:12px;font-size:14px;font-weight:900;color:#FF9900;text-align:right;font-variant-numeric:tabular-nums;">${inr(latestBalance)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p style="font-size:11px;color:#9ca3af;margin:6px 0 0;text-align:right;">Balance = Deposits + Interest − Expenses − Exit Payouts</p>
+  </div>`;
+}
+
+function buildNextYearSection(renewalFee: number, monthlyDeposit: number, yearNum: number): string {
+  if (!renewalFee && !monthlyDeposit) return "";
+  return `
+  <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">🔄 Year ${yearNum} — What to Expect</div>
+    <div style="display:flex;gap:12px;">
+      <div style="flex:1;background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #bfdbfe;">
+        <div style="font-size:10px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Monthly Deposit</div>
+        <div style="font-size:18px;font-weight:800;color:#1e40af;font-variant-numeric:tabular-nums;">${inr(monthlyDeposit)}</div>
+      </div>
+      ${renewalFee > 0 ? `
+      <div style="flex:1;background:#fffbeb;border-radius:10px;padding:12px 14px;border:1px solid #fcd34d;">
+        <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Renewal Fee (one-time)</div>
+        <div style="font-size:18px;font-weight:800;color:#d97706;font-variant-numeric:tabular-nums;">${inr(renewalFee)}</div>
+      </div>` : ""}
+    </div>
+    ${renewalFee > 0 ? `<p style="font-size:12px;color:#2563eb;margin:10px 0 0;line-height:1.5;">Your first payment will be <strong>${inr(monthlyDeposit + renewalFee)}</strong> (deposit + renewal fee).</p>` : ""}
+  </div>`;
+}
+
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  return `+91${digits}`;
+}
+
+async function sendBulkSms(phones: string[], message: string): Promise<void> {
+  if (!TEXTBEE_API_KEY || !TEXTBEE_DEVICE_ID || !phones.length) return;
+  const recipients = phones.map(toE164);
+  const smsBody = `🏦 BanakarFinClub | Sri Mukkaneshwara Associates\n${message}\napp: ${APP_URL}`;
+  await fetch(
+    `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`,
+    {
+      method: "POST",
+      headers: { "x-api-key": TEXTBEE_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipients, message: smsBody }),
+    }
+  );
+}
+
 function buildLoanSection(loans: LoanRow[]): string {
   const active = loans.filter(l => l.status === "active" && l.notes !== "emi_entry");
   if (!active.length) {
@@ -351,6 +452,10 @@ function buildAnnualMeetingEmailHtml(
   const closingBalance= Number(data.balance    || 0);
   const loansOutstanding = Number(data.loansOutstanding || 0);
   const poolBalance   = Number(data.poolBalance|| 0);
+  const allYears      = Array.isArray(data.allYears) ? data.allYears as YearRow[] : [];
+  const nextYearNum   = Number(data.nextYearNum || yearNum + 1);
+  const nextYearRenewalFee    = Number(data.nextYearRenewalFee    || 0);
+  const nextYearMonthlyDeposit= Number(data.nextYearMonthlyDeposit|| 0);
   const firstName     = String(member.full_name || "Member").split(" ")[0];
 
   const decisionsHtml = decisions.length
@@ -423,6 +528,10 @@ function buildAnnualMeetingEmailHtml(
         ${poolBalanceBanner(poolBalance, "Total Pool Balance (Deposits + Outstanding Loans)")}
       </div>
 
+      ${buildYearByYearTable(allYears)}
+
+      ${buildNextYearSection(nextYearRenewalFee, nextYearMonthlyDeposit, nextYearNum)}
+
       ${buildLoanSection(loans)}
 
       <div style="margin-bottom:24px;">
@@ -459,12 +568,11 @@ serve(async (req) => {
     const type = String(data.type || "annual_meeting");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Active members with email
+    // Active members with email and phone
     const { data: members, error: membErr } = await supabase
       .from("profiles")
-      .select("id, full_name, email")
-      .eq("status", "active")
-      .not("email", "is", null);
+      .select("id, full_name, email, phone")
+      .eq("status", "active");
     if (membErr) throw membErr;
 
     const client = new SMTPClient({
@@ -530,6 +638,32 @@ serve(async (req) => {
       const totalCount = members?.length || 0;
 
       getHtml = (member) => buildAnnualMeetingEmailHtml(member, histLoansByMember[member.id] || [], data, ackedCount, totalCount);
+    }
+
+    // Send bulk SMS for annual_meeting type
+    if (type === "annual_meeting") {
+      const yearNum   = Number(data.yearNum || 0);
+      const yearLabel = String(data.yearLabel || `Year ${yearNum}`);
+      const poolBalance = Number(data.poolBalance || 0);
+      const loansOutstanding = Number(data.loansOutstanding || 0);
+      const expenditure = Number(data.expenditure || 0);
+      const renewalFee = Number(data.nextYearRenewalFee || 0);
+      const monthlyDeposit = Number(data.nextYearMonthlyDeposit || 0);
+      const smsText = [
+        `${yearLabel} Annual Meeting Summary`,
+        `Pool Balance: ${inr(poolBalance)}`,
+        `Total Loans: ${inr(loansOutstanding)}`,
+        monthlyDeposit ? `Monthly Deposit: ${inr(monthlyDeposit)}` : "",
+        renewalFee     ? `Renewal Fee: ${inr(renewalFee)}` : "",
+        expenditure    ? `Meeting Expenses: ${inr(expenditure)}` : "",
+        `Full details sent to your email.`,
+      ].filter(Boolean).join("\n");
+      const phones = (members || []).map(m => m.phone).filter(Boolean) as string[];
+      try {
+        await sendBulkSms(phones, smsText);
+      } catch (smsErr) {
+        console.error("SMS error:", smsErr);
+      }
     }
 
     let sent = 0;

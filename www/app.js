@@ -3854,7 +3854,12 @@ function renderAdmin() {
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 14px;border-bottom:1px solid var(--border);">
+          <div style="padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:4px;">
+            <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Share Meeting Summary</p>
+            <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Send Year ${yearNum - 1} annual meeting summary to all members via SMS and email.</p>
+            <button class="primary" data-action="share-summary" type="button" style="width:100%;">Share Summary →</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-bottom:1px solid var(--border);">
             <p style="font-size:14px;font-weight:600;margin:0;">Member Signoff</p>
             <label class="toggle-switch" aria-label="Enable member signoff">
               <input type="checkbox" data-action="toggle-financial-signoff" ${signoffEnabled ? "checked" : ""} />
@@ -4595,6 +4600,7 @@ document.addEventListener("click", async (event) => {
 
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
     if (action.dataset.action === "toggle-year-close") { event.preventDefault(); await toggleYearClose(action.checked); }
+    if (action.dataset.action === "share-summary") { event.preventDefault(); await shareMeetingSummary(); }
 
     if (action.dataset.action === "toggle-meeting-signoff") { event.preventDefault(); await toggleMeetingSignoff(action.checked); }
 
@@ -6384,6 +6390,88 @@ async function toggleYearClose(enabled) {
   await loadLiveState();
   showToast(enabled ? "Year close unlocked." : "Year close locked.");
   render();
+}
+
+async function shareMeetingSummary() {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const btn = document.querySelector("[data-action='share-summary']");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+
+  try {
+    const activeYearNum = state.settings.activeYearNumber || 7;
+    const closedYearNum = activeYearNum - 1;
+    const closedDbYear  = 2020 + closedYearNum;
+    const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
+    const closedYearLabel = ORDINALS[closedYearNum - 1] ? ORDINALS[closedYearNum - 1] + " Year" : `Year ${closedYearNum}`;
+
+    const depRow = state.deposits.find(d => d.year === closedDbYear) || {};
+    const mr     = state.meetingRecords.find(r => r.year === closedDbYear) || {};
+
+    const loansOutstanding = currentLoans()
+      .filter(l => l.notes !== "emi_entry")
+      .reduce((s, l) => s + loanOutstanding(l), 0);
+
+    const poolBalance = Number(depRow.balance || 0) + loansOutstanding;
+
+    const allYears = state.deposits
+      .filter(d => d.year <= closedDbYear)
+      .map(d => ({
+        year: d.year,
+        label: d.label || (ORDINALS[d.year - 2021] ? ORDINALS[d.year - 2021] + " Year" : `Year ${d.year - 2020}`),
+        principal: Number(d.principal || 0),
+        interest: Number(d.interest || 0),
+        expenditure: Number(d.expenditure || 0),
+        exit_payouts: Number(d.exit_payouts || 0),
+        balance: Number(d.balance || 0),
+      }));
+
+    const payload = {
+      type: "annual_meeting",
+      yearNum: closedYearNum,
+      yearLabel: closedYearLabel,
+      date: mr.date || "",
+      venue: mr.venue || "",
+      notes: mr.notes || "",
+      decisions: mr.decisions || [],
+      principal: Number(depRow.principal || 0),
+      interest: Number(depRow.interest || 0),
+      expenditure: Number(depRow.expenditure || 0),
+      exitPayouts: Number(depRow.exit_payouts || 0),
+      balance: Number(depRow.balance || 0),
+      loansOutstanding,
+      poolBalance,
+      allYears,
+      nextYearNum: activeYearNum,
+      nextYearRenewalFee: Number(state.settings.activeYearRenewalFeePerMember || 0),
+      nextYearMonthlyDeposit: Number(state.settings.monthlyDeposit || 0),
+    };
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const resp = await fetch(
+      `${appConfig.supabaseUrl}/functions/v1/send-meeting-summary`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token}`,
+          "apikey": appConfig.supabaseAnonKey,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+    const result = await resp.json();
+    if (result.ok) {
+      showToast(`Summary sent to ${result.sent} members via email + SMS.`);
+    } else {
+      showToast("Failed to send summary. Check console.");
+      console.error("share-summary error:", result);
+    }
+  } catch (err) {
+    showToast("Failed to send summary. Please try again.");
+    console.error("shareMeetingSummary error:", err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Share Summary →"; }
+  }
 }
 
 async function saveAnnualMeetingDecisions(data) {
