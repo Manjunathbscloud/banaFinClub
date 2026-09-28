@@ -3015,9 +3015,14 @@ function showDepositYearModal(yearKey) {
       title = dbRow.label || `Year ${yearNum}`;
       const savedBreakdown = Array.isArray(dbRow.breakdown) ? dbRow.breakdown : [];
       if (savedBreakdown.length > 0) {
+        const breakdownRows = [...savedBreakdown];
+        // Inject meeting expenses if added after close and not already in breakdown
+        if (Number(dbRow.expenditure) > 0 && !breakdownRows.some(r => r.description === "Meeting Expenses")) {
+          breakdownRows.push({ description: "Meeting Expenses", details: "Annual meeting cost", amount: -Number(dbRow.expenditure) });
+        }
         bodyHtml = `
           <ul class="year-modal-list">
-            ${savedBreakdown.map(row => `
+            ${breakdownRows.map(row => `
               <li class="year-modal-item">
                 <div><span class="year-modal-label">${escapeHtml(row.description)}</span><span class="year-modal-detail">${escapeHtml(row.details)}</span></div>
                 <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
@@ -5918,11 +5923,18 @@ async function saveMeetingNotes(yearDbYear, data) {
   if (data.expense !== undefined) {
     const depRow = state.deposits.find(d => d.year === yearDbYear);
     if (depRow) {
+      const prevExpenditure = Number(depRow.expenditure || 0);
       const newExpenditure = data.expense;
       const newBalance = depRow.principal + depRow.interest - (depRow.exit_payouts || 0) - newExpenditure;
       await liveQuery(supabaseClient.from("deposit_summaries")
         .update({ expenditure: newExpenditure, balance: newBalance })
         .eq("year", yearDbYear));
+      // Add/update statement debit for the expense difference
+      if (newExpenditure !== prevExpenditure) {
+        const diff = newExpenditure - prevExpenditure;
+        const yearLabel = depRow.label || `Year ${yearDbYear - 2020}`;
+        await insertStatement("debit", Math.abs(diff), `Meeting expenses — ${yearLabel}`, null);
+      }
     }
   }
   await loadLiveState();
