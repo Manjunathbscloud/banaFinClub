@@ -3864,9 +3864,14 @@ function renderAdmin() {
               </div>`;
             }).join("")}
           </div>` : ""}
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-            <button class="primary" data-action="close-current-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;">Close ${yearDbYear} Year</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
+            <p style="font-size:14px;font-weight:600;margin:0;">Enable Year Close</p>
+            <label class="toggle-switch" aria-label="Enable year close">
+              <input type="checkbox" data-action="toggle-year-close" ${state.settings.yearCloseEnabled ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
           </div>
+          ${state.settings.yearCloseEnabled ? `<button class="primary" data-action="close-current-year" type="button" style="width:100%;background:#dc2626;border-color:#dc2626;">Close ${yearDbYear} Year</button>` : `<p style="font-size:12px;color:var(--muted);text-align:center;margin:0;">Enable the toggle above to unlock year close</p>`}
         </div>
       </details>`;
       })()}
@@ -4582,6 +4587,7 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "toggle-partial-repayment") { event.preventDefault(); await togglePartialRepaymentEnabled(); }
 
     if (action.dataset.action === "toggle-financial-signoff") { event.preventDefault(); await toggleFinancialSignoff(action.checked); }
+    if (action.dataset.action === "toggle-year-close") { event.preventDefault(); await toggleYearClose(action.checked); }
 
     if (action.dataset.action === "toggle-meeting-signoff") { event.preventDefault(); await toggleMeetingSignoff(action.checked); }
 
@@ -5958,6 +5964,7 @@ async function startNextYear(data) {
       activeYearLabel: current.activeYearLabel,
       yearClosed: false,
       yearStarted: true,
+      yearCloseEnabled: false,
       activeYearRenewalFee: totalRenewalFee,
       activeYearRenewalFeePerMember: renewalFeePerMember,
       activeYearExits: current.activeYearExits || [],
@@ -6326,6 +6333,30 @@ async function toggleMeetingSignoff(enabled) {
   }));
   await loadLiveState();
   showToast(enabled ? "Meeting signoff enabled — members will now see the prompt." : "Meeting signoff disabled.");
+  render();
+}
+
+async function toggleYearClose(enabled) {
+  if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
+  const current = state.settings;
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: {
+      activeYearNumber: current.activeYearNumber || 6,
+      activeYearStart: current.activeYearStart || currentMonth(),
+      activeYearLabel: current.activeYearLabel || "",
+      yearClosed: current.yearClosed || false,
+      yearStarted: current.yearStarted !== false,
+      activeYearRenewalFee: current.activeYearRenewalFee || 0,
+      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
+      activeYearExits: current.activeYearExits || [],
+      financialSignoffEnabled: current.financialSignoffEnabled || false,
+      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
+      yearCloseEnabled: Boolean(enabled),
+    },
+  }));
+  await loadLiveState();
+  showToast(enabled ? "Year close unlocked." : "Year close locked.");
   render();
 }
 
