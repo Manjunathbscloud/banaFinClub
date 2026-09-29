@@ -4883,6 +4883,7 @@ async function handleMpinKey(key) {
       }
       if (!liveBackendReady || state.currentUserId) {
         mpinPending = false;
+        state.activeTab = "dashboard";
         render();
         setTimeout(showMeetingWelcome, 600);
       } else {
