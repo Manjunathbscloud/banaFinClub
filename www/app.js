@@ -1784,26 +1784,17 @@ function renderHome() {
       <div class="dash-summary-grid">
         <div class="dash-summary-col">
           <p>Pool Balance</p>
-          <div class="bal-row">
-            <strong class="bal-val" data-bal-key="pool" data-bal="${poolBal}">₹ ••••</strong>
-            <button class="bal-eye" data-bal-key="pool" onclick="bfcToggleBal('pool')" aria-label="Toggle pool balance">${_EYE_SLASH}</button>
-          </div>
+          <strong data-count-up="${poolBal}">${money(poolBal)}</strong>
           <small>Total association pool</small>
         </div>
         <div class="dash-summary-col">
           <p>Bank Balance</p>
-          <div class="bal-row">
-            <strong class="bal-val" data-bal-key="bank" data-bal="${bankBal}">₹ ••••</strong>
-            <button class="bal-eye" data-bal-key="bank" onclick="bfcToggleBal('bank')" aria-label="Toggle bank balance">${_EYE_SLASH}</button>
-          </div>
+          <strong data-count-up="${bankBal}">${money(bankBal)}</strong>
           <small>Estimated</small>
         </div>
         <div class="dash-summary-col">
           <p>Available Loan</p>
-          <div class="bal-row">
-            <strong class="bal-val" data-bal-key="loan" data-bal="${availLoan}">₹ ••••</strong>
-            <button class="bal-eye" data-bal-key="loan" onclick="bfcToggleBal('loan')" aria-label="Toggle available loan">${_EYE_SLASH}</button>
-          </div>
+          <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col">
