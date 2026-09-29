@@ -3884,37 +3884,6 @@ function renderAdmin() {
       </details>`;
       })()}
 
-      <details class="card collapsible">
-        <summary class="card-header">
-          <div><h3>Test Notifications</h3><p>Send sample notifications to yourself only</p></div>
-          <span class="collapse-icon">⌄</span>
-        </summary>
-        <div class="card-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px;">
-            <div>
-              <p style="font-size:14px;font-weight:600;margin:0 0 2px;">Send to All Members</p>
-              <p style="font-size:12px;color:var(--muted);margin:0;">${state.settings.notificationsForAll ? "Notifications go to everyone" : "Admin only — safe for testing"}</p>
-            </div>
-            <label class="toggle-switch" aria-label="Enable notifications for all members">
-              <input type="checkbox" data-action="toggle-notifications-for-all" ${state.settings.notificationsForAll ? "checked" : ""} />
-              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-            </label>
-          </div>
-          <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Test templates — each button sends to your account only regardless of the toggle above.</p>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <button class="secondary" data-action="test-notif" data-type="signup_approved" data-title="Welcome to Banakar FinClub!" data-body="Your membership has been approved! You can now log in to the app." type="button">✅ Signup Approved</button>
-            <button class="secondary" data-action="test-notif" data-type="loan_approved" data-title="Loan Approved ✓" data-body="Your loan of ₹1,00,000 has been approved and will be disbursed shortly." type="button">✅ Loan Approved</button>
-            <button class="secondary" data-action="test-notif" data-type="loan_disbursed" data-title="Loan Disbursed 💰" data-body="₹1,00,000 has been disbursed to you. Monthly interest: ₹1,250 at 1.25%." type="button">💰 Loan Disbursed</button>
-            <button class="secondary" data-action="test-notif" data-type="payment_confirmed" data-title="Payment confirmed ✓" data-body="Your payment of ₹2,000 for October 2026 has been recorded. Thank you!" type="button">💚 Payment Confirmed</button>
-            <button class="secondary" data-action="test-notif" data-type="loan_extension_approved" data-title="Extension Approved ✓" data-body="Your loan extension request has been approved. New due date: Oct 2027." type="button">📅 Extension Approved</button>
-            <button class="secondary" data-action="test-notif" data-type="partial_repayment_approved" data-title="Payment Recorded ✅" data-body="Your partial repayment of ₹25,000 has been recorded. Outstanding: ₹75,000." type="button">💳 Partial Repayment Recorded</button>
-            <button class="secondary" data-action="test-notif" data-type="emi_completed" data-title="EMI Loan fully paid! 🏆" data-body="Congratulations! You have completed all 12 EMI payments. Your loan is now closed." type="button">🏆 EMI Completed</button>
-            <button class="secondary" data-action="test-notif" data-type="signoff_request" data-title="Action Required ✍️" data-body="Please review and sign off on your Year 6 financial records in the app." type="button">✍️ Signoff Request</button>
-            <button class="secondary" data-action="test-meeting-summary" type="button" style="margin-top:4px;border-color:var(--accent);color:var(--accent);">📧 Annual Meeting Summary (email + SMS to me)</button>
-          </div>
-        </div>
-      </details>
-
       ${(() => {
         const pendingExtensions = (state.extensionRequests || []).filter((e) => e.status === "pending");
         const pendingPartialRequests = (state.partialRepaymentRequests || []).filter(r => r.status === "pending");
@@ -5697,18 +5666,11 @@ const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   if (!liveBackendReady) return;
-  const notifForAll = state.settings.notificationsForAll === true;
-  const targets = notifForAll ? activeMembers() : activeMembers().filter(m => m.role === "president");
-  await Promise.allSettled(targets.map(m => notifyMember(m.id, type, title, body, relatedId)));
+  await Promise.allSettled(activeMembers().map(m => notifyMember(m.id, type, title, body, relatedId)));
 }
 
 async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
-  const notifForAll = state.settings.notificationsForAll === true;
-  if (!notifForAll) {
-    const target = state.members?.find(m => m.id === profileId);
-    if (target?.role !== "president") return;
-  }
   try {
     await supabaseClient.from("notifications").insert({
       profile_id: profileId, type, title, body, related_id: relatedId || null, is_read: false,
