@@ -377,6 +377,7 @@ function liveProfileToMember(profile) {
     nomineeName: profile.nominee_name || "",
     nomineeRelationship: profile.nominee_relationship || "",
     nomineePhone: profile.nominee_phone || "",
+    dob: profile.dob || "",
   };
 }
 
@@ -588,7 +589,7 @@ async function loadLiveState() {
 
   const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, partialRepaymentRequestsData, galleryPhotosData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
-    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone,dob").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
     liveQuery(supabaseClient.from("monthly_payments").select("*").gte("month", "2025-11").order("created_at", { ascending: false })),
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
@@ -1556,6 +1557,7 @@ function signupForm() {
       <label class="field"><span>${t("name")}</span><input name="name" type="text" required /></label>
       <label class="field"><span>${t("phone")}</span><input name="phone" type="tel" required /></label>
       <label class="field"><span>Email</span><input name="email" type="email" required /></label>
+      <label class="field"><span>Date of Birth</span><input name="dob" type="date" required /></label>
       ${passwordField("password", t("password"))}
       <button class="primary" type="submit">${t("requestAccess")}</button>
       <p class="hint">Signup requests stay pending until the president approves them.</p>
@@ -5155,6 +5157,12 @@ async function signup(data) {
       p_phone: phone,
       p_email: signupEmail,
     }));
+    if (data.dob) {
+      const { data: authUser } = await supabaseClient.auth.getUser();
+      if (authUser?.user) {
+        await supabaseClient.from("profiles").update({ dob: data.dob }).eq("auth_user_id", authUser.user.id);
+      }
+    }
     if (data.avatar instanceof File && data.avatar.size > 0) {
       const { data: authUser } = await supabaseClient.auth.getUser();
       if (authUser?.user) {
