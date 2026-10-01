@@ -2057,6 +2057,10 @@ function renderProfile() {
             <label>Email</label>
             <input name="email" type="email" value="${escapeHtml(user.email || "")}" placeholder="your@email.com" />
           </div>
+          <div class="prof-field">
+            <label>Date of Birth</label>
+            <input name="dob" type="date" value="${escapeHtml(user.dob || "")}" />
+          </div>
           <button class="prof-btn prof-btn-blue" type="submit">Save Changes</button>
         </form>
       </div>
@@ -2138,9 +2142,10 @@ async function saveProfileInfo(data) {
   await liveQuery(supabaseClient.from("profiles").update({
     full_name: data.full_name.trim(),
     email: data.email.trim(),
+    ...(data.dob ? { dob: data.dob } : {}),
   }).eq("id", userId));
   const member = state.members.find(m => m.id === userId);
-  if (member) { member.name = data.full_name.trim(); member.email = data.email.trim(); }
+  if (member) { member.name = data.full_name.trim(); member.email = data.email.trim(); if (data.dob) member.dob = data.dob; }
   showToast("Profile updated.");
   render();
 }
