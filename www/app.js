@@ -1718,7 +1718,7 @@ function renderHome() {
           if (yearNum === 6) {
             totalDep = 21000 + 14000 + 11250 + 84000 + 44672 + 64335 + liveDep;
             totalInt = 65000 + 11171 + 36625 + liveInt;
-            poolBal = 230217 + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+            poolBal = (21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625) + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
           } else {
             totalDep = liveDep; totalInt = liveInt;
             const exits = (state.settings.activeYearExits || []).reduce((s, e) => s + Number(e.payout || 0), 0);
@@ -2801,7 +2801,7 @@ function renderDeposits() {
     activeBalance = Number(activeDbRow.balance);
   } else if (activeYearNum === 6) {
     // Year 6: DB balance cleared — use hardcoded pre-Jul hist total + live July+ payments
-    const yr6HistFixed = 230217; // Fully hardcoded through Sep 2026
+    const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625;
     const yr6LiveTotal = state.monthlyPayments
       .filter(p => p.status === "paid" && p.month >= "2026-10")
       .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
@@ -2918,7 +2918,8 @@ function showDepositYearModal(yearKey) {
         ...(liveTotalInterest > 0 ? [{ label: "Interest Collected", detail: `Oct 2026 – ${latestLbl} · loan interest`, amount: liveTotalInterest }] : []),
       ];
       const liveTotal = livePaymentsOct.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-      const yr6RunningTotal = 230217 + liveTotal;
+      const yr6Base = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625;
+      const yr6RunningTotal = yr6Base + liveTotal;
       title = `Sixth Year (Nov 2025 – ${latestMonth ? latestLbl : "Sep 2026"})`;
       const points = [
         { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
