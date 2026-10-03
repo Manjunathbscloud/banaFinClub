@@ -1716,9 +1716,9 @@ function renderHome() {
           });
           let totalDep, totalInt, poolBal;
           if (yearNum === 6) {
-            totalDep = 21000 + 14000 + 11250 + 84000 + 44672 + liveDep;
-            totalInt = 65546 + 11171 + liveInt;
-            poolBal = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834 + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+            totalDep = 21000 + 14000 + 11250 + 84000 + 44672 + 64335 + liveDep;
+            totalInt = 65000 + 11171 + 36625 + liveInt;
+            poolBal = 230217 + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
           } else {
             totalDep = liveDep; totalInt = liveInt;
             const exits = (state.settings.activeYearExits || []).reduce((s, e) => s + Number(e.payout || 0), 0);
@@ -2801,9 +2801,9 @@ function renderDeposits() {
     activeBalance = Number(activeDbRow.balance);
   } else if (activeYearNum === 6) {
     // Year 6: DB balance cleared — use hardcoded pre-Jul hist total + live July+ payments
-    const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834; // 129805
+    const yr6HistFixed = 230217; // Fully hardcoded through Sep 2026
     const yr6LiveTotal = state.monthlyPayments
-      .filter(p => p.status === "paid" && p.month >= "2026-07")
+      .filter(p => p.status === "paid" && p.month >= "2026-10")
       .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
     activeBalance = yr6HistFixed + yr6LiveTotal;
   } else {
@@ -2898,12 +2898,12 @@ function showDepositYearModal(yearKey) {
         </ul>
         <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>` : "";
     } else if (activeYearNum === 6) {
-      // Year 6 with existing historical base — show the rich Year 6 hardcoded breakdown + live rows
-      const livePayments = state.monthlyPayments
-        .filter((p) => p.status === "paid" && p.month >= "2026-07")
+      // Year 6 — fully hardcoded through Sep 2026; Oct+ from live DB
+      const livePaymentsOct = state.monthlyPayments
+        .filter((p) => p.status === "paid" && p.month >= "2026-10")
         .sort((a, b) => a.month.localeCompare(b.month));
       let liveTotalDeposit = 0, liveTotalInterest = 0;
-      livePayments.forEach((p) => {
+      livePaymentsOct.forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
@@ -2911,29 +2911,27 @@ function showDepositYearModal(yearKey) {
         liveTotalDeposit += dep;
         liveTotalInterest += interest;
       });
-      const latestMonth = livePayments.map(p => p.month).sort().pop();
-      const latestLbl = latestMonth ? (() => { const [yr, mo] = latestMonth.split("-"); return `${MNAMES[Number(mo)-1]} ${yr}`; })() : "Jul 2026";
+      const latestMonth = livePaymentsOct.map(p => p.month).sort().pop();
+      const latestLbl = latestMonth ? (() => { const [yr, mo] = latestMonth.split("-"); return `${MNAMES[Number(mo)-1]} ${yr}`; })() : "Sep 2026";
       const liveRows = [
-        ...(liveTotalDeposit > 0 ? [{ label: "Monthly Deposits",   detail: `Jul 2026 – ${latestLbl} · collected`, amount: liveTotalDeposit }] : []),
-        ...(liveTotalInterest > 0 ? [{ label: "Interest Collected", detail: `Jul 2026 – ${latestLbl} · loan interest`, amount: liveTotalInterest }] : []),
+        ...(liveTotalDeposit > 0 ? [{ label: "Monthly Deposits",   detail: `Oct 2026 – ${latestLbl} · collected`, amount: liveTotalDeposit }] : []),
+        ...(liveTotalInterest > 0 ? [{ label: "Interest Collected", detail: `Oct 2026 – ${latestLbl} · loan interest`, amount: liveTotalInterest }] : []),
       ];
-      const liveTotal = livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-      // Sum from hardcoded pre-Jul rows: renewal + Nov + Dec + Jan-Jun + EMI + interest + addl interest - member exit
-      const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65546 + 11171 - 121834; // 129805
-      const yr6RunningTotal = yr6HistFixed + liveTotal;
-      const endDate = latestMonth ? new Date(latestMonth + "-01") : new Date(2026, 5, 30);
-      const endLabel = `${MNAMES[endDate.getMonth()]} ${endDate.getFullYear()}`;
-      title = `Sixth Year (Nov 2025 – ${endLabel})`;
+      const liveTotal = livePaymentsOct.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+      const yr6RunningTotal = 230217 + liveTotal;
+      title = `Sixth Year (Nov 2025 – ${latestMonth ? latestLbl : "Sep 2026"})`;
       const points = [
         { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
         { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
         { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000 },
         { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250 },
         { label: "Monthly Deposits",    detail: "January – June 2026 (₹2,000 × 7 members × 6 months)",                       amount:  84000 },
-        { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months",                                 amount:  44672 },
-        { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65546 },
+        { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months (Jan–Jun)",                       amount:  44672 },
+        { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65000 },
         { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
         { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
+        { label: "Monthly Deposits",    detail: "July – September 2026 (₹2,000 × 7 members + Appanna EMI × 3 months)",       amount:  64335 },
+        { label: "Interest Collected",  detail: "July – September 2026 · loan interest",                                     amount:  36625 },
         ...liveRows,
       ];
       bodyHtml = `
@@ -2943,7 +2941,7 @@ function showDepositYearModal(yearKey) {
             : `<li class="year-modal-item"><div><span class="year-modal-label">${escapeHtml(p.label)}</span><span class="year-modal-detail">${escapeHtml(p.detail)}</span></div><strong class="year-modal-amount" style="color:${p.amount < 0 ? "#dc2626" : "#16a34a"};">${p.amount < 0 ? "−" + money(Math.abs(p.amount)) : money(p.amount)}</strong></li>`
           ).join("")}
         </ul>
-        <div class="year-modal-total"><span>Running Balance (${endLabel})</span><strong style="color:#2563eb;">${money(yr6RunningTotal)}</strong></div>`;
+        <div class="year-modal-total"><span>Running Balance (${latestMonth ? latestLbl : "Sep 2026"})</span><strong style="color:#2563eb;">${money(yr6RunningTotal)}</strong></div>`;
     } else {
       // Year 7+ active: show renewal fee, exits, and live payment rows
       const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
