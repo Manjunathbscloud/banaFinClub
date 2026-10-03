@@ -3228,7 +3228,7 @@ function showLoanYearModal(yearKey) {
           const { interest } = paymentSplit(_mem, p.month, Number(p.paidAmount || p.amount || 0));
           return s + interest;
         }, 0);
-      _totalYrInt = 87967 + _yr6LiveInt;
+      _totalYrInt = 76796 + _yr6LiveInt; // 87967 - 11171 (additional interest excluded)
     } else {
       const _yrPayStart = activeYearCutoffMonth();
       _totalYrInt = state.monthlyPayments
