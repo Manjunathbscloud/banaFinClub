@@ -3130,7 +3130,8 @@ function renderLoans() {
               </div>
               <div class="field" id="lr-tenure-row" style="display:none;">
                 <span>Tenure (months)</span>
-                <input name="tenure_months" type="number" min="1" max="36" placeholder="e.g. 12" id="lr-tenure" oninput="updateEmiPreview()" />
+                <input name="tenure_months" type="number" min="1" max="24" placeholder="e.g. 12" id="lr-tenure" oninput="updateEmiPreview()" />
+                <small id="lr-tenure-hint" style="color:var(--muted);font-size:11px;">Up to 12 months (₹0–1L) · 18 months (₹1–2L) · 24 months (₹2–3L)</small>
               </div>
               <div id="lr-emi-preview" style="font-size:13px;color:#2563eb;padding:4px 0 0;min-height:20px;"></div>
             ` : ""}
@@ -5236,15 +5237,27 @@ async function setNewPassword(data) {
   renderAuth("login");
 }
 
+function emiMaxTenure(principal) {
+  if (principal <= 100000) return 12;
+  if (principal <= 200000) return 18;
+  if (principal <= 300000) return 24;
+  return 24;
+}
+
 function updateEmiPreview() {
   const previewEl = document.getElementById("lr-emi-preview");
   if (!previewEl) return;
   const amountEl = document.getElementById("lr-amount");
   const tenureEl = document.getElementById("lr-tenure");
+  const tenureHintEl = document.getElementById("lr-tenure-hint");
   const tenureRow = document.getElementById("lr-tenure-row");
   if (!amountEl || !tenureEl || tenureRow?.style.display === "none") { previewEl.innerHTML = ""; return; }
   const principal = Number(amountEl.value);
-  const tenure = Number(tenureEl.value);
+  const maxTenure = emiMaxTenure(principal);
+  tenureEl.max = maxTenure;
+  if (tenureHintEl) tenureHintEl.textContent = `Maximum ${maxTenure} months for this loan amount.`;
+  const tenure = Math.min(Number(tenureEl.value), maxTenure);
+  if (tenureEl.value && Number(tenureEl.value) > maxTenure) tenureEl.value = maxTenure;
   if (!principal || !tenure || tenure < 1) { previewEl.innerHTML = ""; return; }
   const { emiAmount } = calcEmi(principal, tenure);
   previewEl.innerHTML = `EMI: <strong>${money(emiAmount)}/month</strong> for ${tenure} months`;
@@ -5375,7 +5388,11 @@ async function requestLoan(data) {
   const loanType = data.loan_type || "full";
   const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
   if (!Number(data.amount) || Number(data.amount) < 10000) throw new Error("Minimum loan amount is ₹10,000.");
-  if (loanType === "emi" && (!tenureMonths || tenureMonths < 1)) throw new Error("Please enter a valid tenure (months).");
+  if (loanType === "emi") {
+    if (!tenureMonths || tenureMonths < 1) throw new Error("Please enter a valid tenure (months).");
+    const maxT = emiMaxTenure(Number(data.amount));
+    if (tenureMonths > maxT) throw new Error(`Maximum tenure for ₹${Number(data.amount).toLocaleString("en-IN")} is ${maxT} months.`);
+  }
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("loan_requests").insert({
       profile_id: user.id,
