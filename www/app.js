@@ -6597,6 +6597,7 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       nextYearRenewalFee: Number(state.settings.activeYearRenewalFeePerMember || state.settings.activeYearRenewalFee || 0),
       nextYearMonthlyDeposit: Number(state.settings.monthlyDeposit || 0),
       nextYearMaxLoan: Number(state.settings.maxLoanPerMember || 0),
+      notificationsForAll: Boolean(state.settings.notificationsForAll),
     };
 
     const { data: { session } } = await supabaseClient.auth.getSession();
