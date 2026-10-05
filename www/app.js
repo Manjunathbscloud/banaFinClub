@@ -1705,7 +1705,8 @@ function renderHome() {
         );
         if (!alreadyAcknowledged) {
           // Compute summary figures for the banner
-          const activeYearStart = activeYearCutoffMonth();
+          // Year 6: hardcoded through Sep 2026, live only from Oct 2026
+          const activeYearStart = yearNum === 6 ? "2026-10" : activeYearCutoffMonth();
           const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
           let liveDep = 0, liveInt = 0;
           livePayments.forEach(p => {
