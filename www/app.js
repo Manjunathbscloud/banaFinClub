@@ -1710,7 +1710,7 @@ function renderHome() {
           const totalInt = Number(depRow.interest || 0);
           const closingBal = Number(depRow.balance || 0);
           const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
-          const poolBal = closingBal + loansOutstanding;
+          const poolBal = expectedBankBalance() + loansOutstanding;
           const exits = Number(depRow.exit_payouts || 0) > 0
             ? [{ name: "Member Exit", payout: Number(depRow.exit_payouts) }]
             : (state.settings.activeYearExits || []);
