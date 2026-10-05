@@ -312,18 +312,20 @@ function buildYearByYearTable(allYears: YearRow[]): string {
   }
 
   const cards = sorted.map(r => {
-    const label = r.label || `Year ${r.year - 2020}`;
-    const principal   = Number(r.principal   || 0);
-    const interest    = Number(r.interest    || 0);
-    const expenditure = Number(r.expenditure || 0);
-    const balance     = Number(r.balance     || 0);
+    const label       = r.label || `Year ${r.year - 2020}`;
+    const principal   = Number(r.principal    || 0);
+    const interest    = Number(r.interest     || 0);
+    const expenditure = Number(r.expenditure  || 0);
+    const exitPayouts = Number(r.exit_payouts || 0);
+    const balance     = Number(r.balance      || 0);
     return `
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:8px;">
       <div style="font-size:13px;font-weight:800;color:#1a1a2e;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #f3f4f6;">${label}</div>
       <table width="100%" cellpadding="0" cellspacing="0">
         ${row("Deposits", inr(principal), "#6b7280", "#1d4ed8")}
         ${row("Interest Earned", inr(interest), "#6b7280", "#15803d")}
-        ${expenditure > 0 ? row("Expenses", inr(expenditure), "#6b7280", "#92400e") : ""}
+        ${exitPayouts > 0 ? row("Member Exit", "−" + inr(exitPayouts), "#6b7280", "#dc2626") : ""}
+        ${expenditure > 0 ? row("Meeting Expenses", "−" + inr(expenditure), "#6b7280", "#92400e") : ""}
         <tr><td colspan="2" style="padding:4px 0;border-top:1px solid #f3f4f6;"></td></tr>
         ${row("Closing Balance", inr(balance), "#374151", "#1f2937")}
       </table>
@@ -345,9 +347,13 @@ function buildYearByYearTable(allYears: YearRow[]): string {
           <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;">Total Interest</td>
           <td style="font-size:13px;font-weight:700;color:#86efac;text-align:right;padding:5px 0;">${inr(totalInterest)}</td>
         </tr>
+        ${totalExitPayouts > 0 ? `<tr>
+          <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;">Total Exit Payouts</td>
+          <td style="font-size:13px;font-weight:700;color:#fca5a5;text-align:right;padding:5px 0;">−${inr(totalExitPayouts)}</td>
+        </tr>` : ""}
         ${totalExpenses > 0 ? `<tr>
           <td style="font-size:11px;color:rgba(255,255,255,0.6);padding:5px 0;">Total Expenses</td>
-          <td style="font-size:13px;font-weight:700;color:#fcd34d;text-align:right;padding:5px 0;">${inr(totalExpenses)}</td>
+          <td style="font-size:13px;font-weight:700;color:#fcd34d;text-align:right;padding:5px 0;">−${inr(totalExpenses)}</td>
         </tr>` : ""}
         <tr>
           <td colspan="2" style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.1);"></td>
