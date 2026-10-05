@@ -3875,6 +3875,16 @@ function renderAdmin() {
             }).join("")}
           </div>` : ""}
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
+            <div>
+              <p style="font-size:14px;font-weight:600;margin:0;">Notifications</p>
+              <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">${state.settings.notificationsForAll ? "Sending to all members" : "Admin only"}</p>
+            </div>
+            <label class="toggle-switch" aria-label="Enable notifications for all">
+              <input type="checkbox" data-action="toggle-notifications-for-all" ${state.settings.notificationsForAll ? "checked" : ""} />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
             <p style="font-size:14px;font-weight:600;margin:0;">Enable Year Close</p>
             <label class="toggle-switch" aria-label="Enable year close">
               <input type="checkbox" data-action="toggle-year-close" ${state.settings.yearCloseEnabled ? "checked" : ""} />
@@ -5720,15 +5730,20 @@ async function rejectLoan(id) {
 const TEST_MODE_SUPPRESS_BROADCAST = true; // set false before going live
 
 async function notifyAllActiveMembers(type, title, body, relatedId = null) {
-  // Admin-only notifications — only president receives
-  const admin = state.members.find(m => m.role === "president" && m.status === "active");
-  if (admin) await notifyMember(admin.id, type, title, body, relatedId);
+  if (state.settings.notificationsForAll) {
+    const active = state.members.filter(m => m.status === "active");
+    for (const m of active) await notifyMember(m.id, type, title, body, relatedId);
+  } else {
+    const admin = state.members.find(m => m.role === "president" && m.status === "active");
+    if (admin) await notifyMember(admin.id, type, title, body, relatedId);
+  }
 }
 async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (!liveBackendReady || !profileId) return;
-  // Admin-only: skip if target is not the president
-  const target = state.members.find(m => m.id === profileId);
-  if (!target || target.role !== "president") return;
+  if (!state.settings.notificationsForAll) {
+    const target = state.members.find(m => m.id === profileId);
+    if (!target || target.role !== "president") return;
+  }
   try {
     await supabaseClient.from("notifications").insert({
       profile_id: profileId, type, title, body, related_id: relatedId || null, is_read: false,
