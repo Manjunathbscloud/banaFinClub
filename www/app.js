@@ -1704,31 +1704,16 @@ function renderHome() {
           a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
         );
         if (!alreadyAcknowledged) {
-          // Compute summary figures for the banner
-          // Year 6: hardcoded through Sep 2026, live only from Oct 2026
-          const activeYearStart = yearNum === 6 ? "2026-10" : activeYearCutoffMonth();
-          const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
-          let liveDep = 0, liveInt = 0;
-          livePayments.forEach(p => {
-            const mem = memberById(p.memberId);
-            if (!mem) return;
-            const { dep, interest } = paymentSplit(mem, p.month, Number(p.paidAmount || p.amount || 0));
-            liveDep += dep; liveInt += interest;
-          });
-          let totalDep, totalInt, poolBal;
-          if (yearNum === 6) {
-            totalDep = 21000 + 14000 + 11250 + 84000 + 44672 + 64335 + liveDep;
-            totalInt = 65000 + 11171 + 36625 + liveInt;
-            poolBal = (21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625) + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-          } else {
-            totalDep = liveDep; totalInt = liveInt;
-            const exits = (state.settings.activeYearExits || []).reduce((s, e) => s + Number(e.payout || 0), 0);
-            poolBal = liveDep + liveInt - exits;
-          }
-          const exits = yearNum === 6
-            ? [{ name: "Sarpabhushana Banakar", payout: 121834 }]
-            : (state.settings.activeYearExits || []);
+          // Read all figures from deposit_summaries — no hardcoding
+          const depRow = state.deposits.find(d => d.year === yearDbYear) || {};
+          const totalDep = Number(depRow.principal || 0);
+          const totalInt = Number(depRow.interest || 0);
+          const closingBal = Number(depRow.balance || 0);
           const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
+          const poolBal = closingBal + loansOutstanding;
+          const exits = Number(depRow.exit_payouts || 0) > 0
+            ? [{ name: "Member Exit", payout: Number(depRow.exit_payouts) }]
+            : (state.settings.activeYearExits || []);
 
           banners.push(`
             <details style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
@@ -1754,18 +1739,14 @@ function renderHome() {
                     <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
                     <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
                   </div>
-                  ${(() => {
-                    const expRow = state.deposits.find(d => d.year === 2020 + yearNum);
-                    const expAmt = Number(expRow?.expenditure || 0);
-                    return expAmt > 0 ? `
+                  ${Number(depRow.expenditure || 0) > 0 ? `
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
                     <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Meeting Expenses</p>
-                    <strong style="font-size:15px;color:#d97706;">${money(expAmt)}</strong>
-                  </div>` : "";
-                  })()}
+                    <strong style="font-size:15px;color:#d97706;">${money(Number(depRow.expenditure))}</strong>
+                  </div>` : ""}
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
                     <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Closing Balance</p>
-                    <strong style="font-size:15px;color:#2563eb;">${money((() => { const r = state.deposits.find(d => d.year === 2020 + yearNum); return r ? Number(r.balance || 0) : poolBal; })())}</strong>
+                    <strong style="font-size:15px;color:#2563eb;">${money(closingBal)}</strong>
                   </div>
                 </div>
                 ${exits.length > 0 ? `
