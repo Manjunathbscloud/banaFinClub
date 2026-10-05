@@ -1714,6 +1714,9 @@ function renderHome() {
           const exits = Number(depRow.exit_payouts || 0) > 0
             ? [{ name: "Member Exit", payout: Number(depRow.exit_payouts) }]
             : (state.settings.activeYearExits || []);
+          // Association year always runs November → October
+          // e.g. Year 6 (db year 2026) = November 2025 – October 2026
+          const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
           banners.push(`
             <details style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
@@ -1721,11 +1724,12 @@ function renderHome() {
                 <span style="font-size:20px;">📋</span>
                 <div style="flex:1;">
                   <p style="font-size:14px;font-weight:700;margin:0;color:var(--accent,#2563eb);">Year ${yearNum} — Records Review</p>
-                  <p style="font-size:12px;color:var(--muted);margin:0;">Tap to review and acknowledge</p>
+                  <p style="font-size:12px;color:var(--muted);margin:0;">${periodLabel} · Tap to review</p>
                 </div>
                 <span style="font-size:18px;color:var(--muted);">›</span>
               </summary>
               <div style="padding:0 16px 16px;">
+                <p style="font-size:12px;color:var(--muted);margin:0 0 10px;text-align:center;">${periodLabel}</p>
                 <div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:center;">
                   <p style="font-size:11px;color:rgba(255,255,255,0.7);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.6px;">Pool Balance</p>
                   <strong style="font-size:22px;color:#fff;">${money(poolBal)}</strong>
