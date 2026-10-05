@@ -1740,22 +1740,31 @@ function renderHome() {
                 <span style="font-size:18px;color:var(--muted);">›</span>
               </summary>
               <div style="padding:0 16px 16px;">
+                <div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:center;">
+                  <p style="font-size:11px;color:rgba(255,255,255,0.7);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.6px;">Pool Balance</p>
+                  <strong style="font-size:22px;color:#fff;">${money(poolBal)}</strong>
+                </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Total Deposits</p>
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Deposits Collected</p>
                     <strong style="font-size:15px;color:#16a34a;">${money(totalDep)}</strong>
                   </div>
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
                     <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
                     <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
                   </div>
+                  ${(() => {
+                    const expRow = state.deposits.find(d => d.year === 2020 + yearNum);
+                    const expAmt = Number(expRow?.expenditure || 0);
+                    return expAmt > 0 ? `
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Loans Outstanding</p>
-                    <strong style="font-size:15px;color:#dc2626;">${money(loansOutstanding)}</strong>
-                  </div>
+                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Meeting Expenses</p>
+                    <strong style="font-size:15px;color:#d97706;">${money(expAmt)}</strong>
+                  </div>` : "";
+                  })()}
                   <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
                     <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Closing Balance</p>
-                    <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
+                    <strong style="font-size:15px;color:#2563eb;">${money((() => { const r = state.deposits.find(d => d.year === 2020 + yearNum); return r ? Number(r.balance || 0) : poolBal; })())}</strong>
                   </div>
                 </div>
                 ${exits.length > 0 ? `
