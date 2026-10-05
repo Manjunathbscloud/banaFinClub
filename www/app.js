@@ -5943,48 +5943,41 @@ async function approvePartialRepaymentRequest(requestId) {
   const loan = state.loans.find(l => l.id === req.loanId);
   if (!loan) { showToast("Loan not found."); return; }
   const outstanding = loanOutstanding(loan);
-  if (req.amount >= outstanding) {
-    showToast(`Amount ${money(req.amount)} exceeds outstanding ${money(outstanding)}. Use Clear Loan instead.`);
-    return;
-  }
-
-  // Apply repayment — clear fixed interest so dynamic calculation takes over
-  const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
-  const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
-  const newOutstanding = Math.max(0, Number(loan.amount) - newPrincipalPaid);
-  const rate = Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly || 1.25);
-  const newMonthlyInterest = Math.round((newOutstanding * rate) / 100);
-  await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: newMonthlyInterest }).eq("id", req.loanId));
-  await liveQuery(supabaseClient.from("loan_partial_payments").insert({
-    loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
-  }));
-  await insertStatement("credit", req.amount, `${loanMemberName(loan).split(" ")[0]} Partial Payment`, req.loanId);
+  const isFinalClearance = req.amount >= outstanding;
+  const memberName = loanMemberName(loan);
 
   // Mark request approved
   await liveQuery(supabaseClient.from("partial_repayment_requests").update({
     status: "approved", decided_at: new Date().toISOString(),
   }).eq("id", requestId));
 
-  const memberName = loanMemberName(loan);
+  await liveQuery(supabaseClient.from("loan_partial_payments").insert({
+    loan_id: req.loanId, amount: req.amount, paid_on: today(), recorded_by: currentProfileId(),
+  }));
 
-  // Notify the member
-  await notifyMember(
-    req.profileId,
-    "partial_repayment_approved",
-    "Payment Recorded ✅",
-    `Your payment of ${money(req.amount)} has been recorded. Your new outstanding balance is ${money(outstanding - req.amount)}.`,
-    requestId
-  );
+  if (isFinalClearance) {
+    const interestPaid = calculatedInterestPaid(loan, today());
+    await liveQuery(supabaseClient.from("current_loans").update({
+      principal_paid: loan.amount,
+      interest_paid: interestPaid,
+      status: "clear",
+      closed_at: today(),
+    }).eq("id", req.loanId));
+    await insertStatement("credit", req.amount, `Final loan clearance — ${memberName}`, req.loanId);
+    await addLiveAudit(`Final clearance ${money(req.amount)} approved for ${memberName}. Loan closed.`, "partial_repayment_approved");
+  } else {
+    const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
+    const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
+    const newOutstanding = Math.max(0, Number(loan.amount) - newPrincipalPaid);
+    const rate = Number(loan.interestRateMonthly || state.settings.loanInterestRateMonthly || 1.25);
+    const newMonthlyInterest = Math.round((newOutstanding * rate) / 100);
+    await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: newMonthlyInterest }).eq("id", req.loanId));
+    await insertStatement("credit", req.amount, `${memberName.split(" ")[0]} Partial Payment`, req.loanId);
+    await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
+  }
 
-  // await notifyAllActiveMembers(
-  //   "partial_repayment_approved",
-  //   "Loan Partial Repayment",
-  //   `${memberName} has partially repaid ${money(req.amount)} on their loan. Remaining outstanding: ${money(outstanding - req.amount)}.`
-  // );
-
-  await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
   await loadLiveState();
-  showToast(`✓ Payment of ${money(req.amount)} recorded for ${memberName}.`);
+  showToast(isFinalClearance ? `✓ Loan closed. Final payment of ${money(req.amount)} recorded for ${memberName}.` : `✓ Payment of ${money(req.amount)} recorded for ${memberName}.`);
   render();
 }
 
