@@ -120,7 +120,7 @@ const initialState = {
     financialSignoffEnabled: false,
     meetingSignoffEnabled: false,
     emiEnabled: false,
-    emiLoanInterestRateMonthly: 1.5,
+    emiLoanInterestRateMonthly: 1.25,
     partialRepaymentEnabled: false,
   },
   members: [
@@ -637,7 +637,7 @@ async function loadLiveState() {
       loanInterestLabel: "Rs. 1.25 per Rs. 100 per month",
       bankName: "ICICI Bank",
       emiEnabled: Boolean(settingsById.emi_settings?.enabled ?? false),
-      emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.5),
+      emiLoanInterestRateMonthly: Number(settingsById.emi_settings?.interestRate ?? 1.25),
       partialRepaymentEnabled: Boolean(settingsById.partial_repayment_settings?.enabled ?? false),
       maxLoanPerMember: Number(settingsById.loan_settings?.maxLoanPerMember ?? 300000),
       monthlyDeposit: Number(settingsById.monthly_deposit?.amount ?? settingsById.active_year_info?.monthlyDeposit ?? 2000),
@@ -818,7 +818,7 @@ function loanOutstanding(loan) {
 }
 
 function calcEmi(principal, tenureMonths) {
-  const r = Number(state.settings.emiLoanInterestRateMonthly || 1.5) / 100;
+  const r = Number(state.settings.emiLoanInterestRateMonthly || 1.25) / 100;
   const emiAmount = Math.round(principal * (1 + r * tenureMonths) / tenureMonths);
   const principalPart = Math.round(principal / tenureMonths);
   const interestPart = emiAmount - principalPart;
@@ -872,7 +872,7 @@ function calculatedInterestPaid(loan, clearDate = today()) {
   if (!partials.length) {
     return loanBaseMonthlyInterest(loan) * monthDiff(loan.from, clearDate);
   }
-  const rate = (loan.interestRateMonthly || state.settings.interestRateMonthly || 1.5) / 100;
+  const rate = (loan.interestRateMonthly || state.settings.interestRateMonthly || 1.25) / 100;
   let outstanding = loan.amount;
   let from = loan.from;
   let total = 0;
@@ -3124,7 +3124,7 @@ function renderLoans() {
                   </label>
                   <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
                     <input type="radio" name="loan_type" value="emi" onchange="document.getElementById('lr-tenure-row').style.display='block';updateEmiPreview()" />
-                    EMI <small style="color:var(--muted);">(1.5%/mo)</small>
+                    EMI <small style="color:var(--muted);">(1.25%/mo)</small>
                   </label>
                 </div>
               </div>
@@ -4019,7 +4019,7 @@ function renderAdmin() {
         <div class="card-body">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 0;">
             <div>
-              <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, members can request loans in EMI format at <strong>1.5%/month</strong> with a custom tenure.</p>
+              <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">When enabled, members can request loans in EMI format at <strong>1.25%/month</strong> with a custom tenure.</p>
               <p style="font-size:13px;color:var(--muted);margin:0;">Full-repayment loans remain available at <strong>1.25%/month</strong>.</p>
             </div>
             <label class="toggle-switch" aria-label="Enable EMI loans">
@@ -5243,7 +5243,7 @@ async function toggleEmiEnabled() {
   const newVal = !state.settings.emiEnabled;
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "emi_settings",
-    value: { enabled: newVal, interestRate: Number(state.settings.emiLoanInterestRateMonthly || 1.5) },
+    value: { enabled: newVal, interestRate: Number(state.settings.emiLoanInterestRateMonthly || 1.25) },
   }));
   await loadLiveState();
   showToast(`EMI loans ${newVal ? "enabled" : "disabled"}.`);
@@ -5577,7 +5577,7 @@ async function approveLoan(id) {
   renewalDate.setFullYear(renewalDate.getFullYear() + 1);
   const renewalDateStr = renewalDate.toISOString().slice(0, 10);
   const interestRate = loanType === "emi"
-    ? Number(state.settings.emiLoanInterestRateMonthly || 1.5)
+    ? Number(state.settings.emiLoanInterestRateMonthly || 1.25)
     : Number(state.settings.loanInterestRateMonthly || 1.25);
   const emiCalc = loanType === "emi" ? calcEmi(request.amount, tenure) : null;
 
