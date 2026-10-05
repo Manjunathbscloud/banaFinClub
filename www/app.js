@@ -1719,48 +1719,45 @@ function renderHome() {
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
           banners.push(`
-            <details style="background:var(--surface,#fff);border:2px solid var(--accent,#2563eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
-              <summary style="display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;list-style:none;">
-                <span style="font-size:20px;">📋</span>
-                <div style="flex:1;">
-                  <p style="font-size:14px;font-weight:700;margin:0;color:var(--accent,#2563eb);">Year ${yearNum} — Records Review</p>
-                  <p style="font-size:12px;color:var(--muted);margin:0;">${periodLabel} · Tap to review</p>
-                </div>
-                <span style="font-size:18px;color:var(--muted);">›</span>
-              </summary>
-              <div style="padding:0 16px 16px;">
-                <p style="font-size:12px;color:var(--muted);margin:0 0 10px;text-align:center;">${periodLabel}</p>
-                <div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:center;">
-                  <p style="font-size:11px;color:rgba(255,255,255,0.7);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.6px;">Pool Balance</p>
-                  <strong style="font-size:22px;color:#fff;">${money(poolBal)}</strong>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Deposits Collected</p>
-                    <strong style="font-size:15px;color:#16a34a;">${money(totalDep)}</strong>
+            <div style="background:var(--surface,#fff);border:1.5px solid var(--border,#e5e7eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
+              <div style="padding:14px 16px;border-bottom:1px solid var(--border,#f3f4f6);">
+                <p style="font-size:13px;font-weight:700;margin:0;color:var(--text);">Year ${yearNum} Financial Review</p>
+                <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">${periodLabel}</p>
+              </div>
+              <div style="padding:12px 16px;">
+                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Pool Balance</span>
+                    <strong style="font-size:14px;color:var(--text);">${money(poolBal)}</strong>
                   </div>
-                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Interest Collected</p>
-                    <strong style="font-size:15px;color:#16a34a;">${money(totalInt)}</strong>
+                  <div style="height:1px;background:var(--border,#f3f4f6);"></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Deposits Collected</span>
+                    <strong style="font-size:14px;color:#16a34a;">${money(totalDep)}</strong>
                   </div>
-                  ${Number(depRow.expenditure || 0) > 0 ? `
-                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Meeting Expenses</p>
-                    <strong style="font-size:15px;color:#d97706;">${money(Number(depRow.expenditure))}</strong>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Interest Collected</span>
+                    <strong style="font-size:14px;color:#16a34a;">${money(totalInt)}</strong>
+                  </div>
+                  ${exits.length > 0 ? `
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Member Exit Payout</span>
+                    <strong style="font-size:14px;color:#dc2626;">−${money(exits.reduce((s,e)=>s+e.payout,0))}</strong>
                   </div>` : ""}
-                  <div style="background:var(--bg,#f9fafb);border-radius:8px;padding:10px;">
-                    <p style="font-size:11px;color:var(--muted);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.4px;">Closing Balance</p>
+                  ${Number(depRow.expenditure || 0) > 0 ? `
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Meeting Expenses</span>
+                    <strong style="font-size:14px;color:#d97706;">−${money(Number(depRow.expenditure))}</strong>
+                  </div>` : ""}
+                  <div style="height:1px;background:var(--border,#f3f4f6);"></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;font-weight:600;color:var(--text);">Closing Balance</span>
                     <strong style="font-size:15px;color:#2563eb;">${money(closingBal)}</strong>
                   </div>
                 </div>
-                ${exits.length > 0 ? `
-                <div style="background:#fef2f2;border-radius:8px;padding:10px;margin-bottom:12px;">
-                  <p style="font-size:11px;color:var(--muted);margin:0 0 4px;text-transform:uppercase;letter-spacing:0.4px;">Member Exit</p>
-                  ${exits.map(e => `<p style="font-size:13px;margin:0;color:#dc2626;">${escapeHtml(e.name)} · −${money(e.payout)}</p>`).join("")}
-                </div>` : ""}
-                <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;">I Acknowledge — Records Look Good ✓</button>
+                <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;font-size:14px;">Acknowledge ✓</button>
               </div>
-            </details>`);
+            </div>`);
         }
       }
 
