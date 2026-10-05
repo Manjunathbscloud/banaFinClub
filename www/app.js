@@ -5364,13 +5364,7 @@ async function recordPartialPayment(loanId, amount, date) {
   if (!loan) { showToast("Loan not found."); return; }
   const outstanding = loanOutstanding(loan);
   const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-  const isFinalClearance = outstanding <= minPartial;
-  if (!isFinalClearance && amount >= outstanding) {
-    showToast(`Amount must be less than outstanding balance (${money(outstanding)}). Use Clear Loan to fully repay.`);
-    const btn = document.querySelector("[data-action='submit-partial-payment']");
-    if (btn) btn.disabled = false;
-    return;
-  }
+  const isFinalClearance = outstanding <= minPartial || amount >= outstanding;
   // Fetch the live principal_paid from DB to avoid TOCTOU with concurrent sessions
   const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", loanId).single();
   const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + amount;
