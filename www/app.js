@@ -1758,7 +1758,6 @@ function renderHome() {
                     <strong style="font-size:15px;color:#2563eb;">${money(closingBal)}</strong>
                   </div>
                 </div>
-                <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;">Please review the <strong>Deposits</strong> and <strong>Loans</strong> sections for full details before acknowledging. This action is irreversible.</p>
                 <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;font-size:14px;">Acknowledge ✓</button>
               </div>
             </details>`);
@@ -4350,13 +4349,15 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "acknowledge-financial") {
+    const confirmed = confirm("Have you reviewed the Deposits and Loans sections?\n\nThis acknowledgement is irreversible and confirms that the records look correct to you.");
+    if (!confirmed) return;
     action.disabled = true;
     action.textContent = "Confirming…";
     try {
       await acknowledgeFinancialRecords();
     } catch (e) {
       action.disabled = false;
-      action.textContent = "Records Look Good ✓";
+      action.textContent = "Acknowledge ✓";
       showToast(typeof e?.message === "string" ? e.message : "Failed to confirm. Please try again.");
     }
     return;
