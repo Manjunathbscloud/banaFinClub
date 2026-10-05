@@ -1719,13 +1719,16 @@ function renderHome() {
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
           banners.push(`
-            <div style="background:var(--surface,#fff);border:1.5px solid var(--border,#e5e7eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
-              <div style="padding:14px 16px;border-bottom:1px solid var(--border,#f3f4f6);">
-                <p style="font-size:13px;font-weight:700;margin:0;color:var(--text);">Year ${yearNum} Financial Review</p>
-                <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">${periodLabel}</p>
-              </div>
-              <div style="padding:12px 16px;">
-                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+            <details style="background:var(--surface,#fff);border:1.5px solid var(--border,#e5e7eb);border-radius:14px;margin-bottom:10px;overflow:hidden;">
+              <summary style="list-style:none;padding:14px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <p style="font-size:13px;font-weight:700;margin:0;color:var(--text);">Year ${yearNum} Financial Review</p>
+                  <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">${periodLabel} · Tap to view & acknowledge</p>
+                </div>
+                <span style="font-size:13px;color:var(--muted);flex-shrink:0;margin-left:8px;">›</span>
+              </summary>
+              <div style="border-top:1px solid var(--border,#f3f4f6);padding:14px 16px;">
+                <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:16px;">
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Pool Balance</span>
                     <strong style="font-size:14px;color:var(--text);">${money(poolBal)}</strong>
@@ -1757,7 +1760,7 @@ function renderHome() {
                 </div>
                 <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;font-size:14px;">Acknowledge ✓</button>
               </div>
-            </div>`);
+            </details>`);
         }
       }
 
