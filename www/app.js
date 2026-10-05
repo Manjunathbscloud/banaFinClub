@@ -4585,8 +4585,8 @@ document.addEventListener("click", async (event) => {
       const loan = state.loans.find(l => l.id === loanId);
       if (loan) {
         const outstanding = loanOutstanding(loan);
-        const minPartial = Math.ceil(outstanding * 0.30);
-        if (amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of outstanding).`); return; }
+        const minPartial = Math.ceil(Number(loan.amount) * 0.30);
+        if (amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of loan amount).`); return; }
       }
       action.disabled = true;
       await requestPartialRepayment(loanId, amount);
@@ -4664,8 +4664,8 @@ document.addEventListener("click", async (event) => {
       const loan = state.loans.find(l => l.id === loanId);
       if (loan) {
         const outstanding = loanOutstanding(loan);
-        const minPartial = Math.ceil(outstanding * 0.30);
-        if (amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of outstanding).`); return; }
+        const minPartial = Math.ceil(Number(loan.amount) * 0.30);
+        if (amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of loan amount).`); return; }
       }
       action.disabled = true;
       try { await recordPartialPayment(loanId, amount, date); } finally { action.disabled = false; }
@@ -5313,7 +5313,7 @@ function showPartialPaymentModal(loanId) {
   const loan = state.loans.find(l => l.id === loanId);
   if (!loan) return;
   const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(outstanding * 0.30);
+  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
   const memberName = loanMemberName(loan);
 
   const modal = document.createElement("div");
@@ -5334,7 +5334,7 @@ function showPartialPaymentModal(loanId) {
           <input id="partial-payment-amount" type="number" min="${minPartial}" max="${outstanding}" step="1"
             placeholder="Min ${money(minPartial)}"
             style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;background:var(--panel);color:var(--text);box-sizing:border-box;" />
-          <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">Minimum 30% of outstanding · ${money(minPartial)} – ${money(outstanding)}</p>
+          <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">Minimum 30% of loan amount · ${money(minPartial)} – ${money(outstanding)}</p>
         </div>
         <div style="margin-bottom:20px;">
           <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px;">Date of Payment</label>
@@ -5833,7 +5833,7 @@ function showPartialRepaymentRequestModal(loanId) {
   const loan = state.loans.find(l => l.id === loanId);
   if (!loan) return;
   const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(outstanding * 0.30);
+  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
   const existing = document.getElementById("partial-req-modal");
   if (existing) existing.remove();
   const modal = document.createElement("div");
@@ -5852,7 +5852,7 @@ function showPartialRepaymentRequestModal(loanId) {
           <span>Amount to repay (₹)</span>
           <input id="partial-req-amount" type="number" min="${minPartial}" max="${outstanding}" step="1"
             placeholder="Min ${money(minPartial)}" style="font-size:16px;" />
-          <span style="font-size:11px;color:var(--muted);">Minimum 30% of outstanding (${money(minPartial)}). Maximum is full outstanding amount.</span>
+          <span style="font-size:11px;color:var(--muted);">Minimum 30% of loan amount (${money(minPartial)}). Maximum is full outstanding amount.</span>
         </label>
         <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">Notify Admin</button>
         <button class="secondary" data-action="close-partial-req-modal" type="button" style="width:100%;">Cancel</button>
@@ -5869,9 +5869,9 @@ async function requestPartialRepayment(loanId, amount) {
   if (!loan) { showToast("Loan not found."); return; }
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(outstanding * 0.30);
+  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
   if (amount < minPartial || amount > outstanding) {
-    showToast(`Amount must be between ${money(minPartial)} (30%) and ${money(outstanding)}.`);
+    showToast(`Amount must be between ${money(minPartial)} (30% of loan) and ${money(outstanding)}.`);
     const btn = document.querySelector("[data-action='submit-partial-repayment-request']");
     if (btn) btn.disabled = false;
     return;
