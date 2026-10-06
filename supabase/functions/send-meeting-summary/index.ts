@@ -554,8 +554,6 @@ function buildAnnualMeetingEmailHtml(
 
       ${buildNextYearSection(nextYearRenewalFee, nextYearMonthlyDeposit, nextYearMaxLoan, nextYearNum)}
 
-      ${buildLoanSection(loans)}
-
       <div style="margin-bottom:24px;">
         <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;">✅ Key Decisions</div>
         ${decisionsHtml}
