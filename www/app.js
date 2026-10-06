@@ -992,6 +992,26 @@ function activeYearCutoffMonth() {
 // Used by both the deposits section and the financial review summary.
 function activeYearFinancials() {
   const yearNum = state.settings.activeYearNumber || 6;
+  if (yearNum === 6) {
+    // Hardcoded base covers Nov 2025 – Sep 2026 (incl. Jul–Sep).
+    // Live data starts Oct 2026 to avoid double-counting Jul–Sep.
+    let liveDep = 0, liveInt = 0;
+    state.monthlyPayments.filter(p => p.status === "paid" && p.month >= "2026-10").forEach(p => {
+      const mem = memberById(p.memberId);
+      if (!mem) return;
+      const paid = Number(p.paidAmount || p.amount || 0);
+      const { dep, interest } = paymentSplit(mem, p.month, paid);
+      liveDep += dep;
+      liveInt += interest;
+    });
+    return {
+      totalDep:    (21000 + 14000 + 11250 + 84000 + 44672 + 64335) + liveDep,
+      totalInt:    (65000 + 11171 + 36625) + liveInt,
+      exitTotal:   121834, // Sarpabhushana Banakar exit payout
+      expenditure: 0,
+    };
+  }
+  // Year 7+: fully live from the year start month
   const liveStart = activeYearCutoffMonth();
   let liveDep = 0, liveInt = 0;
   state.monthlyPayments.filter(p => p.status === "paid" && p.month >= liveStart).forEach(p => {
@@ -1002,16 +1022,6 @@ function activeYearFinancials() {
     liveDep += dep;
     liveInt += interest;
   });
-  if (yearNum === 6) {
-    // Hardcoded base Nov 2025 – Jun 2026 (pre-app) + live Jul 2026+
-    return {
-      totalDep:    (21000 + 14000 + 11250 + 84000 + 44672 + 64335) + liveDep,
-      totalInt:    (65000 + 11171 + 36625) + liveInt,
-      exitTotal:   121834, // Sarpabhushana Banakar exit payout
-      expenditure: 0,
-    };
-  }
-  // Year 7+: fully live
   const exits = state.settings.activeYearExits || [];
   return {
     totalDep:    liveDep,
