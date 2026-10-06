@@ -7264,9 +7264,10 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
     if (emiLoans.length > 0) await loadLiveState();
     // Auto-track and auto-close legacy emi_entry catch-up loans
     const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
-    if (legacyEmiLoan && legacyEmiLoan.tenureMonths > 0) {
+    if (legacyEmiLoan) {
       const newPaid = (legacyEmiLoan.emisPaid || 0) + 1;
-      const allDone = newPaid >= legacyEmiLoan.tenureMonths;
+      const tenure = legacyEmiLoan.tenureMonths || 0;
+      const allDone = tenure > 0 && newPaid >= tenure;
       await liveQuery(supabaseClient.from("current_loans").update({
         emis_paid: newPaid,
         ...(allDone ? { status: "clear", principal_paid: legacyEmiLoan.amount, closed_at: today() } : {}),
