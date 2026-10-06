@@ -1049,7 +1049,7 @@ function paymentSplit(mem, month, paidAmount) {
   // This correctly handles catch-up deposits, renewal fees, or any extra deposit — all go to deposit
   const loanInterest = state.loans
     .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry")
-    .reduce((sum, l) => sum + Number(l.interest || 0), 0);
+    .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
   const interest = Math.min(loanInterest, paidAmount);
   return { dep: Math.max(0, paidAmount - interest), interest };
 }
