@@ -1028,9 +1028,15 @@ function memberMonthlyDue(member) {
 // Splits a member's paid amount into deposit (principal) and interest correctly.
 // Regular deposit + EMI principal → deposit; regular loan interest + EMI interest → interest.
 function paymentSplit(mem, month, paidAmount) {
-  // Legacy Appanna EMI — entire payment is deposit, no interest extracted
+  // Legacy catch-up EMI (emi_entry) — catch-up portion is deposit, but still extract interest from regular loans
   const hasLegacyEmi = state.loans.some(l => (l.notes === "emi_entry" || Number(l.interestRateMonthly) > 3) && loanBelongsToMember(l, mem));
-  if (hasLegacyEmi) return { dep: paidAmount, interest: 0 };
+  if (hasLegacyEmi) {
+    const regularInterest = state.loans
+      .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi")
+      .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
+    const interest = Math.min(regularInterest, paidAmount);
+    return { dep: Math.max(0, paidAmount - interest), interest };
+  }
 
   // New EMI loans — keep existing logic (baseDep + emiPrincipal = deposit, rest = interest)
   const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem));
