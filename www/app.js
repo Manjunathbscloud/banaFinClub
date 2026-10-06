@@ -1029,22 +1029,29 @@ function memberMonthlyDue(member) {
 // Regular deposit + EMI principal → deposit; regular loan interest + EMI interest → interest.
 function paymentSplit(mem, month, paidAmount) {
   // Legacy Appanna EMI — entire payment is deposit, no interest extracted
-  // Use notes OR high interest rate (>3%/mo = EMI) as the EMI indicator, since notes may be NULL after DB resets
   const hasLegacyEmi = state.loans.some(l => (l.notes === "emi_entry" || Number(l.interestRateMonthly) > 3) && loanBelongsToMember(l, mem));
   if (hasLegacyEmi) return { dep: paidAmount, interest: 0 };
 
-  const baseDep = expectedMonthlyDeposit(mem, month);
-
-  // New EMI loans — pull principal part from loan_emis for this month
+  // New EMI loans — keep existing logic (baseDep + emiPrincipal = deposit, rest = interest)
   const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem));
-  let emiPrincipal = 0;
-  for (const loan of emiLoans) {
-    const emiRow = state.loanEmis.find(e => e.loanId === loan.id && e.dueMonth === month);
-    if (emiRow) emiPrincipal += Number(emiRow.principalPart || 0);
+  if (emiLoans.length > 0) {
+    const baseDep = expectedMonthlyDeposit(mem, month);
+    let emiPrincipal = 0;
+    for (const loan of emiLoans) {
+      const emiRow = state.loanEmis.find(e => e.loanId === loan.id && e.dueMonth === month);
+      if (emiRow) emiPrincipal += Number(emiRow.principalPart || 0);
+    }
+    const dep = baseDep + emiPrincipal;
+    return { dep, interest: Math.max(0, paidAmount - dep) };
   }
 
-  const dep = baseDep + emiPrincipal;
-  return { dep, interest: Math.max(0, paidAmount - dep) };
+  // Full loans: interest = exact monthly interest from loan records, deposit = everything else
+  // This correctly handles catch-up deposits, renewal fees, or any extra deposit — all go to deposit
+  const loanInterest = state.loans
+    .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry")
+    .reduce((sum, l) => sum + Number(l.interest || 0), 0);
+  const interest = Math.min(loanInterest, paidAmount);
+  return { dep: Math.max(0, paidAmount - interest), interest };
 }
 
 function groupMonthlyDepositDue() {
