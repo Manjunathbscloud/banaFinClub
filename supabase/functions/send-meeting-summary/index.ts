@@ -301,7 +301,7 @@ function buildYearByYearTable(allYears: YearRow[]): string {
   const totalInterest    = sorted.reduce((s, r) => s + Number(r.interest     || 0), 0);
   const totalExpenses    = sorted.reduce((s, r) => s + Number(r.expenditure  || 0), 0);
   const totalExitPayouts = sorted.reduce((s, r) => s + Number(r.exit_payouts || 0), 0);
-  const totalBalance     = totalPrincipal + totalInterest - totalExpenses - totalExitPayouts;
+  const totalBalance     = sorted.reduce((s, r) => s + Number(r.balance      || 0), 0);
 
   function row(label: string, value: string, labelColor: string, valueColor: string): string {
     return `
@@ -360,7 +360,7 @@ function buildYearByYearTable(allYears: YearRow[]): string {
         </tr>
         <tr>
           <td style="font-size:12px;font-weight:700;color:#fff;padding:4px 0;">Pool Balance</td>
-          <td style="font-size:16px;font-weight:900;color:#FF9900;text-align:right;padding:4px 0;">${inr(totalBalance)}</td>
+          <td style="font-size:16px;font-weight:900;color:#FF9900;text-align:right;padding:4px 0;font-variant-numeric:tabular-nums;">${inr(totalBalance)}</td>
         </tr>
       </table>
     </div>
@@ -590,13 +590,17 @@ serve(async (req) => {
     const type = String(data.type || "annual_meeting");
     const testOnly = Boolean(data.test_only);
     const testProfileId = String(data.test_profile_id || "");
+    const notificationsForAll = Boolean(data.notificationsForAll);
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Active members with email and phone (test_only = only the requesting admin)
-    let membersQuery = supabase.from("profiles").select("id, full_name, email, phone").eq("status", "active");
+    // Active members — when notificationsForAll is off, only send to president (admin)
+    let membersQuery = supabase.from("profiles").select("id, full_name, email, phone, role").eq("status", "active");
     if (testOnly && testProfileId) membersQuery = membersQuery.eq("id", testProfileId);
-    const { data: members, error: membErr } = await membersQuery;
+    const { data: allMembers, error: membErr } = await membersQuery;
     if (membErr) throw membErr;
+    const members = notificationsForAll || testOnly
+      ? allMembers
+      : (allMembers || []).filter((m: { role: string }) => m.role === "president");
 
     const client = new SMTPClient({
       connection: {
@@ -642,15 +646,46 @@ serve(async (req) => {
       // ── Annual Meeting Summary ────────────────────────────────────────────
       subject = `Banakar FinClub — ${yearLabel} Annual Meeting Summary`;
 
-      const { data: loanHistory } = await supabase
-        .from("loan_history")
-        .select("profile_id, principal, monthly_interest, interest_rate_monthly, disbursed_at, renewal_or_return_date, status, notes")
-        .eq("year", `Year ${yearNum}`);
+      // Fetch active loans from current_loans (source of truth for live loan status)
+      const { data: activeLoansData } = await supabase
+        .from("current_loans")
+        .select("profile_id, member_phone, amount, interest, interest_rate_monthly, from, renewal_or_return_date, status, notes, loan_type")
+        .eq("status", "active");
+
+      // Also fetch profiles to match by phone for loans without profile_id
+      const { data: allProfiles } = await supabase
+        .from("profiles")
+        .select("id, phone")
+        .eq("status", "active");
+      const phoneToProfile: Record<string, string> = {};
+      for (const p of (allProfiles || [])) {
+        if (p.phone) phoneToProfile[p.phone.replace(/\D/g, "").slice(-10)] = p.id;
+      }
 
       const histLoansByMember: Record<string, LoanRow[]> = {};
-      for (const l of (loanHistory || [])) {
-        if (!histLoansByMember[l.profile_id]) histLoansByMember[l.profile_id] = [];
-        histLoansByMember[l.profile_id].push(l);
+      for (const l of (activeLoansData || [])) {
+        if (l.notes === "emi_entry") continue;
+        const amount = Number(l.amount || 0);
+        const rate = Number(l.interest_rate_monthly || 1.25);
+        const monthlyInt = Number(l.interest || 0) || Math.round(amount * rate / 100);
+        const row: LoanRow = {
+          principal: amount,
+          monthly_interest: monthlyInt,
+          interest_rate_monthly: rate,
+          disbursed_at: l.from || "",
+          renewal_or_return_date: l.renewal_or_return_date || "",
+          status: l.status,
+          notes: l.notes || "",
+        };
+        // Match by profile_id first, then by phone
+        let pid = l.profile_id;
+        if (!pid && l.member_phone) {
+          const norm = l.member_phone.replace(/\D/g, "").slice(-10);
+          pid = phoneToProfile[norm];
+        }
+        if (!pid) continue;
+        if (!histLoansByMember[pid]) histLoansByMember[pid] = [];
+        histLoansByMember[pid].push(row);
       }
 
       const { data: acks } = await supabase
@@ -663,8 +698,8 @@ serve(async (req) => {
       getHtml = (member) => buildAnnualMeetingEmailHtml(member, histLoansByMember[member.id] || [], data, ackedCount, totalCount);
     }
 
-    // Send bulk SMS for annual_meeting type
-    if (type === "annual_meeting") {
+    // Send bulk SMS only when notifications are enabled for all members
+    if (type === "annual_meeting" && notificationsForAll && !testOnly) {
       const yearNum   = Number(data.yearNum || 0);
       const yearLabel = String(data.yearLabel || `Year ${yearNum}`);
       const poolBalance = Number(data.poolBalance || 0);
@@ -681,12 +716,8 @@ serve(async (req) => {
         expenditure    ? `Meeting Expenses: ${inr(expenditure)}` : "",
         `Full details sent to your email.`,
       ].filter(Boolean).join("\n");
-      const phones = (members || []).map(m => m.phone).filter(Boolean) as string[];
-      try {
-        await sendBulkSms(phones, smsText);
-      } catch (smsErr) {
-        console.error("SMS error:", smsErr);
-      }
+      const phones = (members || []).map((m: { phone: string }) => m.phone).filter(Boolean) as string[];
+      try { await sendBulkSms(phones, smsText); } catch (smsErr) { console.error("SMS error:", smsErr); }
     }
 
     let sent = 0;
