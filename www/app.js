@@ -1717,18 +1717,38 @@ function renderHome() {
           a => a.profileId === pid && a.year === yearDbYear && a.type === "financial"
         );
         if (!alreadyAcknowledged) {
-          // Read all figures from deposit_summaries — no hardcoding
-          const depRow = state.deposits.find(d => d.year === yearDbYear) || {};
-          const totalDep = Number(depRow.principal || 0);
-          const totalInt = Number(depRow.interest || 0);
-          const closingBal = Number(depRow.balance || 0);
           const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
           const poolBal = expectedBankBalance() + loansOutstanding;
-          const exits = Number(depRow.exit_payouts || 0) > 0
-            ? [{ name: "Member Exit", payout: Number(depRow.exit_payouts) }]
-            : (state.settings.activeYearExits || []);
+          const exits = state.settings.activeYearExits || [];
+
+          // Compute deposits & interest dynamically from live monthly_payments
+          let liveDep = 0, liveInt = 0;
+          const liveStart = activeYearCutoffMonth(); // "2026-07" for Year 6
+          state.monthlyPayments.filter(p => p.status === "paid" && p.month >= liveStart).forEach(p => {
+            const mem = memberById(p.memberId);
+            if (!mem) return;
+            const paid = Number(p.paidAmount || p.amount || 0);
+            const { dep, interest } = paymentSplit(mem, p.month, paid);
+            liveDep += dep;
+            liveInt += interest;
+          });
+
+          let totalDep, totalInt, expenditure;
+          const depRow = state.deposits.find(d => d.year === yearDbYear) || {};
+          expenditure = Number(depRow.expenditure || 0);
+          if (yearNum === 6) {
+            // Year 6: hardcoded Nov 2025 – Jun 2026 base + live Jul 2026+
+            const baseDep = 21000 + 14000 + 11250 + 84000 + 44672 + 64335; // renewal + monthly + Appanna EMI + Jul–Sep
+            const baseInt = 65000 + 11171 + 36625; // interest Nov–Jun + additional + Jul–Sep
+            totalDep = baseDep + liveDep;
+            totalInt = baseInt + liveInt;
+          } else {
+            // Year 7+: all data in monthly_payments
+            totalDep = liveDep;
+            totalInt = liveInt;
+          }
+          const closingBal = poolBal; // running pool balance for active year
           // Association year always runs November → October
-          // e.g. Year 6 (db year 2026) = November 2025 – October 2026
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
           banners.push(`
@@ -1760,10 +1780,10 @@ function renderHome() {
                     <span style="font-size:13px;color:var(--muted);">Member Exit Payout</span>
                     <strong style="font-size:14px;color:#dc2626;">−${money(exits.reduce((s,e)=>s+e.payout,0))}</strong>
                   </div>` : ""}
-                  ${Number(depRow.expenditure || 0) > 0 ? `
+                  ${expenditure > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Meeting Expenses</span>
-                    <strong style="font-size:14px;color:#d97706;">−${money(Number(depRow.expenditure))}</strong>
+                    <strong style="font-size:14px;color:#d97706;">−${money(expenditure)}</strong>
                   </div>` : ""}
                   <div style="height:1px;background:var(--border,#f3f4f6);"></div>
                   <div style="display:flex;justify-content:space-between;align-items:center;">
