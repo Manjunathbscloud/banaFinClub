@@ -1747,7 +1747,8 @@ function renderHome() {
             totalDep = liveDep;
             totalInt = liveInt;
           }
-          const closingBal = poolBal; // running pool balance for active year
+          const exitTotal = exits.reduce((s, e) => s + e.payout, 0);
+          const closingBal = totalDep + totalInt - exitTotal - expenditure;
           // Association year always runs November → October
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
@@ -1763,22 +1764,17 @@ function renderHome() {
               <div style="border-top:1px solid var(--border,#f3f4f6);padding:14px 16px;">
                 <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:16px;">
                   <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:13px;color:var(--muted);">Pool Balance</span>
-                    <strong style="font-size:14px;color:var(--text);">${money(poolBal)}</strong>
-                  </div>
-                  <div style="height:1px;background:var(--border,#f3f4f6);"></div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:13px;color:var(--muted);">Deposits Collected</span>
+                    <span style="font-size:13px;color:var(--muted);">Total Deposits</span>
                     <strong style="font-size:14px;color:#16a34a;">${money(totalDep)}</strong>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:13px;color:var(--muted);">Interest Collected</span>
+                    <span style="font-size:13px;color:var(--muted);">Total Interest Collected</span>
                     <strong style="font-size:14px;color:#16a34a;">${money(totalInt)}</strong>
                   </div>
-                  ${exits.length > 0 ? `
+                  ${exitTotal > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Member Exit Payout</span>
-                    <strong style="font-size:14px;color:#dc2626;">−${money(exits.reduce((s,e)=>s+e.payout,0))}</strong>
+                    <strong style="font-size:14px;color:#dc2626;">−${money(exitTotal)}</strong>
                   </div>` : ""}
                   ${expenditure > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -1788,7 +1784,16 @@ function renderHome() {
                   <div style="height:1px;background:var(--border,#f3f4f6);"></div>
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;font-weight:600;color:var(--text);">Closing Balance</span>
-                    <strong style="font-size:15px;color:#2563eb;">${money(closingBal)}</strong>
+                    <strong style="font-size:14px;color:#2563eb;">${money(closingBal)}</strong>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Loans Outstanding</span>
+                    <strong style="font-size:14px;color:#f97316;">${money(loansOutstanding)}</strong>
+                  </div>
+                  <div style="height:1px;background:var(--border,#f3f4f6);"></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;font-weight:700;color:var(--text);">Pool Balance</span>
+                    <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
                   </div>
                 </div>
                 <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;font-size:14px;">Acknowledge ✓</button>
