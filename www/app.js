@@ -5698,6 +5698,7 @@ async function approveLoan(id) {
       decided_by: currentProfileId(),
     }).eq("id", id));
     const loanRow = await liveQuery(supabaseClient.from("current_loans").insert({
+      profile_id: request.memberId,
       member_name: member?.name || "",
       member_phone: member?.phone || "",
       principal: request.amount,
