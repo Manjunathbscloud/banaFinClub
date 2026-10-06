@@ -1719,7 +1719,7 @@ function renderHome() {
         if (!alreadyAcknowledged) {
           const loansOutstanding = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
           const poolBal = expectedBankBalance() + loansOutstanding;
-          const exits = state.settings.activeYearExits || [];
+          const exits = state.settings.activeYearExits || []; // used for Year 7+
 
           // Compute deposits & interest dynamically from live monthly_payments
           let liveDep = 0, liveInt = 0;
@@ -1733,7 +1733,7 @@ function renderHome() {
             liveInt += interest;
           });
 
-          let totalDep, totalInt, expenditure;
+          let totalDep, totalInt, expenditure, exitTotal;
           const depRow = state.deposits.find(d => d.year === yearDbYear) || {};
           expenditure = Number(depRow.expenditure || 0);
           if (yearNum === 6) {
@@ -1742,12 +1742,13 @@ function renderHome() {
             const baseInt = 65000 + 11171 + 36625; // interest Nov–Jun + additional + Jul–Sep
             totalDep = baseDep + liveDep;
             totalInt = baseInt + liveInt;
+            exitTotal = 121834; // Sarpabhushana Banakar exit payout (Oct 2025)
           } else {
             // Year 7+: all data in monthly_payments
             totalDep = liveDep;
             totalInt = liveInt;
+            exitTotal = exits.reduce((s, e) => s + e.payout, 0);
           }
-          const exitTotal = exits.reduce((s, e) => s + e.payout, 0);
           const closingBal = totalDep + totalInt - exitTotal - expenditure;
           // Association year always runs November → October
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
