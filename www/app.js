@@ -6619,19 +6619,37 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       .filter(l => l.notes !== "emi_entry")
       .reduce((s, l) => s + loanOutstanding(l), 0);
 
-    const poolBalance = Number(depRow.balance || 0) + loansOutstanding;
+    // Use live-computed totals for the current year (same as financial review & deposits page)
+    const { totalDep, totalInt, exitTotal, expenditure: liveExp } = activeYearFinancials();
+    const liveExpenditure = liveExp || Number(depRow.expenditure || 0);
+    const liveBalance = totalDep + totalInt - exitTotal - liveExpenditure;
+    const poolBalance = expectedBankBalance() + loansOutstanding;
 
     const allYears = state.deposits
       .filter(d => d.year <= closedDbYear)
-      .map(d => ({
-        year: d.year,
-        label: d.label || (ORDINALS[d.year - 2021] ? ORDINALS[d.year - 2021] + " Year" : `Year ${d.year - 2020}`),
-        principal: Number(d.principal || 0),
-        interest: Number(d.interest || 0),
-        expenditure: Number(d.expenditure || 0),
-        exit_payouts: Number(d.exit_payouts || 0),
-        balance: Number(d.balance || 0),
-      }));
+      .map(d => {
+        // For the current closed year, use live-computed values
+        if (d.year === closedDbYear) {
+          return {
+            year: d.year,
+            label: d.label || closedYearLabel,
+            principal: totalDep,
+            interest: totalInt,
+            expenditure: liveExpenditure,
+            exit_payouts: exitTotal,
+            balance: liveBalance,
+          };
+        }
+        return {
+          year: d.year,
+          label: d.label || (ORDINALS[d.year - 2021] ? ORDINALS[d.year - 2021] + " Year" : `Year ${d.year - 2020}`),
+          principal: Number(d.principal || 0),
+          interest: Number(d.interest || 0),
+          expenditure: Number(d.expenditure || 0),
+          exit_payouts: Number(d.exit_payouts || 0),
+          balance: Number(d.balance || 0),
+        };
+      });
 
     const payload = {
       type: "annual_meeting",
@@ -6643,11 +6661,11 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       venue: mr.venue || "",
       notes: mr.notes || "",
       decisions: mr.decisions || [],
-      principal: Number(depRow.principal || 0),
-      interest: Number(depRow.interest || 0),
-      expenditure: Number(depRow.expenditure || 0),
-      exitPayouts: Number(depRow.exit_payouts || 0),
-      balance: Number(depRow.balance || 0),
+      principal: totalDep,
+      interest: totalInt,
+      expenditure: liveExpenditure,
+      exitPayouts: exitTotal,
+      balance: liveBalance,
       loansOutstanding,
       poolBalance,
       allYears,
