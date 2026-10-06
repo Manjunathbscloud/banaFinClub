@@ -3696,7 +3696,7 @@ function renderDashboard() {
           const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, m) && l.loanType === "emi" && l.status === "active");
           if (emiLoan) return { name: m.name, paid: emiLoan.emisPaid, total: emiLoan.tenureMonths, emi: emiLoan.emiAmount, outstanding: loanOutstanding(emiLoan) };
           const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, m) && l.status === "active");
-          if (legacyLoan) { const prog = appannaEmiProgress(); return { name: m.name, paid: prog.paid, total: prog.totalMonths, emi: prog.monthlyEmi, outstanding: prog.monthlyEmi * (prog.totalMonths - prog.paid) }; }
+          if (legacyLoan) { const emi = Number(legacyLoan.emiAmount || 7445); const paid = legacyLoan.emisPaid || 0; const total = legacyLoan.tenureMonths || 18; return { name: m.name, paid, total, emi, outstanding: emi * Math.max(0, total - paid) }; }
           return null;
         }).filter(Boolean);
         if (!emiRows.length) return "";
@@ -3718,10 +3718,10 @@ function renderDashboard() {
         const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, user) && l.loanType === "emi" && l.status === "active");
         const legacyLoan = !emiLoan && state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, user) && l.status === "active");
         if (!emiLoan && !legacyLoan) return "";
-        const paid = emiLoan ? emiLoan.emisPaid : appannaEmiProgress().paid;
-        const total = emiLoan ? emiLoan.tenureMonths : appannaEmiProgress().totalMonths;
-        const emiAmt = emiLoan ? emiLoan.emiAmount : appannaEmiProgress().monthlyEmi;
-        const outstanding = emiLoan ? loanOutstanding(emiLoan) : (() => { const p = appannaEmiProgress(); return p.monthlyEmi * (p.totalMonths - p.paid); })();
+        const paid = emiLoan ? emiLoan.emisPaid : (legacyLoan?.emisPaid || 0);
+        const total = emiLoan ? emiLoan.tenureMonths : (legacyLoan?.tenureMonths || 18);
+        const emiAmt = emiLoan ? emiLoan.emiAmount : Number(legacyLoan?.emiAmount || 7445);
+        const outstanding = emiLoan ? loanOutstanding(emiLoan) : emiAmt * Math.max(0, total - paid);
         return `
           <div class="card" style="margin-top:12px;">
             <div class="card-header"><div><h3>💳 Your EMI Loan</h3><p>Monthly repayment progress</p></div></div>
@@ -7217,17 +7217,19 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
       }
     }
     if (emiLoans.length > 0) await loadLiveState();
-    // Auto-close legacy emi_entry loan when all months are paid
+    // Auto-track and auto-close legacy emi_entry catch-up loans
     const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
-    if (legacyEmiLoan) {
-      const prog = appannaEmiProgress();
-      if (prog.paid >= prog.totalMonths) {
-        await liveQuery(supabaseClient.from("current_loans").update({
-          status: "clear", principal_paid: legacyEmiLoan.amount, emis_paid: prog.totalMonths, closed_at: today(),
-        }).eq("id", legacyEmiLoan.id));
-        await loadLiveState();
-        showToast(`${member.name} — all EMIs paid, loan closed!`);
-        await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${prog.totalMonths} EMI payments. Your loan is now closed. Thank you!`);
+    if (legacyEmiLoan && legacyEmiLoan.tenureMonths > 0) {
+      const newPaid = (legacyEmiLoan.emisPaid || 0) + 1;
+      const allDone = newPaid >= legacyEmiLoan.tenureMonths;
+      await liveQuery(supabaseClient.from("current_loans").update({
+        emis_paid: newPaid,
+        ...(allDone ? { status: "clear", principal_paid: legacyEmiLoan.amount, closed_at: today() } : {}),
+      }).eq("id", legacyEmiLoan.id));
+      await loadLiveState();
+      if (allDone) {
+        showToast(`${member.name} — catch-up deposits complete, loan closed!`);
+        await notifyMember(memberId, "emi_completed", "Catch-up complete! 🎉", `Congratulations ${member.name}! You have completed all ${legacyEmiLoan.tenureMonths} catch-up payments. Your loan is now closed.`);
       }
     }
     await insertStatement("credit", amount, `${member.name} credited`);
