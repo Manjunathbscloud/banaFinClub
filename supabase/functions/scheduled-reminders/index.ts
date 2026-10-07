@@ -48,6 +48,14 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const now = istNow();
 
+  // ─── Check global notifications toggle ───────────────────────────────────
+  const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
+  const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
+  if (!notificationsForAll) {
+    console.log("Notifications disabled — skipping scheduled SMS.");
+    return new Response("notifications disabled", { status: 200, headers: CORS });
+  }
+
   // ─── Auto-cleanup: delete notifications older than 60 days ───────────────
   const cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
   await supabase.from("notifications").delete().lt("created_at", cutoff);

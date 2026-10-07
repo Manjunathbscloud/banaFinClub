@@ -246,6 +246,7 @@ const initialState = {
   meetingAcknowledgements: [],
   galleryPhotos: [],
   loanPartialPayments: [],
+  loanInterestPayments: [],
   partialRepaymentRequests: [],
   meetings: [
     {
@@ -587,7 +588,7 @@ async function loadLiveState() {
     return;
   }
 
-  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, partialRepaymentRequestsData, galleryPhotosData] = await Promise.all([
+  const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, partialRepaymentRequestsData, galleryPhotosData, loanInterestPaymentsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
     liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone,dob").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
@@ -607,6 +608,7 @@ async function loadLiveState() {
     liveOptionalList(supabaseClient.from("loan_partial_payments").select("*").order("paid_on", { ascending: false })),
     liveOptionalList(supabaseClient.from("partial_repayment_requests").select("*").order("requested_at", { ascending: false })),
     liveOptionalList(supabaseClient.from("gallery_photos").select("*").order("created_at", { ascending: false }).limit(300)),
+    liveOptionalList(supabaseClient.from("loan_interest_payments").select("*").order("month", { ascending: false })),
   ]);
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
@@ -672,6 +674,11 @@ async function loadLiveState() {
     loanPartialPayments: loanPartialPaymentsData.map(r => ({
       id: r.id, loanId: r.loan_id, amount: Number(r.amount || 0),
       paidOn: r.paid_on, recordedBy: r.recorded_by,
+    })),
+    loanInterestPayments: loanInterestPaymentsData.map(r => ({
+      id: r.id, loanId: r.loan_id, profileId: r.profile_id,
+      month: r.month, amount: Number(r.amount || 0),
+      paidOn: r.paid_on, source: r.source || "monthly_payment",
     })),
     extensionRequests: extensionRequests.map(liveExtensionToLocal),
     partialRepaymentRequests: partialRepaymentRequestsData.map(r => ({
@@ -3341,6 +3348,7 @@ function showLoanYearModal(yearKey) {
           ? `<button class="secondary lc-btn" data-action="record-partial-payment" data-loan-id="${loan.id}" type="button">Partial</button>`
           : "";
         actionHtml = `<div class="lc-actions">
+          <button class="secondary lc-btn" data-action="view-loan-detail" data-loan-id="${loan.id}" type="button">Details</button>
           ${loan.status === "active" ? `<button class="primary lc-btn" data-action="clear-current-loan" data-id="${loan.id}" type="button">Clear</button>` : ""}
           ${partialBtn}
           <button class="danger lc-btn" data-action="delete-current-loan" data-id="${loan.id}" type="button">Delete</button>
@@ -4636,6 +4644,7 @@ document.addEventListener("click", async (event) => {
       }
       return;
     }
+    if (action.dataset.action === "view-loan-detail") { showLoanDetailModal(action.dataset.loanId); return; }
     if (action.dataset.action === "clear-current-loan") await clearCurrentLoan(action.dataset.id);
     if (action.dataset.action === "delete-current-loan") await deleteCurrentLoan(action.dataset.id);
     if (action.dataset.action === "request-extension") await requestExtension(action.dataset.loanId);
@@ -5371,6 +5380,189 @@ async function togglePartialRepaymentEnabled() {
   await loadLiveState();
   showToast(`Partial repayment ${newVal ? "enabled" : "disabled"}.`);
   render();
+}
+
+function showLoanDetailModal(loanId) {
+  const loan = state.loans.find(l => l.id === loanId);
+  if (!loan) return;
+  const member = state.members.find(m => loanBelongsToMember(loan, m)) || state.allMembers.find(m => loanBelongsToMember(loan, m));
+  const memberName = loanMemberName(loan);
+
+  // Generate month list from loan start to current month
+  function monthsBetween(from, to) {
+    const months = [];
+    const [fy, fm] = from.slice(0, 7).split("-").map(Number);
+    const [ty, tm] = to.split("-").map(Number);
+    let y = fy, m = fm;
+    while (y < ty || (y === ty && m <= tm)) {
+      months.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+    return months;
+  }
+
+  const loanStart = (loan.from || "").slice(0, 7);
+  const months = loanStart ? monthsBetween(loanStart, currentMonth()) : [];
+  const monthlyInt = loanMonthlyInterest(loan);
+  const LIVE_CUTOFF = "2026-11"; // from Year 7 onwards: use loan_interest_payments table
+
+  const rows = months.map(mo => {
+    let intAmt = 0;
+    let status = "pending";
+
+    if (mo >= LIVE_CUTOFF) {
+      // Year 7+: look up in loan_interest_payments table
+      const rec = state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
+      if (rec) { intAmt = rec.amount; status = "paid"; }
+      else if (mo < currentMonth()) status = "missed";
+    } else {
+      // Year 6: derive from monthly_payments
+      const payment = state.monthlyPayments.find(p =>
+        (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
+        p.month === mo && p.status === "paid"
+      );
+      if (payment) { intAmt = monthlyInt; status = "paid"; }
+      else if (mo < currentMonth()) status = "missed";
+    }
+
+    const [yr, mn] = mo.split("-");
+    const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const label = `${MON[Number(mn)-1]} ${yr}`;
+    const rowBg = status === "missed" ? "background:#fff5f5;" : "";
+    const statusPill = status === "paid"
+      ? `<span style="display:inline-block;font-size:10px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:700;">✓ Paid</span>`
+      : status === "missed"
+      ? `<span style="display:inline-block;font-size:10px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:700;">Missed</span>`
+      : `<span style="display:inline-block;font-size:10px;background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:20px;font-weight:600;">Pending</span>`;
+    return `
+      <tr style="${rowBg}">
+        <td style="padding:8px 10px;font-size:13px;color:var(--ink);">${label}</td>
+        <td style="padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:${status === "paid" ? "var(--ink)" : "var(--muted)"};">${money(status === "paid" ? intAmt : monthlyInt)}</td>
+        <td style="padding:8px 10px;text-align:right;">${statusPill}</td>
+      </tr>`;
+  }).join("");
+
+  const totalIntPaid = state.loanInterestPayments
+    .filter(p => p.loanId === loanId)
+    .reduce((s, p) => s + p.amount, 0) +
+    months.filter(mo => mo < LIVE_CUTOFF).reduce((s, mo) => {
+      const payment = state.monthlyPayments.find(p =>
+        (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
+        p.month === mo && p.status === "paid"
+      );
+      return s + (payment ? monthlyInt : 0);
+    }, 0);
+
+  const partials = (state.loanPartialPayments || []).filter(p => p.loanId === loanId);
+  const partialRows = partials.length ? partials.map(p => `
+    <tr>
+      <td style="padding:8px 10px;font-size:13px;color:var(--ink);">${p.paidOn || ""}</td>
+      <td style="padding:8px 10px;font-size:13px;text-align:right;font-weight:600;color:#2563eb;">${money(p.amount)}</td>
+      <td style="padding:8px 10px;font-size:12px;text-align:right;color:#059669;">Principal</td>
+    </tr>`).join("") :
+    `<tr><td colspan="3" style="padding:12px;text-align:center;color:var(--muted);font-size:13px;">No partial repayments recorded.</td></tr>`;
+
+  const outstanding = loanOutstanding(loan);
+  const renewalDate = loanRenewalDate(loan);
+
+  const paidCount  = months.filter((mo, i) => {
+    if (mo >= LIVE_CUTOFF) return !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
+    return !!state.monthlyPayments.find(p =>
+      (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
+      p.month === mo && p.status === "paid"
+    );
+  }).length;
+  const missedCount = months.filter(mo => mo < currentMonth() && !(
+    mo >= LIVE_CUTOFF
+      ? !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo)
+      : !!state.monthlyPayments.find(p =>
+          (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
+          p.month === mo && p.status === "paid"
+        )
+  )).length;
+
+  const modal = document.createElement("div");
+  modal.id = "loan-detail-modal";
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:520px;border-radius:24px 24px 0 0;overflow:hidden;">
+      <div class="rules-modal-header" style="border-bottom:1px solid var(--border,#e5e7eb);">
+        <div>
+          <h3 style="margin:0;font-size:15px;font-weight:700;">💳 ${escapeHtml(memberName)}</h3>
+          <p style="margin:3px 0 0;font-size:12px;color:var(--muted);">Loan Detail · ${fmtMonthYearShort(loan.from)} → ${fmtMonthYearShort(renewalDate)}</p>
+        </div>
+        <button class="rules-modal-close" onclick="document.getElementById('loan-detail-modal')?.remove();document.body.style.overflow='';">✕</button>
+      </div>
+
+      <div style="overflow-y:auto;max-height:calc(90vh - 60px);padding:14px 16px 24px;">
+
+        <!-- Key figures strip -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+          <div style="background:#eff6ff;border-radius:10px;padding:10px 12px;">
+            <div style="font-size:10px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Principal</div>
+            <div style="font-size:16px;font-weight:800;color:#1d4ed8;margin-top:2px;">${money(loan.amount)}</div>
+          </div>
+          <div style="background:${outstanding > 0 ? "#fef2f2" : "#f0fdf4"};border-radius:10px;padding:10px 12px;">
+            <div style="font-size:10px;color:${outstanding > 0 ? "#ef4444" : "#22c55e"};font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Outstanding</div>
+            <div style="font-size:16px;font-weight:800;color:${outstanding > 0 ? "#dc2626" : "#16a34a"};margin-top:2px;">${money(outstanding)}</div>
+          </div>
+          <div style="background:#f0fdf4;border-radius:10px;padding:10px 12px;">
+            <div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Int. Paid</div>
+            <div style="font-size:16px;font-weight:800;color:#16a34a;margin-top:2px;">${money(totalIntPaid)}</div>
+          </div>
+        </div>
+
+        <!-- Loan meta row -->
+        <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:14px;padding:10px 12px;background:var(--surface-alt,#f8fafc);border-radius:8px;">
+          <span>Interest <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
+          <span>·</span>
+          <span>Rate <strong style="color:var(--ink);">${loan.interestRateMonthly}%/mo</strong></span>
+          <span>·</span>
+          <span>Principal paid <strong style="color:var(--ink);">${money(loan.principalPaid)}</strong></span>
+        </div>
+
+        <!-- Monthly interest history -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">Monthly Interest</h4>
+          <div style="display:flex;gap:6px;">
+            <span style="font-size:11px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:600;">${paidCount} paid</span>
+            ${missedCount > 0 ? `<span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:600;">${missedCount} missed</span>` : ""}
+          </div>
+        </div>
+        <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;margin-bottom:14px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:var(--surface-alt,#f8fafc);">
+                <th style="padding:7px 10px;font-size:10px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Month</th>
+                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Interest</th>
+                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">No records yet.</td></tr>`}</tbody>
+          </table>
+        </div>
+
+        <!-- Partial repayments -->
+        <h4 style="margin:0 0 6px;font-size:13px;font-weight:700;color:var(--ink);">Partial Repayments</h4>
+        <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:var(--surface-alt,#f8fafc);">
+                <th style="padding:7px 10px;font-size:10px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Date</th>
+                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Amount</th>
+                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Type</th>
+              </tr>
+            </thead>
+            <tbody>${partialRows}</tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+  modal.addEventListener("click", e => { if (e.target === modal) { modal.remove(); document.body.style.overflow = ""; } });
 }
 
 function showPartialPaymentModal(loanId) {
@@ -6306,6 +6498,18 @@ async function closeCurrentYear() {
     const historyRows = allLoansForSnapshot.map(loan => {
       const isCleared = loan.status === "clear" || loan.status === "cleared";
       const memberLocal = state.members.find(m => m.id === loan.profile_id);
+
+      // Compute interest paid for this loan during the closing year
+      // For each month the member paid, attribute this loan's share of interest
+      const loanMonthlyInt = Number(loan.monthly_interest || 0) ||
+        (Number(loan.principal || 0) * Number(loan.interest_rate_monthly || 1.25) / 100);
+      const memberPayments = state.monthlyPayments.filter(p =>
+        p.status === "paid" && p.month >= activeYearStart &&
+        (p.memberId === loan.profile_id || (memberLocal && p.memberId === memberLocal.id))
+      );
+      // Sum of interest months paid × monthly rate for this specific loan
+      const totalInterestPaid = loan.is_interest_free ? 0 : loanMonthlyInt * memberPayments.length;
+
       return {
         id: crypto.randomUUID(),
         year: yearLabel,
@@ -6313,11 +6517,11 @@ async function closeCurrentYear() {
         member_name: memberLocal?.name || loan.member_name || "",
         from_date: loan.disbursed_at || null,
         principal: Number(loan.principal || 0),
-        monthly_interest: Number(loan.monthly_interest || 0),
+        monthly_interest: loanMonthlyInt,
         interest_text: loan.interest_text || "",
         renewal_or_return: loan.renewal_or_return || "",
         status: isCleared ? "Cleared" : "Carried Forward",
-        total_paid: 0,
+        total_paid: totalInterestPaid,
         is_interest_free: Boolean(loan.is_interest_free),
         notes: loan.notes || "",
       };
@@ -6330,7 +6534,6 @@ async function closeCurrentYear() {
   for (const loan of (clearedFromDb || [])) {
     await liveQuery(supabaseClient.from("current_loans").delete().eq("id", loan.id));
   }
-  // Active loans stay in current_loans as-is (still "active") for Year 7
 
   // ── 4. Advance settings to next year ─────────────────────────────────
   const ORDINALS_NEXT = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
@@ -6340,6 +6543,13 @@ async function closeCurrentYear() {
   const _now = new Date();
   const _nm = new Date(_now.getFullYear(), _now.getMonth() + 1, 1);
   const nextMonthStart = `${_nm.getFullYear()}-${String(_nm.getMonth() + 1).padStart(2, "0")}`;
+  const nextMonthStartFull = `${nextMonthStart}-01`;
+
+  // Reset disbursed_at to new year start for all carried-forward (still active) loans
+  const { data: activeLoansForReset } = await supabaseClient.from("current_loans").select("id").eq("status", "active");
+  for (const loan of (activeLoansForReset || [])) {
+    await liveQuery(supabaseClient.from("current_loans").update({ disbursed_at: nextMonthStartFull }).eq("id", loan.id));
+  }
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
     value: {
@@ -7262,6 +7472,25 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
       }
     }
     if (emiLoans.length > 0) await loadLiveState();
+    // Record per-loan interest in loan_interest_payments (from Year 7 / Nov 2026 onwards)
+    if (month >= "2026-11") {
+      const fullLoansForMember = state.loans.filter(l =>
+        l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry"
+      );
+      for (const loan of fullLoansForMember) {
+        const interestAmt = loanMonthlyInterest(loan);
+        if (interestAmt > 0) {
+          await liveQuery(supabaseClient.from("loan_interest_payments").upsert({
+            loan_id: loan.id,
+            profile_id: memberId,
+            month,
+            amount: interestAmt,
+            paid_on: today(),
+            source: "monthly_payment",
+          }, { onConflict: "loan_id,month" }));
+        }
+      }
+    }
     // Auto-track and auto-close legacy emi_entry catch-up loans
     const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
     if (legacyEmiLoan) {
