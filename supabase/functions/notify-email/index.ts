@@ -97,6 +97,18 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Respect the global notifications toggle — skip email if disabled
+    const { data: settingsRow } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("id", "active_year_info")
+      .single();
+    const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
+    if (!notificationsForAll) {
+      console.log("Notifications disabled — skipping email.");
+      return new Response("notifications disabled", { status: 200 });
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("email, full_name")
