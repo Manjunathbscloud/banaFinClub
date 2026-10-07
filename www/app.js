@@ -5429,18 +5429,17 @@ function showLoanDetailModal(loanId) {
     const [yr, mn] = mo.split("-");
     const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const label = `${MON[Number(mn)-1]} ${yr}`;
-    const rowBg = status === "missed" ? "background:#fff5f5;" : "";
-    const statusPill = status === "paid"
-      ? `<span style="display:inline-block;font-size:10px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:700;">✓ Paid</span>`
-      : status === "missed"
-      ? `<span style="display:inline-block;font-size:10px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:700;">Missed</span>`
-      : `<span style="display:inline-block;font-size:10px;background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:20px;font-weight:600;">Pending</span>`;
+    const dotColor = status === "paid" ? "#22c55e" : status === "missed" ? "#ef4444" : "#d1d5db";
+    const amtColor = status === "paid" ? "var(--ink)" : "var(--muted)";
+    const statusText = status === "paid" ? "Paid" : status === "missed" ? "Missed" : "Pending";
+    const statusColor = status === "paid" ? "#15803d" : status === "missed" ? "#b91c1c" : "#9ca3af";
     return `
-      <tr style="${rowBg}">
-        <td style="padding:8px 10px;font-size:13px;color:var(--ink);">${label}</td>
-        <td style="padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:${status === "paid" ? "var(--ink)" : "var(--muted)"};">${money(status === "paid" ? intAmt : monthlyInt)}</td>
-        <td style="padding:8px 10px;text-align:right;">${statusPill}</td>
-      </tr>`;
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border,#f0f0f0);">
+        <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
+        <span style="flex:1;font-size:13px;color:var(--ink);">${label}</span>
+        <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:${amtColor};">${money(status === "paid" ? intAmt : monthlyInt)}</span>
+        <span style="font-size:11px;font-weight:600;color:${statusColor};min-width:38px;text-align:right;">${statusText}</span>
+      </div>`;
   }).join("");
 
   const totalIntPaid = state.loanInterestPayments
@@ -5455,13 +5454,6 @@ function showLoanDetailModal(loanId) {
     }, 0);
 
   const partials = (state.loanPartialPayments || []).filter(p => p.loanId === loanId);
-  const partialRows = partials.length ? partials.map(p => `
-    <tr>
-      <td style="padding:8px 10px;font-size:13px;color:var(--ink);">${p.paidOn || ""}</td>
-      <td style="padding:8px 10px;font-size:13px;text-align:right;font-weight:600;color:#2563eb;">${money(p.amount)}</td>
-      <td style="padding:8px 10px;font-size:12px;text-align:right;color:#059669;">Principal</td>
-    </tr>`).join("") :
-    `<tr><td colspan="3" style="padding:12px;text-align:center;color:var(--muted);font-size:13px;">No partial repayments recorded.</td></tr>`;
 
   const outstanding = loanOutstanding(loan);
   const renewalDate = loanRenewalDate(loan);
@@ -5523,39 +5515,29 @@ function showLoanDetailModal(loanId) {
         </div>
 
         <!-- Monthly interest history -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">Monthly Interest</h4>
           <div style="display:flex;gap:6px;">
             <span style="font-size:11px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:600;">${paidCount} paid</span>
             ${missedCount > 0 ? `<span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:600;">${missedCount} missed</span>` : ""}
           </div>
         </div>
-        <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;margin-bottom:14px;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead>
-              <tr style="background:var(--surface-alt,#f8fafc);">
-                <th style="padding:7px 10px;font-size:10px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Month</th>
-                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Interest</th>
-                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Status</th>
-              </tr>
-            </thead>
-            <tbody>${rows || `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">No records yet.</td></tr>`}</tbody>
-          </table>
+        <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;margin-bottom:16px;">
+          ${rows || `<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">No records yet.</div>`}
         </div>
 
         <!-- Partial repayments -->
-        <h4 style="margin:0 0 6px;font-size:13px;font-weight:700;color:var(--ink);">Partial Repayments</h4>
+        <h4 style="margin:0 0 8px;font-size:13px;font-weight:700;color:var(--ink);">Partial Repayments</h4>
         <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead>
-              <tr style="background:var(--surface-alt,#f8fafc);">
-                <th style="padding:7px 10px;font-size:10px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Date</th>
-                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Amount</th>
-                <th style="padding:7px 10px;font-size:10px;text-align:right;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Type</th>
-              </tr>
-            </thead>
-            <tbody>${partialRows}</tbody>
-          </table>
+          ${partials.length ? partials.map(p => `
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border,#f0f0f0);">
+              <span style="width:7px;height:7px;border-radius:50%;background:#3b82f6;flex-shrink:0;"></span>
+              <span style="flex:1;font-size:13px;color:var(--muted);">${p.paidOn || ""}</span>
+              <span style="font-size:13px;font-weight:700;color:#2563eb;">${money(p.amount)}</span>
+              <span style="font-size:11px;font-weight:600;color:#6b7280;">Principal</span>
+            </div>`).join("") :
+            `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">No partial repayments recorded.</div>`
+          }
         </div>
 
       </div>
