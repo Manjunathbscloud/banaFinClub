@@ -4176,6 +4176,17 @@ function renderAdmin() {
       </details>
 
 
+      <details class="card collapsible">
+        <summary class="card-header"><div><h3>Max Loan Per Member</h3><p>Currently: ${money(state.settings.maxLoanPerMember || 0)}</p></div><span class="collapse-icon">⌄</span></summary>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">Set the maximum outstanding loan amount allowed per member. Members cannot request a new loan if their outstanding balance would exceed this limit.</p>
+          <form class="form" data-form="update-max-loan" style="display:flex;gap:10px;align-items:flex-end;">
+            <label class="field" style="flex:1;margin:0;"><span>Max Loan Amount (₹)</span><input name="maxLoan" type="number" min="0" step="1000" value="${state.settings.maxLoanPerMember || 300000}" required /></label>
+            <button class="primary" type="submit" style="height:42px;padding:0 16px;white-space:nowrap;">Update</button>
+          </form>
+        </div>
+      </details>
+
           <details class="card collapsible" id="storage-usage-card">
             <summary class="card-header" data-action="load-storage-usage">
               <div><h3>Storage Usage</h3><p>Supabase free tier · 1 GB limit</p></div>
@@ -5103,6 +5114,14 @@ document.addEventListener("submit", async (event) => {
       form.reset();
     }
     if (type === "start-next-year") await startNextYear(data);
+    if (type === "update-max-loan") {
+      const maxLoan = Number(data.maxLoan);
+      if (!maxLoan || maxLoan < 0) throw new Error("Enter a valid loan amount.");
+      await liveQuery(supabaseClient.from("settings").upsert({ id: "loan_settings", value: { maxLoanPerMember: maxLoan } }, { onConflict: "id" }));
+      await loadLiveState();
+      showToast(`Max loan updated to ${money(maxLoan)}.`);
+      render();
+    }
     if (type === "add-rule") {
       const section = (data.section || "").trim();
       const item = (data.item || "").trim();
