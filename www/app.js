@@ -3339,7 +3339,7 @@ function showLoanYearModal(yearKey) {
 
       const statusBadgeHtml = dueThisMonth
         ? `<span class="badge warn">Due this month</span>`
-        : statusBadge(loan.notes === "emi_entry" ? "EMI" : loan.status);
+        : statusBadge(isEmiType ? "EMI" : loan.status);
 
       let actionHtml = "";
       if (isAdmin()) {
