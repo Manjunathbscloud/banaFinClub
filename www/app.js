@@ -6422,7 +6422,7 @@ async function closeCurrentYear() {
   let totalDeposits, totalInterest, runningBalance, exitPayouts;
   if (yearNum === 6) {
     const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672;
-    const histInterest = 65546 + 11171;
+    const histInterest = 65000 + 11171;
     exitPayouts = 121834;
     totalDeposits  = histDeposits + liveTotalDeposit;
     totalInterest  = histInterest + liveTotalInterest;
@@ -6591,7 +6591,7 @@ function showFinancialSignoffModal() {
   let totalDeposits, totalInterest, runningBalance;
   if (yearNum === 6) {
     const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672; // Nov 2025 – Jun 2026
-    const histInterest = 65546 + 11171;
+    const histInterest = 65000 + 11171;
     totalDeposits  = histDeposits + liveTotalDeposit;
     totalInterest  = histInterest + liveTotalInterest;
     const yr6HistFixed = histDeposits + histInterest - 121834; // member exit payout
