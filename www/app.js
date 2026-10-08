@@ -5642,6 +5642,21 @@ async function requestLoan(data) {
   const loanType = data.loan_type || "full";
   const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
   if (!Number(data.amount) || Number(data.amount) < 10000) throw new Error("Minimum loan amount is ₹10,000.");
+
+  // Check max loan limit
+  const maxLoanLimit = Number(state.settings.maxLoanPerMember || 0);
+  if (maxLoanLimit > 0) {
+    const currentOutstanding = state.loans
+      .filter(l => l.status === "active" && loanBelongsToMember(l, user))
+      .reduce((s, l) => s + loanOutstanding(l), 0);
+    if (currentOutstanding >= maxLoanLimit) {
+      throw new Error(`You have reached the maximum loan limit of ${money(maxLoanLimit)}. Outstanding: ${money(currentOutstanding)}. Please repay before applying again.`);
+    }
+    if (currentOutstanding + Number(data.amount) > maxLoanLimit) {
+      throw new Error(`This loan would exceed the maximum limit of ${money(maxLoanLimit)}. Your current outstanding is ${money(currentOutstanding)}, so you can borrow at most ${money(maxLoanLimit - currentOutstanding)}.`);
+    }
+  }
+
   if (loanType === "emi") {
     if (!tenureMonths || tenureMonths < 1) throw new Error("Please enter a valid tenure (months).");
     const maxT = emiMaxTenure(Number(data.amount));
