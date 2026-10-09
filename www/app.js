@@ -1859,13 +1859,13 @@ function renderHome() {
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col" data-action="show-due-breakdown" style="cursor:pointer;">
-          <p>Monthly Due</p>
+          <p style="display:flex;align-items:center;gap:4px;">Monthly Due <span style="font-size:11px;opacity:0.6;">›</span></p>
           <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
             ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
             : payInitiated
               ? `<small class="awaiting-label">⏳ Awaiting approval</small>`
-              : `<small style="color:rgba(255,255,255,0.6);font-size:10px;">tap to see breakdown</small>`}
+              : `<small style="color:rgba(255,255,255,0.6);font-size:10px;">tap for breakdown</small>`}
         </div>
       </div>
     </div>
