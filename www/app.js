@@ -5678,6 +5678,8 @@ async function requestLoan(data) {
     }
     if (errMsg) {
       if (limitErr) { limitErr.textContent = errMsg; limitErr.style.display = "block"; }
+      const lrForm = document.querySelector("[data-form='loan-request']");
+      if (lrForm) setFormLoading(lrForm, false);
       return;
     }
     if (limitErr) limitErr.style.display = "none";
