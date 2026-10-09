@@ -3485,7 +3485,7 @@ function showLoanYearModal(yearKey) {
   }
 
   const html = `
-    <div id="loan-year-modal" class="rules-modal-overlay" data-action="close-loan-year">
+    <div id="loan-year-modal" class="rules-modal-overlay" data-action="close-loan-year" data-year-key="${escapeHtml(yearKey)}">
       <div class="rules-modal-sheet">
         <div class="rules-modal-header">
           <div><h3>💳 ${escapeHtml(title)}</h3><p>Sri Mukkanneshwara Associate</p></div>
@@ -5775,6 +5775,8 @@ async function clearCurrentLoan(id) {
   if (!loan) throw new Error("Loan not found.");
   const closedAt = today();
   const interestPaid = calculatedInterestPaid(loan, closedAt);
+  const openModal = document.getElementById("loan-year-modal");
+  const openYearKey = openModal?.dataset.yearKey || null;
 
   if (liveBackendReady) {
     await liveQuery(supabaseClient.from("current_loans").update({
@@ -5789,6 +5791,7 @@ async function clearCurrentLoan(id) {
     await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, id);
     showToast("Loan marked clear.");
     render();
+    if (openYearKey) showLoanYearModal(openYearKey);
     return;
   }
 
