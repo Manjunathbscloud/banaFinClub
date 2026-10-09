@@ -1859,7 +1859,7 @@ function renderHome() {
           <small>For new loans</small>
         </div>
         <div class="dash-summary-col" data-action="show-due-breakdown" style="cursor:pointer;">
-          <p style="display:flex;align-items:center;gap:4px;">Monthly Due <span style="font-size:11px;opacity:0.6;">›</span></p>
+          <p style="display:flex;align-items:center;gap:5px;">Monthly Due <span style="font-size:16px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1;">›</span></p>
           <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
             ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
