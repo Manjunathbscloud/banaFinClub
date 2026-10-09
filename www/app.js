@@ -3196,6 +3196,7 @@ function renderLoans() {
             ` : ""}
             <label class="field"><span>${t("reason")}</span><textarea name="reason" required></textarea></label>
             <button class="primary" type="submit">${t("submit")}</button>
+            <div id="lr-limit-error" style="display:none;margin-top:8px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:13px;color:#dc2626;line-height:1.5;"></div>
           </form>
         </div>
       </details>
@@ -5662,18 +5663,24 @@ async function requestLoan(data) {
   const tenureMonths = loanType === "emi" ? Number(data.tenure_months) : null;
   if (!Number(data.amount) || Number(data.amount) < 10000) throw new Error("Minimum loan amount is ₹10,000.");
 
-  // Check max loan limit
+  // Check max loan limit — show inline error below submit button
   const maxLoanLimit = Number(state.settings.maxLoanPerMember || 0);
   if (maxLoanLimit > 0) {
     const currentOutstanding = state.loans
       .filter(l => l.status === "active" && loanBelongsToMember(l, user))
       .reduce((s, l) => s + loanOutstanding(l), 0);
+    const limitErr = document.getElementById("lr-limit-error");
+    let errMsg = "";
     if (currentOutstanding >= maxLoanLimit) {
-      throw new Error(`You have reached the maximum loan limit of ${money(maxLoanLimit)}. Outstanding: ${money(currentOutstanding)}. Please repay before applying again.`);
+      errMsg = `⚠️ You have reached the maximum loan limit of ${money(maxLoanLimit)}. Your current outstanding is ${money(currentOutstanding)}. Please repay before applying again.`;
+    } else if (currentOutstanding + Number(data.amount) > maxLoanLimit) {
+      errMsg = `⚠️ This loan would exceed the maximum limit of ${money(maxLoanLimit)}. Your current outstanding is ${money(currentOutstanding)}, so you can borrow at most ${money(maxLoanLimit - currentOutstanding)}.`;
     }
-    if (currentOutstanding + Number(data.amount) > maxLoanLimit) {
-      throw new Error(`This loan would exceed the maximum limit of ${money(maxLoanLimit)}. Your current outstanding is ${money(currentOutstanding)}, so you can borrow at most ${money(maxLoanLimit - currentOutstanding)}.`);
+    if (errMsg) {
+      if (limitErr) { limitErr.textContent = errMsg; limitErr.style.display = "block"; }
+      return;
     }
+    if (limitErr) limitErr.style.display = "none";
   }
 
   if (loanType === "emi") {
