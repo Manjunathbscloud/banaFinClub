@@ -1858,14 +1858,14 @@ function renderHome() {
           <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
           <small>For new loans</small>
         </div>
-        <div class="dash-summary-col">
+        <div class="dash-summary-col" data-action="show-due-breakdown" style="cursor:pointer;">
           <p>Monthly Due</p>
           <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
             ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
             : payInitiated
               ? `<small class="awaiting-label">⏳ Awaiting approval</small>`
-              : `<button class="pay-now-btn" data-action="pay-now" data-amount="${monthlyDue}">Pay Now</button>`}
+              : `<small style="color:rgba(255,255,255,0.6);font-size:10px;">tap to see breakdown</small>`}
         </div>
       </div>
     </div>
@@ -4546,6 +4546,8 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "show-due-breakdown") { showDueBreakdownSheet(); return; }
+
   if (action.dataset.action === "pay-now") {
     const amount = action.dataset.amount;
     const now = new Date();
@@ -5399,6 +5401,59 @@ async function togglePartialRepaymentEnabled() {
   await loadLiveState();
   showToast(`Partial repayment ${newVal ? "enabled" : "disabled"}.`);
   render();
+}
+
+function showDueBreakdownSheet() {
+  const existing = document.getElementById("due-breakdown-sheet");
+  if (existing) existing.remove();
+
+  const user = currentUser();
+  if (!user) return;
+
+  const deposit    = expectedMonthlyDeposit(user);
+  const interest   = memberMonthlyInterest(user.id);
+  const emi        = memberEmiMonthly(user);
+  const total      = deposit + interest + emi;
+  const month      = currentMonth();
+  const isFirst    = month === activeYearCutoffMonth();
+  const renewalFee = isFirst ? Number(state.settings.activeYearRenewalFeePerMember || 0) : 0;
+  const payment    = currentMonthPayment(user.id);
+  const isPaid     = payment?.status === "paid";
+
+  const row = (label, amount, color = "var(--ink)") =>
+    amount > 0 ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border,#f0f0f0);">
+        <span style="font-size:14px;color:var(--muted);">${label}</span>
+        <span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:${color};">${money(amount)}</span>
+      </div>` : "";
+
+  const modal = document.createElement("div");
+  modal.id = "due-breakdown-sheet";
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:420px;border-radius:24px 24px 0 0;">
+      <div class="rules-modal-header" style="border-bottom:1px solid var(--border,#e5e7eb);">
+        <div>
+          <h3 style="margin:0;font-size:15px;font-weight:700;">Monthly Due Breakdown</h3>
+          <p style="margin:3px 0 0;font-size:12px;color:var(--muted);">${fmtMonthYearShort(month)}</p>
+        </div>
+        <button class="rules-modal-close" onclick="document.getElementById('due-breakdown-sheet')?.remove();document.body.style.overflow='';">✕</button>
+      </div>
+      <div style="padding:8px 0 24px;">
+        ${row("Monthly Deposit", deposit - renewalFee)}
+        ${row("Renewal Fee (Year Start)", renewalFee, "#b45309")}
+        ${row("Loan Interest", interest, "#dc2626")}
+        ${row("EMI Payment", emi, "#2563eb")}
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;margin-top:2px;">
+          <span style="font-size:15px;font-weight:700;color:var(--ink);">Total Due</span>
+          <span style="font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);">${money(total)}</span>
+        </div>
+        ${isPaid ? `<div style="margin:0 16px;padding:10px 14px;background:#dcfce7;border-radius:8px;font-size:13px;font-weight:600;color:#15803d;text-align:center;">✓ Paid for ${fmtMonthYearShort(month)}</div>` : ""}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+  modal.addEventListener("click", e => { if (e.target === modal) { modal.remove(); document.body.style.overflow = ""; } });
 }
 
 function showLoanDetailModal(loanId) {
