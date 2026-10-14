@@ -5531,6 +5531,7 @@ function showLoanDetailModal(loanId) {
 
   const outstanding = loanOutstanding(loan);
   const renewalDate = loanRenewalDate(loan);
+  const extCount = (state.extensionRequests || []).filter(r => r.loanId === loanId && r.status === "approved").length;
 
   const paidCount  = months.filter((mo, i) => {
     if (mo >= LIVE_CUTOFF) return !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
@@ -5586,6 +5587,7 @@ function showLoanDetailModal(loanId) {
           <span>Rate <strong style="color:var(--ink);">${loan.interestRateMonthly}%/mo</strong></span>
           <span>·</span>
           <span>Principal paid <strong style="color:var(--ink);">${money(loan.principalPaid)}</strong></span>
+          ${extCount > 0 ? `<span>·</span><span>Extended <strong style="color:var(--ink);">${extCount} time${extCount > 1 ? "s" : ""}</strong></span>` : ""}
         </div>
 
         <!-- Monthly interest history -->
