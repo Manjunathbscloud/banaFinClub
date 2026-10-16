@@ -5902,6 +5902,7 @@ async function clearCurrentLoan(id) {
   if (!loan) throw new Error("Loan not found.");
   const closedAt = today();
   const interestPaid = calculatedInterestPaid(loan, closedAt);
+  const remainingPrincipal = loanOutstanding(loan);
   const openModal = document.getElementById("loan-year-modal");
   const openYearKey = openModal?.dataset.yearKey || null;
 
@@ -5915,7 +5916,7 @@ async function clearCurrentLoan(id) {
     await addLiveAudit(`Marked loan clear for ${loanMemberName(loan)}. Interest paid ${money(interestPaid)}.`, "current_loan_cleared");
     await _silentResetAcks();
     await loadLiveState();
-    await insertStatement("credit", loan.amount, `${loanMemberName(loan)} credited`, id);
+    if (remainingPrincipal > 0) await insertStatement("credit", remainingPrincipal, `${loanMemberName(loan)} credited · loan cleared`, id);
     showToast("Loan marked clear.");
     render();
     if (openYearKey) showLoanYearModal(openYearKey);
