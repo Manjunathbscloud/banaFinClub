@@ -391,6 +391,8 @@ function livePaymentToLocal(payment) {
     paidAmount: Number(payment.paid_amount || 0),
     status: payment.status,
     source: payment.source,
+    depositAmount: payment.deposit_amount == null ? null : Number(payment.deposit_amount),
+    interestAmount: payment.interest_amount == null ? null : Number(payment.interest_amount),
   };
 }
 
@@ -1007,7 +1009,7 @@ function activeYearFinancials() {
       const mem = memberById(p.memberId);
       if (!mem) return;
       const paid = Number(p.paidAmount || p.amount || 0);
-      const { dep, interest } = paymentSplit(mem, p.month, paid);
+      const { dep, interest } = splitOfPayment(p, mem, paid);
       liveDep += dep;
       liveInt += interest;
     });
@@ -1025,7 +1027,7 @@ function activeYearFinancials() {
     const mem = memberById(p.memberId);
     if (!mem) return;
     const paid = Number(p.paidAmount || p.amount || 0);
-    const { dep, interest } = paymentSplit(mem, p.month, paid);
+    const { dep, interest } = splitOfPayment(p, mem, paid);
     liveDep += dep;
     liveInt += interest;
   });
@@ -1077,19 +1079,30 @@ function memberMonthlyDue(member) {
 
 // Splits a member's paid amount into deposit (principal) and interest correctly.
 // Regular deposit + EMI principal → deposit; regular loan interest + EMI interest → interest.
+// A loan only counts toward a month's interest if it had been taken by that month.
+function loanExistedIn(loan, month) {
+  return !loan.from || String(loan.from).slice(0, 7) <= month;
+}
+
+// Prefer the split saved when the payment was recorded; recalculate only for older rows without it.
+function splitOfPayment(p, mem, paidAmount) {
+  if (p.depositAmount != null && p.interestAmount != null) return { dep: p.depositAmount, interest: p.interestAmount };
+  return paymentSplit(mem, p.month, paidAmount);
+}
+
 function paymentSplit(mem, month, paidAmount) {
   // Legacy catch-up EMI (emi_entry) — catch-up portion is deposit, but still extract interest from regular loans
   const hasLegacyEmi = state.loans.some(l => (l.notes === "emi_entry" || Number(l.interestRateMonthly) > 3) && loanBelongsToMember(l, mem));
   if (hasLegacyEmi) {
     const regularInterest = state.loans
-      .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi")
+      .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi" && loanExistedIn(l, month))
       .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
     const interest = Math.min(regularInterest, paidAmount);
     return { dep: Math.max(0, paidAmount - interest), interest };
   }
 
   // New EMI loans — keep existing logic (baseDep + emiPrincipal = deposit, rest = interest)
-  const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem));
+  const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem) && loanExistedIn(l, month));
   if (emiLoans.length > 0) {
     const baseDep = expectedMonthlyDeposit(mem, month);
     let emiPrincipal = 0;
@@ -1104,7 +1117,7 @@ function paymentSplit(mem, month, paidAmount) {
   // Full loans: interest = exact monthly interest from loan records, deposit = everything else
   // This correctly handles catch-up deposits, renewal fees, or any extra deposit — all go to deposit
   const loanInterest = state.loans
-    .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry")
+    .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && loanExistedIn(l, month))
     .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
   const interest = Math.min(loanInterest, paidAmount);
   return { dep: Math.max(0, paidAmount - interest), interest };
@@ -2965,7 +2978,7 @@ function showDepositYearModal(yearKey) {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        const { dep, interest } = splitOfPayment(p, mem, paid);
         liveTotalDeposit += dep;
         liveTotalInterest += interest;
       });
@@ -3012,7 +3025,7 @@ function showDepositYearModal(yearKey) {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        const { dep, interest } = splitOfPayment(p, mem, paid);
         if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
         liveByMonth[p.month].deposit += dep;
         liveByMonth[p.month].interest += interest;
@@ -3285,7 +3298,7 @@ function showLoanYearModal(yearKey) {
         .reduce((s, p) => {
           const _mem = memberById(p.memberId);
           if (!_mem) return s;
-          const { interest } = paymentSplit(_mem, p.month, Number(p.paidAmount || p.amount || 0));
+          const { interest } = splitOfPayment(p, _mem, Number(p.paidAmount || p.amount || 0));
           return s + interest;
         }, 0);
       _totalYrInt = 76796 + _yr6LiveInt; // 87967 - 11171 (additional interest excluded)
@@ -3296,7 +3309,7 @@ function showLoanYearModal(yearKey) {
         .reduce((s, p) => {
           const _mem = memberById(p.memberId);
           if (!_mem) return s;
-          const { interest } = paymentSplit(_mem, p.month, Number(p.paidAmount || p.amount || 0));
+          const { interest } = splitOfPayment(p, _mem, Number(p.paidAmount || p.amount || 0));
           return s + interest;
         }, 0);
     }
@@ -3582,7 +3595,7 @@ function renderDashboard() {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        const { dep, interest } = splitOfPayment(p, mem, paid);
         yr6LiveDeposits += dep;
         yr6LiveInterest += interest;
       });
@@ -3596,7 +3609,7 @@ function renderDashboard() {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
-        const { dep, interest } = paymentSplit(mem, p.month, paid);
+        const { dep, interest } = splitOfPayment(p, mem, paid);
         activeLiveDeposits += dep;
         activeLiveInterest += interest;
       });
@@ -6516,7 +6529,7 @@ async function closeCurrentYear() {
     const mem = memberById(p.memberId);
     if (!mem) return;
     const paid = Number(p.paidAmount || p.amount || 0);
-    const split = paymentSplit(mem, p.month, paid);
+    const split = splitOfPayment(p, mem, paid);
     liveTotalDeposit += split.dep;
     liveTotalInterest += split.interest;
   });
@@ -6685,7 +6698,7 @@ function showFinancialSignoffModal() {
     const mem = memberById(p.memberId);
     if (!mem) return;
     const paid = Number(p.paidAmount || p.amount || 0);
-    const split = paymentSplit(mem, p.month, paid);
+    const split = splitOfPayment(p, mem, paid);
     liveTotalDeposit += split.dep;
     liveTotalInterest += split.interest;
   });
@@ -7525,11 +7538,14 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
   if (!member) return;
   const amount = memberMonthlyDue(member);
   if (liveBackendReady) {
+    const split = paymentSplit(member, month, amount);
     await liveQuery(supabaseClient.from("monthly_payments").upsert({
       profile_id: memberId,
       month,
       expected_amount: amount,
       paid_amount: amount,
+      deposit_amount: split.dep,
+      interest_amount: split.interest,
       status: "paid",
       source: "manual",
     }, { onConflict: "profile_id,month" }));
