@@ -588,8 +588,9 @@ serve(async (req) => {
     const type = String(data.type || "annual_meeting");
     const testOnly = Boolean(data.test_only);
     const testProfileId = String(data.test_profile_id || "");
-    const notificationsForAll = Boolean(data.notificationsForAll);
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
+    const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
 
     // Active members — when notificationsForAll is off, only send to president (admin)
     let membersQuery = supabase.from("profiles").select("id, full_name, email, phone, role").eq("status", "active");
@@ -696,8 +697,8 @@ serve(async (req) => {
       getHtml = (member) => buildAnnualMeetingEmailHtml(member, histLoansByMember[member.id] || [], data, ackedCount, totalCount);
     }
 
-    // Send bulk SMS only when notifications are enabled for all members
-    if (type === "annual_meeting" && notificationsForAll && !testOnly) {
+    // `members` is already limited to the President when the notifications toggle is off.
+    if (type === "annual_meeting" && !testOnly) {
       const yearNum   = Number(data.yearNum || 0);
       const yearLabel = String(data.yearLabel || `Year ${yearNum}`);
       const poolBalance = Number(data.poolBalance || 0);

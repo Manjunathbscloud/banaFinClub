@@ -5945,6 +5945,11 @@ async function clearCurrentLoan(id) {
     await _silentResetAcks();
     await loadLiveState();
     if (remainingPrincipal > 0) await insertStatement("credit", remainingPrincipal, `${loanMemberName(loan)} credited · loan cleared`, id);
+    const loanOwner = state.members.find(m => loanBelongsToMember(loan, m));
+    if (loanOwner) {
+      await notifyMember(loanOwner.id, "loan_cleared", "Loan cleared ✓",
+        `Hi ${loanOwner.name.split(" ")[0]}, your loan of ${money(loan.amount)} has been marked as cleared${remainingPrincipal > 0 ? ` (${money(remainingPrincipal)} received)` : ""}. No more interest from next month.`, id);
+    }
     showToast("Loan marked clear.");
     render();
     if (openYearKey) showLoanYearModal(openYearKey);
@@ -6189,21 +6194,10 @@ async function sendNotificationToSelf(type, title, body) {
   if (!liveBackendReady) return;
   const profileId = currentProfileId();
   if (!profileId) return;
+  // The notify-email function sends email, SMS and push for every new notification row.
   try {
     await supabaseClient.from("notifications").insert({
       profile_id: profileId, type, title, body, related_id: null, is_read: false,
-    });
-  } catch (_) {}
-  try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    await fetch(`${appConfig.supabaseUrl}/functions/v1/send-push`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session?.access_token}`,
-        "apikey": appConfig.supabaseAnonKey,
-      },
-      body: JSON.stringify({ profile_id: profileId, title, body }),
     });
   } catch (_) {}
 }
@@ -6414,6 +6408,8 @@ async function approvePartialRepaymentRequest(requestId) {
     }).eq("id", req.loanId));
     await insertStatement("credit", req.amount, `Final loan clearance — ${memberName}`, req.loanId);
     await addLiveAudit(`Final clearance ${money(req.amount)} approved for ${memberName}. Loan closed.`, "partial_repayment_approved");
+    await notifyMember(req.profileId, "loan_cleared", "Loan cleared ✓",
+      `Hi ${memberName.split(" ")[0]}, your final payment of ${money(req.amount)} has been received and your loan of ${money(loan.amount)} is now closed. No more interest from next month.`, req.loanId);
   } else {
     const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", req.loanId).single();
     const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + req.amount;
@@ -6423,6 +6419,8 @@ async function approvePartialRepaymentRequest(requestId) {
     await liveQuery(supabaseClient.from("current_loans").update({ principal_paid: newPrincipalPaid, monthly_interest: newMonthlyInterest }).eq("id", req.loanId));
     await insertStatement("credit", req.amount, `${memberName.split(" ")[0]} Partial Payment`, req.loanId);
     await addLiveAudit(`Recorded partial repayment of ${money(req.amount)} for ${memberName}.`, "partial_repayment_approved");
+    await notifyMember(req.profileId, "partial_repayment_approved", "Partial repayment received ✓",
+      `Hi ${memberName.split(" ")[0]}, your repayment of ${money(req.amount)} has been recorded. Remaining loan: ${money(newOutstanding)}. New monthly interest: ${money(newMonthlyInterest)}.`, req.loanId);
   }
 
   await loadLiveState();
@@ -6497,10 +6495,7 @@ async function saveMeetingNotes(yearDbYear, data) {
         .update({ expenditure: newExpenditure, balance: newBalance })
         .eq("year", yearDbYear));
       // Save timestamp so Share Summary button unlocks for 2 days
-      await liveQuery(supabaseClient.from("settings").upsert({
-        id: "active_year_info",
-        value: { ...state.settings, expenditureSavedAt: new Date().toISOString() },
-      }));
+      await updateActiveYearInfo({ expenditureSavedAt: new Date().toISOString() });
       // Add statement entry for expense change
       if (newExpenditure !== prevExpenditure) {
         const diff = newExpenditure - prevExpenditure;
@@ -6546,6 +6541,16 @@ async function deleteMeetingPhoto(yearDbYear, urlToRemove) {
 }
 
 
+// Changes only the given keys of settings.active_year_info and keeps every other key
+// (notificationsForAll, yearCloseEnabled, etc.) exactly as stored.
+async function updateActiveYearInfo(patch) {
+  const { data } = await supabaseClient.from("settings").select("value").eq("id", "active_year_info").maybeSingle();
+  await liveQuery(supabaseClient.from("settings").upsert({
+    id: "active_year_info",
+    value: { ...(data?.value || {}), ...patch },
+  }));
+}
+
 async function startNextYear(data) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const renewalFeePerMember = Number(data.renewalFee) || 0;
@@ -6554,22 +6559,15 @@ async function startNextYear(data) {
   const totalRenewalFee = renewalFeePerMember * activeMembers().length;
 
   const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: current.activeYearNumber,
-      activeYearStart: current.activeYearStart,
-      activeYearLabel: current.activeYearLabel,
-      yearClosed: false,
-      yearStarted: true,
-      yearCloseEnabled: false,
-      activeYearRenewalFee: totalRenewalFee,
-      activeYearRenewalFeePerMember: renewalFeePerMember,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: false,
-      meetingSignoffEnabled: false,
-    },
-  }));
+  await updateActiveYearInfo({
+    yearClosed: false,
+    yearStarted: true,
+    yearCloseEnabled: false,
+    activeYearRenewalFee: totalRenewalFee,
+    activeYearRenewalFeePerMember: renewalFeePerMember,
+    financialSignoffEnabled: false,
+    meetingSignoffEnabled: false,
+  });
   await liveQuery(supabaseClient.from("settings").upsert({ id: "monthly_deposit", value: { amount: monthlyDeposit } }));
   await liveQuery(supabaseClient.from("settings").upsert({ id: "loan_settings", value: { maxLoanPerMember: maxLoan } }));
 
@@ -6755,21 +6753,19 @@ async function closeCurrentYear() {
       original_disbursed_at: loan.original_disbursed_at || loan.disbursed_at,
     }).eq("id", loan.id));
   }
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: nextYearNum,
-      activeYearStart: nextMonthStart,
-      activeYearLabel: nextYearLabel,
-      yearClosed: false,
-      yearStarted: false,
-      activeYearRenewalFee: 0,
-      activeYearRenewalFeePerMember: 0,
-      activeYearExits: [],
-      financialSignoffEnabled: false,
-      meetingSignoffEnabled: false,
-    },
-  }));
+  await updateActiveYearInfo({
+    activeYearNumber: nextYearNum,
+    activeYearStart: nextMonthStart,
+    activeYearLabel: nextYearLabel,
+    yearClosed: false,
+    yearStarted: false,
+    yearCloseEnabled: false,
+    activeYearRenewalFee: 0,
+    activeYearRenewalFeePerMember: 0,
+    activeYearExits: [],
+    financialSignoffEnabled: false,
+    meetingSignoffEnabled: false,
+  });
 
   // ── 5. Create blank deposit_summaries stub for next year ─────────────
   const existingNext = state.deposits.find(d => d.year === nextYearDbYear);
@@ -6928,21 +6924,7 @@ function showMeetingSignoffModal() {
 
 async function toggleFinancialSignoff(enabled) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
-  const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: current.activeYearNumber || 6,
-      activeYearStart: current.activeYearStart || currentMonth(),
-      activeYearLabel: current.activeYearLabel || "",
-      yearClosed: current.yearClosed || false,
-      activeYearRenewalFee: current.activeYearRenewalFee || 0,
-      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: Boolean(enabled),
-      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
-    },
-  }));
+  await updateActiveYearInfo({ financialSignoffEnabled: Boolean(enabled) });
   await loadLiveState();
 
   if (enabled) {
@@ -6955,21 +6937,7 @@ async function toggleFinancialSignoff(enabled) {
 
 async function toggleMeetingSignoff(enabled) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
-  const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: current.activeYearNumber || 6,
-      activeYearStart: current.activeYearStart || currentMonth(),
-      activeYearLabel: current.activeYearLabel || "",
-      yearClosed: current.yearClosed || false,
-      activeYearRenewalFee: current.activeYearRenewalFee || 0,
-      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: current.financialSignoffEnabled || false,
-      meetingSignoffEnabled: Boolean(enabled),
-    },
-  }));
+  await updateActiveYearInfo({ meetingSignoffEnabled: Boolean(enabled) });
   await loadLiveState();
   showToast(enabled ? "Meeting signoff enabled — members will now see the prompt." : "Meeting signoff disabled.");
   render();
@@ -6977,15 +6945,7 @@ async function toggleMeetingSignoff(enabled) {
 
 async function toggleNotificationsForAll(enabled) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
-  const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: { ...Object.fromEntries(Object.entries(current).filter(([k]) => [
-      "activeYearNumber","activeYearStart","activeYearLabel","yearClosed","yearStarted",
-      "yearCloseEnabled","activeYearRenewalFee","activeYearRenewalFeePerMember",
-      "activeYearExits","financialSignoffEnabled","meetingSignoffEnabled","notificationsForAll"
-    ].includes(k))), notificationsForAll: Boolean(enabled) },
-  }));
+  await updateActiveYearInfo({ notificationsForAll: Boolean(enabled) });
   await loadLiveState();
   showToast(enabled ? "Notifications enabled for all members." : "Notifications restricted to admin only.");
   render();
@@ -6993,23 +6953,7 @@ async function toggleNotificationsForAll(enabled) {
 
 async function toggleYearClose(enabled) {
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
-  const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: current.activeYearNumber || 6,
-      activeYearStart: current.activeYearStart || currentMonth(),
-      activeYearLabel: current.activeYearLabel || "",
-      yearClosed: current.yearClosed || false,
-      yearStarted: current.yearStarted !== false,
-      activeYearRenewalFee: current.activeYearRenewalFee || 0,
-      activeYearRenewalFeePerMember: current.activeYearRenewalFeePerMember || 0,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: current.financialSignoffEnabled || false,
-      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
-      yearCloseEnabled: Boolean(enabled),
-    },
-  }));
+  await updateActiveYearInfo({ yearCloseEnabled: Boolean(enabled) });
   await loadLiveState();
   showToast(enabled ? "Year close unlocked." : "Year close locked.");
   render();
@@ -7136,21 +7080,10 @@ async function saveAnnualMeetingDecisions(data) {
   }));
 
   // Update active_year_info with renewal fee
-  const current = state.settings;
-  await liveQuery(supabaseClient.from("settings").upsert({
-    id: "active_year_info",
-    value: {
-      activeYearNumber: current.activeYearNumber || yearNum,
-      activeYearStart: current.activeYearStart || currentMonth(),
-      activeYearLabel: current.activeYearLabel || "",
-      yearClosed: current.yearClosed || false,
-      activeYearRenewalFee: data.renewalFee * (activeMembers().length),
-      activeYearRenewalFeePerMember: data.renewalFee,
-      activeYearExits: current.activeYearExits || [],
-      financialSignoffEnabled: current.financialSignoffEnabled || false,
-      meetingSignoffEnabled: current.meetingSignoffEnabled || false,
-    },
-  }));
+  await updateActiveYearInfo({
+    activeYearRenewalFee: data.renewalFee * (activeMembers().length),
+    activeYearRenewalFeePerMember: data.renewalFee,
+  });
 
   // Debit meeting expense from bank + statement
   if (data.meetingExpense > 0) {

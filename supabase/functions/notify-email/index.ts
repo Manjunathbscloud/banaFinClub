@@ -6,7 +6,12 @@ const GMAIL_USER = "srimukkaneshwara@gmail.com";
 const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const TEXTBEE_API_KEY = Deno.env.get("TEXTBEE_API_KEY") || "";
+const TEXTBEE_DEVICE_ID = Deno.env.get("TEXTBEE_DEVICE_ID") || "";
 const APP_URL = "https://manjunathbscloud.github.io/banaFinClub/";
+
+// These types send their own custom email elsewhere, so only SMS + push go from here.
+const SKIP_EMAIL_TYPES = new Set(["birthday_wish"]);
 
 // ─── Theme map per notification type ─────────────────────────────────────────
 const THEMES: Record<string, { icon: string; accent: string; bg: string; label: string }> = {
@@ -26,7 +31,35 @@ const THEMES: Record<string, { icon: string; accent: string; bg: string; label: 
   partial_repayment_rejected:  { icon: "🚫", accent: "#dc2626", bg: "#fef2f2", label: "Loan Repayment" },
   signoff_request:           { icon: "✍️",  accent: "#b45309", bg: "#fef3c7", label: "Action Required" },
   nominee_added:             { icon: "👤", accent: "#0891b2", bg: "#ecfeff", label: "Profile" },
+  loan_cleared:              { icon: "🏁", accent: "#15803d", bg: "#dcfce7", label: "Loan" },
+  payment_reminder:          { icon: "⏰", accent: "#b45309", bg: "#fef3c7", label: "Payment Reminder" },
+  loan_availability:         { icon: "💰", accent: "#0369a1", bg: "#e0f2fe", label: "Loan Availability" },
+  loan_renewal_reminder:     { icon: "⚠️", accent: "#b45309", bg: "#fef3c7", label: "Loan Renewal" },
 };
+
+function toE164(phone: string): string {
+  return `+91${phone.replace(/\D/g, "").slice(-10)}`;
+}
+
+async function sendSms(phone: string, title: string, body: string) {
+  if (!TEXTBEE_API_KEY || !TEXTBEE_DEVICE_ID) return "sms not configured";
+  const message = `🏦 BanakarFinClub | Sri Mukkaneshwara Associates\n${title}\n${body}\napp: ${APP_URL}`;
+  const res = await fetch(`https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`, {
+    method: "POST",
+    headers: { "x-api-key": TEXTBEE_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ recipients: [toE164(phone)], message }),
+  });
+  return `sms ${res.status}`;
+}
+
+async function sendPush(profileId: string, title: string, body: string) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ profile_id: profileId, title, body }),
+  });
+  return `push ${res.status}`;
+}
 
 const FALLBACK_THEME = { icon: "🔔", accent: "#1d4ed8", bg: "#eff6ff", label: "Notification" };
 
@@ -97,52 +130,67 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Respect the global notifications toggle — skip email if disabled
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, full_name, phone, role")
+      .eq("id", record.profile_id)
+      .single();
+    if (!profile) return new Response("recipient not found", { status: 200 });
+
+    // Notifications toggle: off → only the President (admin) receives email/SMS/push.
     const { data: settingsRow } = await supabase
       .from("settings")
       .select("value")
       .eq("id", "active_year_info")
       .single();
     const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
-    if (!notificationsForAll) {
-      console.log("Notifications disabled — skipping email.");
-      return new Response("notifications disabled", { status: 200 });
+    if (!notificationsForAll && profile.role !== "president") {
+      console.log("Notifications restricted to admin — skipping", record.profile_id);
+      return new Response("notifications restricted to admin", { status: 200 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email, full_name")
-      .eq("id", record.profile_id)
-      .single();
+    const type = record.type || "";
+    const results: string[] = [];
 
-    if (!profile?.email) {
-      return new Response("no email for recipient", { status: 200 });
+    // Each channel is independent: one failing must not stop the others.
+    if (profile.email && !SKIP_EMAIL_TYPES.has(type)) {
+      try {
+        const firstName = (profile.full_name || "Member").split(" ")[0];
+        const rawHtml = buildEmailHtml(firstName, type, record.title, record.body);
+        const html = rawHtml.split("\n").map((l: string) => l.trimEnd()).join("\n");
+        const client = new SMTPClient({
+          connection: {
+            hostname: "smtp.gmail.com",
+            port: 465,
+            tls: true,
+            auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
+          },
+        });
+        await client.send({
+          from: `Banakar FinClub <${GMAIL_USER}>`,
+          to: profile.email,
+          subject: record.title,
+          content: "auto",
+          html,
+        });
+        await client.close();
+        results.push("email ok");
+      } catch (e) {
+        console.error("email error:", e);
+        results.push("email failed");
+      }
     }
 
-    const firstName = (profile.full_name || "Member").split(" ")[0];
-    const rawHtml = buildEmailHtml(firstName, record.type || "", record.title, record.body);
-    const html = rawHtml.split("\n").map((l: string) => l.trimEnd()).join("\n");
+    if (profile.phone) {
+      try { results.push(await sendSms(profile.phone, record.title, record.body)); }
+      catch (e) { console.error("sms error:", e); results.push("sms failed"); }
+    }
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: "smtp.gmail.com",
-        port: 465,
-        tls: true,
-        auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
-      },
-    });
+    try { results.push(await sendPush(record.profile_id, record.title, record.body)); }
+    catch (e) { console.error("push error:", e); results.push("push failed"); }
 
-    await client.send({
-      from: `Banakar FinClub <${GMAIL_USER}>`,
-      to: profile.email,
-      subject: record.title,
-      content: "auto",
-      html,
-    });
-
-    await client.close();
-
-    return new Response(JSON.stringify({ ok: true }), {
+    console.log("notify", record.profile_id, type, results.join(", "));
+    return new Response(JSON.stringify({ ok: true, results }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

@@ -101,19 +101,23 @@ serve(async (req) => {
     // Find members whose birthday is today (match day + month, any year)
     const { data: profiles, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, dob")
+      .select("id, full_name, email, dob, role")
       .eq("status", "active")
-      .not("dob", "is", null)
-      .not("email", "is", null);
+      .not("dob", "is", null);
 
     if (error) throw error;
+
+    // Notifications toggle: off → only the President (admin) is notified.
+    const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
+    const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
 
     const today = new Date();
     const todayMonth = today.getUTCMonth() + 1;
     const todayDay = today.getUTCDate();
 
     const birthdayMembers = (profiles || []).filter((p) => {
-      if (!p.dob || !p.email) return false;
+      if (!p.dob) return false;
+      if (!notificationsForAll && p.role !== "president") return false;
       const dob = new Date(p.dob);
       return dob.getUTCMonth() + 1 === todayMonth && dob.getUTCDate() === todayDay;
     });
@@ -141,18 +145,20 @@ serve(async (req) => {
       const html = rawHtml.split("\n").map((l: string) => l.trimEnd()).join("\n");
 
       try {
-        await client.send({
-          from: `Banakar FinClub <${GMAIL_USER}>`,
-          to: profile.email,
-          subject: `Happy Birthday ${firstName}! 🎂 — Banakar FinClub`,
-          content: "auto",
-          html,
-        });
+        if (profile.email) {
+          await client.send({
+            from: `Banakar FinClub <${GMAIL_USER}>`,
+            to: profile.email,
+            subject: `Happy Birthday ${firstName}! 🎂 — Banakar FinClub`,
+            content: "auto",
+            html,
+          });
+        }
 
-        // Insert in-app notification
+        // In-app notification; notify-email adds SMS + push (it skips email for this type)
         await supabase.from("notifications").insert({
           profile_id: profile.id,
-          type: "birthday",
+          type: "birthday_wish",
           title: `Happy Birthday ${firstName}! 🎂`,
           body: "Wishing you a wonderful birthday from all of us at Sri Mukkanneshwara Associate · Banakar FinClub!",
           is_read: false,

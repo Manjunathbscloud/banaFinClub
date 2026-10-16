@@ -33,11 +33,18 @@ serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("phone, full_name")
+      .select("phone, full_name, role")
       .eq("id", profile_id)
       .single();
 
     if (!profile?.phone) return new Response("no phone for recipient", { status: 200, headers: CORS });
+
+    // Notifications toggle: off → only the President (admin) receives SMS.
+    const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
+    const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
+    if (!notificationsForAll && profile.role !== "president") {
+      return new Response("notifications restricted to admin", { status: 200, headers: CORS });
+    }
 
     const phone = toE164(profile.phone);
     const sms = buildSms(message);

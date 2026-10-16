@@ -1,21 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const TEXTBEE_API_KEY = Deno.env.get("TEXTBEE_API_KEY")!;
-const TEXTBEE_DEVICE_ID = Deno.env.get("TEXTBEE_DEVICE_ID")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const APP_URL = "https://manjunathbscloud.github.io/banaFinClub/";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-function toE164(phone: string): string {
-  const digits = phone.replace(/\D/g, "").slice(-10);
-  return `+91${digits}`;
-}
 
 function formatMoney(amount: number): string {
   return "₹" + amount.toLocaleString("en-IN");
@@ -26,19 +18,8 @@ function istNow(): Date {
   return new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
 }
 
-async function sendSms(phone: string, message: string) {
-  const sms = `🏦 BanakarFinClub | Sri Mukkaneshwara Associates\n${message}`;
-  const res = await fetch(
-    `https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`,
-    {
-      method: "POST",
-      headers: { "x-api-key": TEXTBEE_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ recipients: [toE164(phone)], message: sms }),
-    }
-  );
-  console.log("SMS sent to", phone, res.status);
-}
-
+// Reminders are written as notification rows. The notify-email function then sends
+// email, SMS and push for each row, so every channel follows the same toggle rule.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -48,20 +29,29 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const now = istNow();
 
-  // ─── Check global notifications toggle ───────────────────────────────────
-  const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
-  const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
-  if (!notificationsForAll) {
-    console.log("Notifications disabled — skipping scheduled SMS.");
-    return new Response("notifications disabled", { status: 200, headers: CORS });
-  }
-
   // ─── Auto-cleanup: delete notifications older than 60 days ───────────────
   const cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
   await supabase.from("notifications").delete().lt("created_at", cutoff);
-  console.log("Cleaned up notifications older than 60 days");
 
-  // ─── Loan Availability & Bank Balance ────────────────────────────────────
+  // ─── Notifications toggle: off → only the President (admin) is notified ──
+  const { data: settingsRow } = await supabase.from("settings").select("value").eq("id", "active_year_info").single();
+  const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
+
+  const { data: activeProfiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, role")
+    .eq("status", "active");
+  const profiles = (activeProfiles || []) as { id: string; full_name: string; role: string }[];
+  const allowed = (p: { role: string }) => notificationsForAll || p.role === "president";
+
+  async function notify(profileId: string, ntype: string, title: string, body: string) {
+    const { error } = await supabase.from("notifications").insert({
+      profile_id: profileId, type: ntype, title, body, is_read: false,
+    });
+    if (error) console.error("notification insert failed:", error.message);
+  }
+
+  // ─── Loan Availability & Bank Balance (broadcast) ────────────────────────
   if (type === "availability") {
     const { data: settings } = await supabase
       .from("settings")
@@ -74,115 +64,66 @@ serve(async (req) => {
     const bankBal = available + reserve;
     const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
 
-    const message =
-      `💰 ${monthLabel} — Loan Availability\n` +
-      `Bank Balance: ${formatMoney(bankBal)}\n` +
-      `Available to Lend: ${formatMoney(available)}\n` +
-      `To apply for a loan, open the app by clicking the link below:\n${APP_URL}`;
+    const title = `${monthLabel} — Loan Availability`;
+    const body = `Bank Balance: ${formatMoney(bankBal)}. Available to lend: ${formatMoney(available)}. Open the app to apply for a loan.`;
 
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("phone")
-      .eq("status", "active")
-      .not("phone", "is", null);
-
-    for (const p of profiles || []) {
-      if (p.phone) await sendSms(p.phone, message).catch(console.error);
-    }
-
-    console.log(`Availability SMS sent to ${(profiles || []).length} members`);
+    const recipients = profiles.filter(allowed);
+    for (const p of recipients) await notify(p.id, "loan_availability", title, body);
+    console.log(`Availability reminder created for ${recipients.length} member(s)`);
     return new Response("ok", { status: 200, headers: CORS });
   }
 
-  // ─── Loan Renewal Reminder ────────────────────────────────────────────────
+  // ─── Loan Renewal Reminder (each loan owner) ─────────────────────────────
   if (type === "renewal") {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const monthStart = `${year}-${month}-01`;
-    // Last day of the month — avoids invalid dates like 2026-02-31
     const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
     const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
 
     const { data: loans } = await supabase
       .from("current_loans")
-      .select("id, profile_id, amount, renewal_or_return_date")
+      .select("id, profile_id, principal, renewal_or_return_date")
       .eq("status", "active")
       .gte("renewal_or_return_date", monthStart)
       .lte("renewal_or_return_date", monthEnd);
 
-    if (!loans || loans.length === 0) {
-      console.log("No loans due for renewal this month");
-      return new Response("no loans due", { status: 200, headers: CORS });
+    let count = 0;
+    for (const loan of loans || []) {
+      const owner = profiles.find((p) => p.id === loan.profile_id);
+      if (!owner || !allowed(owner)) continue;
+      const firstName = (owner.full_name || "Member").split(" ")[0];
+      const dueDateStr = new Date(loan.renewal_or_return_date)
+        .toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      await notify(owner.id, "loan_renewal_reminder", "Loan Renewal Reminder",
+        `Hi ${firstName}, your loan of ${formatMoney(Number(loan.principal || 0))} is due for renewal on ${dueDateStr}. Open the app to request an extension.`);
+      count++;
     }
-
-    // Format "5 Jul 2026" from the loan's renewal month
-    const dueDateStr = new Date(year, now.getMonth(), 5)
-      .toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-
-    for (const loan of loans) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("phone, full_name")
-        .eq("id", loan.profile_id)
-        .single();
-
-      if (!profile?.phone) continue;
-
-      const firstName = (profile.full_name || "Member").split(" ")[0];
-      const message =
-        `⚠️ Loan Renewal Reminder\n` +
-        `Hi ${firstName}, your loan of ${formatMoney(Number(loan.amount))} is due for renewal on ${dueDateStr}. ` +
-        `To extend your loan, open the app by clicking the link below:\n${APP_URL}`;
-
-      await sendSms(profile.phone, message).catch(console.error);
-    }
-
-    console.log(`Renewal SMS sent to ${loans.length} members`);
+    console.log(`Renewal reminder created for ${count} loan(s)`);
     return new Response("ok", { status: 200, headers: CORS });
   }
 
-  // ─── Monthly Payment Pending Reminder ────────────────────────────────────
+  // ─── Monthly Payment Pending Reminder (unpaid members) ───────────────────
   if (type === "payment") {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const currentMonth = `${year}-${month}`;
     const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
 
-    // Get all active members
-    const { data: activeProfiles } = await supabase
-      .from("profiles")
-      .select("id, phone, full_name")
-      .eq("status", "active")
-      .not("phone", "is", null);
-
-    if (!activeProfiles || activeProfiles.length === 0) {
-      return new Response("no active members", { status: 200, headers: CORS });
-    }
-
-    // Get members who have already paid this month
     const { data: paidRows } = await supabase
       .from("monthly_payments")
       .select("profile_id")
       .eq("month", currentMonth)
       .eq("status", "paid");
-
     const paidIds = new Set((paidRows || []).map((r: any) => r.profile_id));
 
-    // Send reminder only to those who have NOT paid
-    const unpaid = activeProfiles.filter((p: any) => !paidIds.has(p.id));
-
+    const unpaid = profiles.filter((p) => !paidIds.has(p.id) && allowed(p));
     for (const p of unpaid) {
-      if (!p.phone) continue;
       const firstName = (p.full_name || "Member").split(" ")[0];
-      const message =
-        `⏰ Payment Reminder\n` +
-        `Hi ${firstName}, your monthly payment for ${monthLabel} is still pending. ` +
-        `Please pay at the earliest to avoid any issues.\n` +
-        `Open the app by clicking the link below:\n${APP_URL}`;
-      await sendSms(p.phone, message).catch(console.error);
+      await notify(p.id, "payment_reminder", "Payment Reminder",
+        `Hi ${firstName}, your monthly payment for ${monthLabel} is still pending. Please pay at the earliest.`);
     }
-
-    console.log(`Payment reminder sent to ${unpaid.length} unpaid members out of ${activeProfiles.length}`);
+    console.log(`Payment reminder created for ${unpaid.length} member(s)`);
     return new Response("ok", { status: 200, headers: CORS });
   }
 
