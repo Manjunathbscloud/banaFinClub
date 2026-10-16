@@ -964,9 +964,16 @@ function memberOutstanding(memberId) {
 }
 
 function memberMonthlyInterest(memberId) {
-  return memberLoans(memberId)
+  const member = memberById(memberId);
+  const dueMonth = currentMonth() < activeYearCutoffMonth() ? activeYearCutoffMonth() : currentMonth();
+  const activeInterest = memberLoans(memberId)
     .filter((l) => l.notes !== "emi_entry" && l.loanType !== "emi")
     .reduce((sum, loan) => sum + loanMonthlyInterest(loan), 0);
+  const clearedThisMonthInterest = state.loans
+    .filter((l) => l.status !== "active" && l.notes !== "emi_entry" && l.loanType !== "emi" && !l.isInterestFree
+      && loanBelongsToMember(l, member) && loanOpenIn(l, dueMonth))
+    .reduce((sum, loan) => sum + loanBaseMonthlyInterest(loan), 0);
+  return activeInterest + clearedThisMonthInterest;
 }
 
 function latestHistoricalBalance() {
@@ -1077,6 +1084,57 @@ function memberMonthlyDue(member) {
   return expectedMonthlyDeposit(member, dueMonth) + memberMonthlyInterest(member.id) + memberEmiMonthly(member);
 }
 
+// The clearing month's interest is paid with that month's regular payment (principal is
+// paid separately), so a cleared loan still counts for the month it was cleared in.
+function loanOpenIn(loan, month) {
+  if (loan.status === "active") return true;
+  return Boolean(loan.closedAt) && String(loan.closedAt).slice(0, 7) >= month;
+}
+
+function loanInterestForMonth(loan) {
+  return loan.status === "active" ? loanMonthlyInterest(loan) : loanBaseMonthlyInterest(loan);
+}
+
+// What was due for a specific month. The current due month uses the live calculation unchanged;
+// a missed earlier month uses that month's deposit rules and only the loans open in that month.
+function memberDueForMonth(member, month) {
+  const dueMonthNow = currentMonth() < activeYearCutoffMonth() ? activeYearCutoffMonth() : currentMonth();
+  if (month === dueMonthNow) {
+    return { isCurrent: true, total: memberMonthlyDue(member) };
+  }
+  const deposit = expectedMonthlyDeposit(member, month);
+  const interestLoans = state.loans
+    .filter(l => loanBelongsToMember(l, member) && l.loanType !== "emi" && l.notes !== "emi_entry"
+      && !l.isInterestFree && l.status !== "interest_free" && loanExistedIn(l, month) && loanOpenIn(l, month))
+    .map(l => ({ loan: l, amount: loanInterestForMonth(l) }))
+    .filter(x => x.amount > 0);
+  const interest = interestLoans.reduce((s, x) => s + x.amount, 0);
+  let emiPrincipal = 0, emiInterest = 0;
+  state.loans
+    .filter(l => l.loanType === "emi" && loanBelongsToMember(l, member) && loanExistedIn(l, month))
+    .forEach(l => {
+      const row = state.loanEmis.find(e => e.loanId === l.id && e.dueMonth === month);
+      if (row) { emiPrincipal += Number(row.principalPart || 0); emiInterest += Number(row.interestPart || 0); }
+    });
+  const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member) && loanExistedIn(l, month));
+  let legacyEmi = 0;
+  if (legacyLoan && emiPrincipal + emiInterest === 0) {
+    const prog = appannaEmiProgress();
+    legacyEmi = prog.remaining > 0 ? Math.round(prog.monthlyEmi) : 0;
+  }
+  return {
+    isCurrent: false,
+    total: deposit + interest + emiPrincipal + emiInterest + legacyEmi,
+    split: { dep: deposit + emiPrincipal + legacyEmi, interest: interest + emiInterest },
+    interestLoans,
+  };
+}
+
+function fmtMonthLong(month) {
+  const [y, m] = String(month).split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
+}
+
 // Splits a member's paid amount into deposit (principal) and interest correctly.
 // Regular deposit + EMI principal → deposit; regular loan interest + EMI interest → interest.
 // A loan only counts toward a month's interest if it had been taken by that month.
@@ -1095,8 +1153,8 @@ function paymentSplit(mem, month, paidAmount) {
   const hasLegacyEmi = state.loans.some(l => (l.notes === "emi_entry" || Number(l.interestRateMonthly) > 3) && loanBelongsToMember(l, mem));
   if (hasLegacyEmi) {
     const regularInterest = state.loans
-      .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi" && loanExistedIn(l, month))
-      .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
+      .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi" && loanExistedIn(l, month))
+      .reduce((sum, l) => sum + loanInterestForMonth(l), 0);
     const interest = Math.min(regularInterest, paidAmount);
     return { dep: Math.max(0, paidAmount - interest), interest };
   }
@@ -1117,8 +1175,8 @@ function paymentSplit(mem, month, paidAmount) {
   // Full loans: interest = exact monthly interest from loan records, deposit = everything else
   // This correctly handles catch-up deposits, renewal fees, or any extra deposit — all go to deposit
   const loanInterest = state.loans
-    .filter(l => l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && loanExistedIn(l, month))
-    .reduce((sum, l) => sum + loanMonthlyInterest(l), 0);
+    .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, mem) && l.notes !== "emi_entry" && l.loanType !== "emi" && loanExistedIn(l, month))
+    .reduce((sum, l) => sum + loanInterestForMonth(l), 0);
   const interest = Math.min(loanInterest, paidAmount);
   return { dep: Math.max(0, paidAmount - interest), interest };
 }
@@ -7519,7 +7577,7 @@ function showMarkPaymentModal(memberId) {
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:8px;border-radius:10px;border:1.5px solid ${isCurrent(m) ? "var(--accent,#2563eb)" : "var(--border,#e5e7eb)"};background:${isCurrent(m) ? "var(--accent-bg,#eff6ff)" : "var(--bg,#fff)"};">
               <div>
                 <div style="font-size:14px;font-weight:600;color:var(--text);">${fmtMonth(m)}</div>
-                <div style="font-size:12px;color:var(--muted);">${isCurrent(m) ? "Current month" : "Missed month"} · ${money(memberMonthlyDue(member))}</div>
+                <div style="font-size:12px;color:var(--muted);">${isCurrent(m) ? "Current month" : "Missed month"} · ${money(memberDueForMonth(member, m).total)}</div>
               </div>
               <button class="primary small" data-action="confirm-mark-paid" data-member-id="${memberId}" data-month="${m}" style="${isCurrent(m) ? "" : "background:#f59e0b;border-color:#f59e0b;"}">
                 Mark Paid
@@ -7536,9 +7594,10 @@ function showMarkPaymentModal(memberId) {
 async function markPaymentPaid(memberId, month = currentMonth()) {
   const member = memberById(memberId);
   if (!member) return;
-  const amount = memberMonthlyDue(member);
+  const due = memberDueForMonth(member, month);
+  const amount = due.total;
   if (liveBackendReady) {
-    const split = paymentSplit(member, month, amount);
+    const split = due.isCurrent ? paymentSplit(member, month, amount) : due.split;
     await liveQuery(supabaseClient.from("monthly_payments").upsert({
       profile_id: memberId,
       month,
@@ -7574,11 +7633,12 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
     if (emiLoans.length > 0) await loadLiveState();
     // Record per-loan interest in loan_interest_payments (from Year 7 / Nov 2026 onwards)
     if (month >= "2026-11") {
-      const fullLoansForMember = state.loans.filter(l =>
-        l.status === "active" && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry"
-      );
-      for (const loan of fullLoansForMember) {
-        const interestAmt = loanMonthlyInterest(loan);
+      const interestRows = due.isCurrent
+        ? state.loans
+            .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry" && l.loanType !== "emi")
+            .map(l => ({ loan: l, amount: loanInterestForMonth(l) }))
+        : due.interestLoans;
+      for (const { loan, amount: interestAmt } of interestRows) {
         if (interestAmt > 0) {
           await liveQuery(supabaseClient.from("loan_interest_payments").upsert({
             loan_id: loan.id,
@@ -7607,7 +7667,7 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
         await notifyMember(memberId, "emi_completed", "Catch-up complete! 🎉", `Congratulations ${member.name}! You have completed all ${legacyEmiLoan.tenureMonths} catch-up payments. Your loan is now closed.`);
       }
     }
-    await insertStatement("credit", amount, `${member.name} credited`);
+    await insertStatement("credit", amount, `${member.name} credited · ${fmtMonthLong(month)} dues`);
     await notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`);
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
