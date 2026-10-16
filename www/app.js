@@ -1130,6 +1130,19 @@ function memberDueForMonth(member, month) {
   };
 }
 
+function nextMonthKey(month) {
+  const [y, m] = String(month).split("-").map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthsInclusive(fromMonth, toMonth) {
+  if (!fromMonth || !toMonth || toMonth < fromMonth) return 0;
+  const [fy, fm] = fromMonth.split("-").map(Number);
+  const [ty, tm] = toMonth.split("-").map(Number);
+  return (ty - fy) * 12 + (tm - fm) + 1;
+}
+
 function fmtMonthLong(month) {
   const [y, m] = String(month).split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
@@ -6655,16 +6668,27 @@ async function closeCurrentYear() {
       const isCleared = loan.status === "clear" || loan.status === "cleared";
       const memberLocal = state.members.find(m => m.id === loan.profile_id);
 
-      // Compute interest paid for this loan during the closing year
-      // For each month the member paid, attribute this loan's share of interest
       const loanMonthlyInt = Number(loan.monthly_interest || 0) ||
         (Number(loan.principal || 0) * Number(loan.interest_rate_monthly || 1.25) / 100);
-      const memberPayments = state.monthlyPayments.filter(p =>
-        p.status === "paid" && p.month >= activeYearStart &&
-        (p.memberId === loan.profile_id || (memberLocal && p.memberId === memberLocal.id))
-      );
-      // Sum of interest months paid × monthly rate for this specific loan
-      const totalInterestPaid = loan.is_interest_free ? 0 : loanMonthlyInt * memberPayments.length;
+      let totalInterestPaid = 0;
+      if (!loan.is_interest_free) {
+        if (yearNum === 6) {
+          // Year 6 predates per-loan interest records: count only the months this loan was held
+          // (from the month after it was taken, Nov 2025 at the earliest, until cleared or year end).
+          const yearFirst = "2025-11";
+          const yearLast = currentMonth();
+          const takenMonth = String(loan.disbursed_at || "").slice(0, 7);
+          const firstInterestMonth = takenMonth ? nextMonthKey(takenMonth) : yearFirst;
+          const from = firstInterestMonth > yearFirst ? firstInterestMonth : yearFirst;
+          const closedMonth = isCleared && loan.closed_at ? String(loan.closed_at).slice(0, 7) : "";
+          const to = closedMonth && closedMonth < yearLast ? closedMonth : yearLast;
+          totalInterestPaid = monthsInclusive(from, to) * loanMonthlyInt;
+        } else {
+          totalInterestPaid = (state.loanInterestPayments || [])
+            .filter(p => p.loanId === loan.id && p.month >= activeYearStart)
+            .reduce((s, p) => s + Number(p.amount || 0), 0);
+        }
+      }
 
       return {
         id: crypto.randomUUID(),
