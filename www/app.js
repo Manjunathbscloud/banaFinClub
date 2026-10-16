@@ -409,6 +409,7 @@ function liveLoanToLocal(loan) {
     interest: Number(loan.monthly_interest || 0),
     interestPaid: Number(loan.interest_paid || 0),
     from: loan.disbursed_at,
+    originalFrom: loan.original_disbursed_at || "",
     renewalOrReturnDate: loan.renewal_or_return_date || "",
     closedAt: loan.closed_at || "",
     status: loan.status,
@@ -449,6 +450,7 @@ function liveLoanHistoryToLocal(loan) {
     totalPaid: Number(loan.total_paid || 0),
     isInterestFree: Boolean(loan.is_interest_free),
     notes: loan.notes || "",
+    loanId: loan.loan_id || null,
   };
 }
 
@@ -5616,6 +5618,7 @@ function showLoanDetailModal(loanId) {
   const outstanding = loanOutstanding(loan);
   const renewalDate = loanRenewalDate(loan);
   const extCount = (state.extensionRequests || []).filter(r => r.loanId === loanId && r.status === "approved").length;
+  const pastYears = (state.loanHistory || []).filter(h => h.loanId === loanId);
 
   const paidCount  = months.filter((mo, i) => {
     if (mo >= LIVE_CUTOFF) return !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
@@ -5672,6 +5675,7 @@ function showLoanDetailModal(loanId) {
           <span>·</span>
           <span>Principal paid <strong style="color:var(--ink);">${money(loan.principalPaid)}</strong></span>
           ${extCount > 0 ? `<span>·</span><span>Extended <strong style="color:var(--ink);">${extCount} time${extCount > 1 ? "s" : ""}</strong></span>` : ""}
+          ${loan.originalFrom && String(loan.originalFrom).slice(0, 10) !== String(loan.from || "").slice(0, 10) ? `<span>·</span><span>First taken <strong style="color:var(--ink);">${fmtMonthYearShort(loan.originalFrom)}</strong></span>` : ""}
         </div>
 
         <!-- Monthly interest history -->
@@ -5699,6 +5703,17 @@ function showLoanDetailModal(loanId) {
             `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">No partial repayments recorded.</div>`
           }
         </div>
+
+        ${pastYears.length ? `
+        <h4 style="margin:16px 0 8px;font-size:13px;font-weight:700;color:var(--ink);">Past years</h4>
+        <div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;">
+          ${pastYears.map(h => `
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border,#f0f0f0);">
+              <span style="flex:1;font-size:13px;color:var(--ink);">${escapeHtml(h.year)}</span>
+              <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);">${money(h.totalPaid)}</span>
+              <span style="font-size:11px;font-weight:600;color:var(--muted);min-width:96px;text-align:right;">${escapeHtml(h.status)}</span>
+            </div>`).join("")}
+        </div>` : ""}
 
       </div>
     </div>`;
@@ -6709,6 +6724,7 @@ async function closeCurrentYear() {
         total_paid: totalInterestPaid,
         is_interest_free: Boolean(loan.is_interest_free),
         notes: loan.notes || "",
+        loan_id: loan.id,
       };
     });
     await liveQuery(supabaseClient.from("loan_history").insert(historyRows));
@@ -6731,9 +6747,13 @@ async function closeCurrentYear() {
   const nextMonthStartFull = `${nextMonthStart}-01`;
 
   // Reset disbursed_at to new year start for all carried-forward (still active) loans
-  const { data: activeLoansForReset } = await supabaseClient.from("current_loans").select("id").eq("status", "active");
+  // Keep the real first-taken date in original_disbursed_at before the yearly reset.
+  const { data: activeLoansForReset } = await supabaseClient.from("current_loans").select("id, disbursed_at, original_disbursed_at").eq("status", "active");
   for (const loan of (activeLoansForReset || [])) {
-    await liveQuery(supabaseClient.from("current_loans").update({ disbursed_at: nextMonthStartFull }).eq("id", loan.id));
+    await liveQuery(supabaseClient.from("current_loans").update({
+      disbursed_at: nextMonthStartFull,
+      original_disbursed_at: loan.original_disbursed_at || loan.disbursed_at,
+    }).eq("id", loan.id));
   }
   await liveQuery(supabaseClient.from("settings").upsert({
     id: "active_year_info",
