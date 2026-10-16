@@ -6640,9 +6640,14 @@ async function closeCurrentYear() {
     breakdown.push({ description: "Member Out",       details: "Sarpabhushana Banakar – exit payout",      amount: -exitPayouts });
   } else {
     const activeYearExits = state.settings.activeYearExits || [];
-    const renewalFee = Number(state.settings.activeYearRenewalFee || 0);
-    if (renewalFee > 0) breakdown.push({ description: "Renewal Fee",    details: "Annual renewal collected",              amount: renewalFee });
-    breakdown.push({ description: "Total Deposits",   details: "Monthly collections for the year",         amount: liveTotalDeposit });
+    // The renewal fee is paid inside the first month's payment, so it is already part of
+    // liveTotalDeposit; show it as its own line and take it out of Total Deposits.
+    const renewalPerMember = Number(state.settings.activeYearRenewalFeePerMember || 0);
+    const renewalCollected = renewalPerMember > 0
+      ? Math.min(liveTotalDeposit, renewalPerMember * livePayments.filter(p => p.month === activeYearStart).length)
+      : 0;
+    if (renewalCollected > 0) breakdown.push({ description: "Renewal Fee",    details: "Annual renewal collected",              amount: renewalCollected });
+    breakdown.push({ description: "Total Deposits",   details: "Monthly collections for the year",         amount: liveTotalDeposit - renewalCollected });
     breakdown.push({ description: "Total Interest",   details: "Loan interest earned",                     amount: liveTotalInterest });
     activeYearExits.forEach(e => breakdown.push({ description: "Member Out", details: `${e.name} – exit payout`, amount: -Number(e.payout || 0) }));
   }
