@@ -95,6 +95,8 @@ function buildBirthdayEmailHtml(firstName: string): string {
 }
 
 serve(async (req) => {
+  // NOTIFICATIONS OFF: every notification channel is switched off. Delete this line to turn it back on.
+  return new Response(JSON.stringify({ ok: false, disabled: true, sent: 0 }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 

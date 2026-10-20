@@ -120,6 +120,8 @@ function buildEmailHtml(firstName: string, type: string, title: string, body: st
 }
 
 serve(async (req) => {
+  // NOTIFICATIONS OFF: every notification channel is switched off. Delete this line to turn it back on.
+  return new Response(JSON.stringify({ ok: false, disabled: true, sent: 0 }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const payload = await req.json();
     const record = payload.record;

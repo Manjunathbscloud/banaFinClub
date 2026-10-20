@@ -5,6 +5,8 @@ const ASSOCIATION_UPI_ID = "mukkaneshwara@ybl";
 const ASSOCIATION_UPI_NAME = "Sri Mukkaneshwara Associates";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
+// All notifications (in-app, email, SMS, push, meeting summary) are switched off. Set to false to turn back on.
+const NOTIFICATIONS_OFF = true;
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
 const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
 const supabaseClient = liveBackendReady ? window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey) : null;
@@ -4805,7 +4807,7 @@ document.addEventListener("click", async (event) => {
       action.disabled = true;
       action.textContent = "Sending…";
       await sendNotificationToSelf(type, title, body);
-      showToast("Sent to your account — check inbox + email + push.");
+      showToast(NOTIFICATIONS_OFF ? "Notifications are switched off — nothing was sent." : "Sent to your account — check inbox + email + push.");
       action.disabled = false;
       action.textContent = action.dataset.origLabel || action.textContent;
       await loadLiveState();
@@ -6185,6 +6187,7 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
   }
 }
 async function notifyMember(profileId, type, title, body, relatedId = null) {
+  if (NOTIFICATIONS_OFF) return;
   if (!liveBackendReady || !profileId) return;
   if (!state.settings.notificationsForAll) {
     const target = state.members.find(m => m.id === profileId);
@@ -6198,6 +6201,7 @@ async function notifyMember(profileId, type, title, body, relatedId = null) {
 }
 
 async function sendNotificationToSelf(type, title, body) {
+  if (NOTIFICATIONS_OFF) return;
   if (!liveBackendReady) return;
   const profileId = currentProfileId();
   if (!profileId) return;
@@ -6949,6 +6953,7 @@ async function toggleYearClose(enabled) {
 }
 
 async function shareMeetingSummary({ testOnly = false } = {}) {
+  if (NOTIFICATIONS_OFF) { showToast("Notifications are switched off — summary was not sent."); return; }
   if (!liveBackendReady || !isAdmin()) { showToast("Admin access required."); return; }
   const btn = document.querySelector("[data-action='share-summary']");
   if (!testOnly && btn) { btn.disabled = true; btn.textContent = "Sending…"; }
@@ -7135,6 +7140,7 @@ async function _silentResetAcks() {
 
 
 async function sendMeetingSummaryEmail(data) {
+  if (NOTIFICATIONS_OFF) { showToast("Notifications are switched off — summary was not sent."); return; }
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   try {
     showToast("Sending meeting summary to all members…");

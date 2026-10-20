@@ -21,6 +21,8 @@ function istNow(): Date {
 // Reminders are written as notification rows. The notify-email function then sends
 // email, SMS and push for each row, so every channel follows the same toggle rule.
 serve(async (req) => {
+  // NOTIFICATIONS OFF: every notification channel is switched off. Delete this line to turn it back on.
+  return new Response(JSON.stringify({ ok: false, disabled: true, sent: 0 }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   const { type } = await req.json().catch(() => ({}));
