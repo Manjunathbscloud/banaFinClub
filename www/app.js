@@ -1006,6 +1006,11 @@ function activeYearCutoffMonth() {
   return state.settings.activeYearStart || "2026-07";
 }
 
+// Year 6 exit settlement (statement dated 12/3/2026, settled 16/3/2026). Only the share
+// reduces the Year 6 balance; the ₹25,166 cash is loan principal and sits in the bank balance.
+const YEAR6_EXIT_SETTLEMENT_NOTE =
+  "Sarpabhushana Banakar exited (settled 16 Mar 2026). His share ₹1,21,834 plus his own 2026 deposits and renewal fee ₹11,000 (total ₹1,32,834) was set off against his loans of ₹1,58,000 (₹58,000 + ₹1,00,000). He paid the remaining ₹25,166 in cash on 15 Mar 2026, which is added to the bank balance. Only his share of ₹1,21,834 reduces the Year 6 balance.";
+
 // Single source of truth for current active year financial totals.
 // Used by both the deposits section and the financial review summary.
 function activeYearFinancials() {
@@ -1887,7 +1892,8 @@ function renderHome() {
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Member Exit Payout</span>
                     <strong style="font-size:14px;color:#dc2626;">−${money(exitTotal)}</strong>
-                  </div>` : ""}
+                  </div>
+                  ${(state.settings.activeYearNumber || 6) === 6 ? `<p style="margin:-2px 0 0;font-size:11px;line-height:1.5;color:var(--muted);">${escapeHtml(YEAR6_EXIT_SETTLEMENT_NOTE)}</p>` : ""}` : ""}
                   ${expenditure > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Meeting Expenses</span>
@@ -3066,7 +3072,7 @@ function showDepositYearModal(yearKey) {
       const yr6RunningTotal = yr6Base + liveTotal;
       title = `Sixth Year (Nov 2025 – ${latestMonth ? latestLbl : "Sep 2026"})`;
       const points = [
-        { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited Oct 2025", meta: true },
+        { text: "7 members · Appanna Banakar joined Nov 2025 · Sarpabhushana Banakar exited (settled 16 Mar 2026)", meta: true },
         { label: "Yearly Renewal Fee",  detail: "November 2025 (₹3,000 × 7 members)",                                        amount:  21000 },
         { label: "Monthly Deposits",    detail: "November 2025 (₹2,000 × 7 members)",                                        amount:  14000 },
         { label: "Monthly Deposits",    detail: "December 2025 (5 members × ₹2,000 + 6th member × ₹1,250 + 7th exempted)",   amount:  11250 },
@@ -3074,7 +3080,8 @@ function showDepositYearModal(yearKey) {
         { label: "New Member EMI",      detail: "Appanna Banakar – ₹7,445/month × 6 months (Jan–Jun)",                       amount:  44672 },
         { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65000 },
         { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
-        { label: "Member Exited",       detail: "Sarpabhushana Banakar – amount paid out",                                   amount: -121834 },
+        { label: "Member Exited",       detail: "Sarpabhushana Banakar – share set off against his loans",                   amount: -121834 },
+        { text: YEAR6_EXIT_SETTLEMENT_NOTE, meta: true },
         { label: "Monthly Deposits",    detail: "July – September 2026 (₹2,000 × 7 members + Appanna EMI × 3 months)",       amount:  64335 },
         { label: "Interest Collected",  detail: "July – September 2026 · loan interest",                                     amount:  36625 },
         ...liveRows,
@@ -6650,7 +6657,7 @@ async function closeCurrentYear() {
     breakdown.push({ description: "Renewal Fee",      details: "Nov 2025 · ₹3,000 × 7 members",           amount: renewalFee });
     breakdown.push({ description: "Total Deposits",   details: "Monthly collections (Nov 2025 – close)",   amount: monthlyDeposits });
     breakdown.push({ description: "Total Interest",   details: "Loan interest earned",                     amount: totalInterest });
-    breakdown.push({ description: "Member Out",       details: "Sarpabhushana Banakar – exit payout",      amount: -exitPayouts });
+    breakdown.push({ description: "Member Out",       details: YEAR6_EXIT_SETTLEMENT_NOTE,                 amount: -exitPayouts });
   } else {
     const activeYearExits = state.settings.activeYearExits || [];
     // The renewal fee is paid inside the first month's payment, so it is already part of
@@ -6794,34 +6801,13 @@ function showFinancialSignoffModal() {
   const ORDINALS = ["First","Second","Third","Fourth","Fifth","Sixth","Seventh","Eighth","Ninth","Tenth"];
   const yearLabel = state.settings.activeYearLabel || `${ORDINALS[yearNum - 1] || `Year ${yearNum}`} Year`;
 
-  // Compute year-to-date totals the same way the Deposits tab does
-  const activeYearStart = activeYearCutoffMonth();
-  const livePayments = state.monthlyPayments.filter(p => p.status === "paid" && p.month >= activeYearStart);
-  let liveTotalDeposit = 0, liveTotalInterest = 0;
-  livePayments.forEach(p => {
-    const mem = memberById(p.memberId);
-    if (!mem) return;
-    const paid = Number(p.paidAmount || p.amount || 0);
-    const split = splitOfPayment(p, mem, paid);
-    liveTotalDeposit += split.dep;
-    liveTotalInterest += split.interest;
-  });
-
-  let totalDeposits, totalInterest, runningBalance;
-  if (yearNum === 6) {
-    const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672; // Nov 2025 – Jun 2026
-    const histInterest = 65000 + 11171;
-    totalDeposits  = histDeposits + liveTotalDeposit;
-    totalInterest  = histInterest + liveTotalInterest;
-    const yr6HistFixed = histDeposits + histInterest - 121834; // member exit payout
-    runningBalance = yr6HistFixed + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-  } else {
-    totalDeposits  = liveTotalDeposit;
-    totalInterest  = liveTotalInterest;
-    const activeYearExits = state.settings.activeYearExits || [];
-    const exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
-    runningBalance = Number(state.deposits.find(d => d.year === 2020 + yearNum)?.balance || 0) - exitPayouts + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-  }
+  // Same totals as the Deposits page, so members review exactly what they see there.
+  const fin = activeYearFinancials();
+  const depRowForYear = state.deposits.find(d => d.year === 2020 + yearNum) || {};
+  const meetingExpenses = fin.expenditure || Number(depRowForYear.expenditure || 0);
+  const totalDeposits = fin.totalDep;
+  const totalInterest = fin.totalInt;
+  const runningBalance = fin.totalDep + fin.totalInt - fin.exitTotal - meetingExpenses;
 
   const bankBal = expectedBankBalance();
   const loanOutstandingTotal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
@@ -6856,10 +6842,13 @@ function showFinancialSignoffModal() {
           ${row("Total Deposits", money(totalDeposits))}
           ${row("Total Interest Collected", money(totalInterest))}
           ${exits.map(e => row(`${escapeHtml(e.name)} — Exit Payout`, `−${money(Number(e.payout || 0))}`, true)).join("")}
+          ${yearNum === 6 ? `<p style="margin:0;padding:2px 14px 4px;font-size:12px;line-height:1.5;color:${mutedCol};">Share set off against his loans · remaining ₹25,166 received 15 Mar 2026 (in bank balance).</p>` : ""}
+          ${meetingExpenses > 0 ? row("Meeting Expenses", `−${money(meetingExpenses)}`, true) : ""}
           ${row("Corpus / Running Balance", money(runningBalance))}
           ${row("Bank Balance", money(bankBal))}
           ${row("Loans Outstanding", money(loanOutstandingTotal))}
         </div>
+        <p style="margin:-12px 0 20px;font-size:12px;line-height:1.5;color:${mutedCol};">📧 The complete year-by-year details (Year 1 to Year ${yearNum}) are shared with you by email.</p>
         <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;padding:14px;">Records Look Good ✓</button>
       </div>
     </div>`;
@@ -7006,6 +6995,7 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       interest: Number(depRow.interest || 0),
       expenditure: Number(depRow.expenditure || 0),
       exitPayouts: Number(depRow.exit_payouts || 0),
+      exitNote: closedYearNum === 6 ? YEAR6_EXIT_SETTLEMENT_NOTE : "",
       balance: Number(depRow.balance || 0),
       loansOutstanding,
       poolBalance,
