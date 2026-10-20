@@ -554,6 +554,7 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function subscribeToPush() {
+  if (NOTIFICATIONS_OFF) return;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   if (!liveBackendReady || !currentProfileId()) return;
   try {
@@ -1382,7 +1383,7 @@ function render() {
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
             <button class="icon-button" type="button" data-action="manual-refresh" title="Refresh data" aria-label="Refresh" id="refresh-btn">↻</button>
-            ${isAdmin() ? `<button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
+            ${isAdmin() && !NOTIFICATIONS_OFF ? `<button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
               ${bellIcon()}
               ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
             </button>` : ""}
@@ -3953,13 +3954,13 @@ function renderAdmin() {
                     </div>`;
                 }).join("")}
               </div>
-              ${members.length - paidCount > 0 ? `
+              ${members.length - paidCount > 0 ? (NOTIFICATIONS_OFF ? "" : `
               <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e5e7eb);text-align:center;">
                 <button class="secondary" data-action="send-payment-reminder" type="button" style="width:100%;font-size:13px;">
                   📣 Send Payment Reminder to All
                 </button>
                 <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">In-app + email to all · SMS to unpaid members only</p>
-              </div>` : `
+              </div>`) : `
               <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border,#e5e7eb);text-align:center;">
                 <span style="font-size:12px;color:#16a34a;font-weight:600;">✓ All members have paid this month</span>
               </div>`}`;
@@ -4007,7 +4008,7 @@ function renderAdmin() {
           <span class="collapse-icon">⌄</span>
         </summary>
         <div class="card-body">
-          ${(() => {
+          ${NOTIFICATIONS_OFF ? "" : (() => {
             const savedAt = state.settings.expenditureSavedAt;
             const withinWindow = savedAt && (Date.now() - new Date(savedAt).getTime()) < 2 * 24 * 60 * 60 * 1000;
             return `<div style="padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:4px;">
@@ -4034,7 +4035,7 @@ function renderAdmin() {
               </div>`;
             }).join("")}
           </div>` : ""}
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
+          ${NOTIFICATIONS_OFF ? "" : `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
             <div>
               <p style="font-size:14px;font-weight:600;margin:0;">Notifications</p>
               <p style="font-size:12px;color:var(--muted);margin:2px 0 0;">${state.settings.notificationsForAll ? "Sending to all members" : "Admin only"}</p>
@@ -4043,7 +4044,7 @@ function renderAdmin() {
               <input type="checkbox" data-action="toggle-notifications-for-all" ${state.settings.notificationsForAll ? "checked" : ""} />
               <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
             </label>
-          </div>
+          </div>`}
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;border-top:1px solid var(--border);">
             <p style="font-size:14px;font-weight:600;margin:0;">Enable Year Close</p>
             <label class="toggle-switch" aria-label="Enable year close">
