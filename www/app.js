@@ -1012,7 +1012,10 @@ function activeYearCutoffMonth() {
 // Year 6 exit settlement (statement dated 12/3/2026, settled 16/3/2026). Only the share
 // reduces the Year 6 balance; the ₹25,166 cash is loan principal and sits in the bank balance.
 const YEAR6_EXIT_SETTLEMENT_NOTE =
-  "Sarpabhushana Banakar exited (settled 16 Mar 2026). His share ₹1,21,834 plus his own 2026 deposits and renewal fee ₹11,000 (total ₹1,32,834) was set off against his loans of ₹1,58,000 (₹58,000 + ₹1,00,000). He paid the remaining ₹25,166 in cash on 15 Mar 2026, which is added to the bank balance. Only his share of ₹1,21,834 reduces the Year 6 balance.";
+  "Sarpabhushana Banakar exited (settled 16 Mar 2026). His share ₹1,21,834 plus his own 2026 deposits and renewal fee ₹11,000 (total ₹1,32,834) was set off against his loans of ₹1,58,000 (₹58,000 + ₹1,00,000). He paid the remaining ₹25,166 on 15 Mar 2026; it is shown as Member Settlement and added to the Year 6 balance.";
+// Cash received from the exiting member (15 Mar 2026). Added to the Year 6 balance so that
+// all years' closing balances add up to the pool balance (bank + loans), as verified by the user.
+const YEAR6_MEMBER_SETTLEMENT = 25166;
 
 // Single source of truth for current active year financial totals.
 // Used by both the deposits section and the financial review summary.
@@ -1034,6 +1037,7 @@ function activeYearFinancials() {
       totalDep:    (21000 + 14000 + 11250 + 84000 + 44672 + 64335) + liveDep,
       totalInt:    (65000 + 11171 + 36625) + liveInt,
       exitTotal:   121834, // Sarpabhushana Banakar exit payout
+      settlement:  YEAR6_MEMBER_SETTLEMENT,
       expenditure: 0,
     };
   }
@@ -1053,6 +1057,7 @@ function activeYearFinancials() {
     totalDep:    liveDep,
     totalInt:    liveInt,
     exitTotal:   exits.reduce((s, e) => s + Number(e.payout || 0), 0),
+    settlement:  0,
     expenditure: 0,
   };
 }
@@ -1865,10 +1870,10 @@ function renderHome() {
           const poolBal = expectedBankBalance() + loansOutstanding;
 
           // Pull all figures from the same single source as the deposits section
-          const { totalDep, totalInt, exitTotal, expenditure: yr_exp } = activeYearFinancials();
+          const { totalDep, totalInt, exitTotal, settlement, expenditure: yr_exp } = activeYearFinancials();
           const depRow = state.deposits.find(d => d.year === yearDbYear) || {};
           const expenditure = yr_exp || Number(depRow.expenditure || 0);
-          const closingBal = totalDep + totalInt - exitTotal - expenditure;
+          const closingBal = totalDep + totalInt - exitTotal + settlement - expenditure;
           // Association year always runs November → October
           const periodLabel = `November ${yearDbYear - 1} – October ${yearDbYear}`;
 
@@ -1897,6 +1902,11 @@ function renderHome() {
                     <strong style="font-size:14px;color:#dc2626;">−${money(exitTotal)}</strong>
                   </div>
                   ${(state.settings.activeYearNumber || 6) === 6 ? `<p style="margin:-2px 0 0;font-size:11px;line-height:1.5;color:var(--muted);">${escapeHtml(YEAR6_EXIT_SETTLEMENT_NOTE)}</p>` : ""}` : ""}
+                  ${settlement > 0 ? `
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--muted);">Member Settlement</span>
+                    <strong style="font-size:14px;color:#16a34a;">+${money(settlement)}</strong>
+                  </div>` : ""}
                   ${expenditure > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Meeting Expenses</span>
@@ -2954,7 +2964,7 @@ function renderDeposits() {
     activeBalance = Number(activeDbRow.balance);
   } else if (activeYearNum === 6) {
     // Year 6: DB balance cleared — use hardcoded pre-Jul hist total + live July+ payments
-    const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625;
+    const yr6HistFixed = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625 + YEAR6_MEMBER_SETTLEMENT;
     const yr6LiveTotal = state.monthlyPayments
       .filter(p => p.status === "paid" && p.month >= "2026-10")
       .reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
@@ -3071,7 +3081,7 @@ function showDepositYearModal(yearKey) {
         ...(liveTotalInterest > 0 ? [{ label: "Interest Collected", detail: `Oct 2026 – ${latestLbl} · loan interest`, amount: liveTotalInterest }] : []),
       ];
       const liveTotal = livePaymentsOct.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
-      const yr6Base = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625;
+      const yr6Base = 21000 + 14000 + 11250 + 84000 + 44672 + 65000 + 11171 - 121834 + 64335 + 36625 + YEAR6_MEMBER_SETTLEMENT;
       const yr6RunningTotal = yr6Base + liveTotal;
       title = `Sixth Year (Nov 2025 – ${latestMonth ? latestLbl : "Sep 2026"})`;
       const points = [
@@ -3084,6 +3094,7 @@ function showDepositYearModal(yearKey) {
         { label: "Interest Earned",     detail: "Total interest earned (Nov 2025 – Jun 2026)",                                amount:  65000 },
         { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
         { label: "Member Exited",       detail: "Sarpabhushana Banakar – share set off against his loans",                   amount: -121834 },
+        { label: "Member Settlement",   detail: "Sarpabhushana Banakar – balance paid 15 Mar 2026",                          amount:  YEAR6_MEMBER_SETTLEMENT },
         { text: YEAR6_EXIT_SETTLEMENT_NOTE, meta: true },
         { label: "Monthly Deposits",    detail: "July – September 2026 (₹2,000 × 7 members + Appanna EMI × 3 months)",       amount:  64335 },
         { label: "Interest Collected",  detail: "July – September 2026 · loan interest",                                     amount:  36625 },
@@ -3657,7 +3668,10 @@ function renderDashboard() {
     .sort((a, b) => a.year - b.year)
     .map((d, i) => ({
       label: `Yr${i + 1}`,
-      deposits: Math.max(0, (d.principal || 0) - (d.exit_payouts || 0) - (d.expenditure || 0)),
+      // balance − interest = deposits − exits − expenses (+ any member settlement saved in the balance)
+      deposits: Math.max(0, Number(d.balance) > 0
+        ? Number(d.balance) - (d.interest || 0)
+        : (d.principal || 0) - (d.exit_payouts || 0) - (d.expenditure || 0)),
       interest: d.interest || 0,
     }));
 
@@ -3682,7 +3696,7 @@ function renderDashboard() {
         yr6LiveDeposits += dep;
         yr6LiveInterest += interest;
       });
-    activeChartDeposits = Math.max(0, yr6HistDeposits + yr6LiveDeposits - currentExpenditure);
+    activeChartDeposits = Math.max(0, yr6HistDeposits + yr6LiveDeposits + YEAR6_MEMBER_SETTLEMENT - currentExpenditure);
     activeChartInterest = yr6HistInterest + yr6LiveInterest;
   } else {
     let activeLiveDeposits = 0, activeLiveInterest = 0;
@@ -6638,7 +6652,7 @@ async function closeCurrentYear() {
     exitPayouts = 121834;
     totalDeposits  = histDeposits + liveTotalDeposit;
     totalInterest  = histInterest + liveTotalInterest;
-    const yr6HistFixed = histDeposits + histInterest - exitPayouts;
+    const yr6HistFixed = histDeposits + histInterest - exitPayouts + YEAR6_MEMBER_SETTLEMENT;
     runningBalance = yr6HistFixed + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
   } else {
     const activeYearExits = state.settings.activeYearExits || [];
@@ -6663,6 +6677,7 @@ async function closeCurrentYear() {
     breakdown.push({ description: "Total Deposits",   details: "Monthly collections (Nov 2025 – close)",   amount: monthlyDeposits });
     breakdown.push({ description: "Total Interest",   details: "Loan interest earned",                     amount: totalInterest });
     breakdown.push({ description: "Member Out",       details: YEAR6_EXIT_SETTLEMENT_NOTE,                 amount: -exitPayouts });
+    breakdown.push({ description: "Member Settlement", details: "Sarpabhushana Banakar – balance paid 15 Mar 2026", amount: YEAR6_MEMBER_SETTLEMENT });
   } else {
     const activeYearExits = state.settings.activeYearExits || [];
     // The renewal fee is paid inside the first month's payment, so it is already part of
@@ -6812,7 +6827,7 @@ function showFinancialSignoffModal() {
   const meetingExpenses = fin.expenditure || Number(depRowForYear.expenditure || 0);
   const totalDeposits = fin.totalDep;
   const totalInterest = fin.totalInt;
-  const runningBalance = fin.totalDep + fin.totalInt - fin.exitTotal - meetingExpenses;
+  const runningBalance = fin.totalDep + fin.totalInt - fin.exitTotal + fin.settlement - meetingExpenses;
 
   const bankBal = expectedBankBalance();
   const loanOutstandingTotal = currentLoans().filter(l => l.notes !== "emi_entry").reduce((s, l) => s + loanOutstanding(l), 0);
@@ -6847,7 +6862,8 @@ function showFinancialSignoffModal() {
           ${row("Total Deposits", money(totalDeposits))}
           ${row("Total Interest Collected", money(totalInterest))}
           ${exits.map(e => row(`${escapeHtml(e.name)} — Exit Payout`, `−${money(Number(e.payout || 0))}`, true)).join("")}
-          ${yearNum === 6 ? `<p style="margin:0;padding:2px 14px 4px;font-size:12px;line-height:1.5;color:${mutedCol};">Share set off against his loans · remaining ₹25,166 received 15 Mar 2026 (in bank balance).</p>` : ""}
+          ${yearNum === 6 ? `<p style="margin:0;padding:2px 14px 4px;font-size:12px;line-height:1.5;color:${mutedCol};">Share set off against his loans.</p>` : ""}
+          ${fin.settlement > 0 ? row("Member Settlement (paid 15 Mar 2026)", `+${money(fin.settlement)}`) : ""}
           ${meetingExpenses > 0 ? row("Meeting Expenses", `−${money(meetingExpenses)}`, true) : ""}
           ${row("Corpus / Running Balance", money(runningBalance))}
           ${row("Bank Balance", money(bankBal))}
