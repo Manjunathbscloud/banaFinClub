@@ -11,7 +11,7 @@ const CORS = {
 
 const RENEWAL_NOTICE_DAYS = 30;
 // Test mode: reminders are created only for the President. Set false to go live.
-const TEST_MODE_ADMIN_ONLY = true;
+const TEST_MODE_ADMIN_ONLY = false;
 
 function formatMoney(amount: number): string {
   return "₹" + amount.toLocaleString("en-IN");

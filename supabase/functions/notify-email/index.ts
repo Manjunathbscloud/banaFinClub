@@ -136,7 +136,7 @@ const MAX_AGE_MINUTES = 10;        // older rows (e.g. re-inserted by a restore)
 const DEDUPE_HOURS = 24;           // same person + type + text within this window is sent once
 const MAX_SMS_PER_DAY = 30;        // hard cap across the club; extra SMS are skipped
 // Test mode: only the President receives SMS/push, whatever the toggle says. Set false to go live.
-const TEST_MODE_ADMIN_ONLY = true;
+const TEST_MODE_ADMIN_ONLY = false;
 
 serve(async (req) => {
   try {
