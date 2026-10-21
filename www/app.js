@@ -1009,10 +1009,22 @@ function activeYearCutoffMonth() {
   return state.settings.activeYearStart || "2026-07";
 }
 
-// Year 6 exit settlement (statement dated 12/3/2026, settled 16/3/2026). Only the share
-// reduces the Year 6 balance; the ₹25,166 cash is loan principal and sits in the bank balance.
-const YEAR6_EXIT_SETTLEMENT_NOTE =
-  "Sarpabhushana Banakar exited (settled 16 Mar 2026). His share ₹1,21,834 plus his own 2026 deposits and renewal fee ₹11,000 (total ₹1,32,834) was set off against his loans of ₹1,58,000 (₹58,000 + ₹1,00,000). He paid the remaining ₹25,166 on 15 Mar 2026; it is shown as Member Settlement and added to the Year 6 balance.";
+// Year 6 exit settlement (statement dated 12/3/2026, settled 16/3/2026). Full details are in
+// the signed statement stored in the private "club-documents" bucket (logged-in members only).
+const YEAR6_EXIT_SETTLEMENT_NOTE = "Sarpabhushana Banakar · settled 16 Mar 2026 · share set off against his loans";
+const YEAR6_SETTLEMENT_DOC_PATH = "member-exits/sarpabhushana-exit-settlement.pdf";
+const CLUB_DOCUMENTS_BUCKET = "club-documents";
+
+function settlementLinkHtml() {
+  return `<button type="button" data-action="open-settlement-doc" style="background:none;border:0;padding:0;font:inherit;font-size:12px;font-weight:600;color:#2563eb;cursor:pointer;text-decoration:underline;">📄 View settlement statement</button>`;
+}
+
+async function openSettlementDoc() {
+  if (!liveBackendReady) { showToast("Live backend required."); return; }
+  const { data, error } = await supabaseClient.storage.from(CLUB_DOCUMENTS_BUCKET).createSignedUrl(YEAR6_SETTLEMENT_DOC_PATH, 300);
+  if (error || !data?.signedUrl) { showToast("Could not open the statement. Please try again."); return; }
+  window.open(data.signedUrl, "_blank");
+}
 // Cash received from the exiting member (15 Mar 2026). Added to the Year 6 balance so that
 // all years' closing balances add up to the pool balance (bank + loans), as verified by the user.
 const YEAR6_MEMBER_SETTLEMENT = 25166;
@@ -1901,7 +1913,7 @@ function renderHome() {
                     <span style="font-size:13px;color:var(--muted);">Member Exit Payout</span>
                     <strong style="font-size:14px;color:#dc2626;">−${money(exitTotal)}</strong>
                   </div>
-                  ${(state.settings.activeYearNumber || 6) === 6 ? `<p style="margin:-2px 0 0;font-size:11px;line-height:1.5;color:var(--muted);">${escapeHtml(YEAR6_EXIT_SETTLEMENT_NOTE)}</p>` : ""}` : ""}
+                  ${(state.settings.activeYearNumber || 6) === 6 ? `<p style="margin:-2px 0 0;font-size:11px;line-height:1.5;color:var(--muted);">${escapeHtml(YEAR6_EXIT_SETTLEMENT_NOTE)} · ${settlementLinkHtml()}</p>` : ""}` : ""}
                   ${settlement > 0 ? `
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:13px;color:var(--muted);">Member Settlement</span>
@@ -3059,7 +3071,7 @@ function showDepositYearModal(yearKey) {
               <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
             </li>`).join("")}
         </ul>
-        <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>` : "";
+        <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>${Number(dbRow.year) === 2026 ? `<p style="margin:8px 0 0;text-align:center;">${settlementLinkHtml()}</p>` : ""}` : "";
     } else if (activeYearNum === 6) {
       // Year 6 — fully hardcoded through Sep 2026; Oct+ from live DB
       const livePaymentsOct = state.monthlyPayments
@@ -3095,7 +3107,7 @@ function showDepositYearModal(yearKey) {
         { label: "Additional Interest", detail: "Sarpabhushana ₹8,125 + Appanna ₹3,046 (outside loan table)",                amount:  11171 },
         { label: "Member Exited",       detail: "Sarpabhushana Banakar – share set off against his loans",                   amount: -121834 },
         { label: "Member Settlement",   detail: "Sarpabhushana Banakar – balance paid 15 Mar 2026",                          amount:  YEAR6_MEMBER_SETTLEMENT },
-        { text: YEAR6_EXIT_SETTLEMENT_NOTE, meta: true },
+        { text: settlementLinkHtml(), meta: true },
         { label: "Monthly Deposits",    detail: "July – September 2026 (₹2,000 × 7 members + Appanna EMI × 3 months)",       amount:  64335 },
         { label: "Interest Collected",  detail: "July – September 2026 · loan interest",                                     amount:  36625 },
         ...liveRows,
@@ -3190,7 +3202,7 @@ function showDepositYearModal(yearKey) {
                 <strong class="year-modal-amount" style="color:${row.amount < 0 ? "#dc2626" : "#16a34a"};">${row.amount < 0 ? "−" + money(Math.abs(row.amount)) : money(row.amount)}</strong>
               </li>`).join("")}
           </ul>
-          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>${Number(dbRow.year) === 2026 ? `<p style="margin:8px 0 0;text-align:center;">${settlementLinkHtml()}</p>` : ""}`;
       } else {
         bodyHtml = `
           <ul class="year-modal-list">
@@ -3199,7 +3211,7 @@ function showDepositYearModal(yearKey) {
             ${Number(dbRow.exit_payouts) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Member Exit Payouts</span><span class="year-modal-detail">Paid to exiting members</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.exit_payouts)}</strong></li>` : ""}
             ${Number(dbRow.expenditure) > 0 ? `<li class="year-modal-item"><div><span class="year-modal-label">Meeting Expenses</span><span class="year-modal-detail">Annual meeting cost</span></div><strong class="year-modal-amount" style="color:#dc2626;">−${money(dbRow.expenditure)}</strong></li>` : ""}
           </ul>
-          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>`;
+          <div class="year-modal-total"><span>Closing Balance</span><strong style="color:#2563eb;">${money(dbRow.balance)}</strong></div>${Number(dbRow.year) === 2026 ? `<p style="margin:8px 0 0;text-align:center;">${settlementLinkHtml()}</p>` : ""}`;
       }
     }
   }
@@ -4668,6 +4680,7 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action.dataset.action === "open-settlement-doc") { event.preventDefault(); openSettlementDoc(); return; }
   if (action.dataset.action === "open-notifications") {
     await openNotifications();
     return;
@@ -6862,7 +6875,7 @@ function showFinancialSignoffModal() {
           ${row("Total Deposits", money(totalDeposits))}
           ${row("Total Interest Collected", money(totalInterest))}
           ${exits.map(e => row(`${escapeHtml(e.name)} — Exit Payout`, `−${money(Number(e.payout || 0))}`, true)).join("")}
-          ${yearNum === 6 ? `<p style="margin:0;padding:2px 14px 4px;font-size:12px;line-height:1.5;color:${mutedCol};">Share set off against his loans.</p>` : ""}
+          ${yearNum === 6 ? `<p style="margin:0;padding:2px 14px 4px;font-size:12px;line-height:1.5;color:${mutedCol};">Share set off against his loans · ${settlementLinkHtml()}</p>` : ""}
           ${fin.settlement > 0 ? row("Member Settlement (paid 15 Mar 2026)", `+${money(fin.settlement)}`) : ""}
           ${meetingExpenses > 0 ? row("Meeting Expenses", `−${money(meetingExpenses)}`, true) : ""}
           ${row("Corpus / Running Balance", money(runningBalance))}
@@ -7017,7 +7030,7 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       interest: Number(depRow.interest || 0),
       expenditure: Number(depRow.expenditure || 0),
       exitPayouts: Number(depRow.exit_payouts || 0),
-      exitNote: closedYearNum === 6 ? YEAR6_EXIT_SETTLEMENT_NOTE : "",
+      exitNote: closedYearNum === 6 ? `${YEAR6_EXIT_SETTLEMENT_NOTE}. Member Settlement +₹25,166 received 15 Mar 2026. The signed settlement statement is available in the app (Deposits → Year 6).` : "",
       balance: Number(depRow.balance || 0),
       loansOutstanding,
       poolBalance,
