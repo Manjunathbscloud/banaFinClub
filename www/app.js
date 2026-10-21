@@ -3447,6 +3447,19 @@ function showLoanYearModal(yearKey) {
       window.bfcFilterLoanTable();
     };
 
+    // Cards and compact list are both rendered; the viewer's choice is remembered on their device.
+    let _loanView = "cards";
+    try { _loanView = localStorage.getItem("bfc_loan_view") === "list" ? "list" : "cards"; } catch (_) {}
+    window.bfcSetLoanView = function(mode) {
+      const cards = document.getElementById("lm-cards");
+      const list = document.getElementById("lm-list");
+      if (cards) cards.style.display = mode === "cards" ? "" : "none";
+      if (list) list.style.display = mode === "list" ? "" : "none";
+      document.querySelectorAll("#loan-year-modal .lm-view-btn").forEach(b => b.classList.toggle("active", b.dataset.view === mode));
+      try { localStorage.setItem("bfc_loan_view", mode); } catch (_) {}
+    };
+    const loanListRows = [];
+
     const loanCards = loans.map(loan => {
       const dueThisMonth = loan.status === "active" && isLoanDueThisMonth(loan);
       const myLoan = loanBelongsToMember(loan, user);
@@ -3484,6 +3497,28 @@ function showLoanYearModal(yearKey) {
       }
 
       const cardBorder = dueThisMonth ? "border-left:3px solid #f59e0b;" : loan.status === "clear" ? "border-left:3px solid #16a34a;" : "border-left:3px solid #2563eb;";
+
+      // Compact list row: admin can open any loan; a member only their own.
+      const canOpen = isAdmin() || myLoan;
+      const dotColor = dueThisMonth ? "#f59e0b" : loan.status === "clear" ? "#16a34a" : "#2563eb";
+      const subParts = [
+        `Due ${fmtMonthYearShort(loanRenewalDate(loan))}`,
+        intPerMo > 0 ? `${money(intPerMo)}/mo` : "",
+        isEmiType ? "EMI" : "",
+        dueThisMonth ? "Due this month" : (loan.status === "clear" ? "Cleared" : ""),
+      ].filter(Boolean);
+      loanListRows.push(`<div class="ll-row lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}">
+        <div class="ll-line${canOpen ? " ll-tap" : ""}" ${canOpen ? `data-action="view-loan-detail" data-loan-id="${loan.id}" role="button" tabindex="0"` : ""}>
+          <span class="ll-dot" style="background:${dotColor};"></span>
+          <div class="ll-main">
+            <span class="ll-name">${escapeHtml(memberName)}</span>
+            <span class="ll-sub">${subParts.join(" · ")}</span>
+          </div>
+          <span class="ll-amt">${money(loan.amount)}</span>
+          ${canOpen ? `<span class="ll-chev">›</span>` : ""}
+        </div>
+        ${!isAdmin() && actionHtml ? actionHtml : ""}
+      </div>`);
 
       return `<div class="lc-card lm-row" data-member="${escapeHtml(memberName.toLowerCase())}" data-status="${rowStatus}" style="${cardBorder}">
         <div class="lc-top">
@@ -3532,7 +3567,14 @@ function showLoanYearModal(yearKey) {
         <button class="lm-chip lm-chip-active" onclick="bfcSetLoanChip(this,'all')">All</button>
         ${dueCount > 0 ? `<button class="lm-chip" onclick="bfcSetLoanChip(this,'due')">Due (${dueCount})</button>` : ""}
       </div>
-      <div class="lc-list">${loanCards}</div>
+      <div class="lm-viewbar">
+        <div class="lm-view" role="group" aria-label="Loan view">
+          <button type="button" class="lm-view-btn${_loanView === "cards" ? " active" : ""}" data-view="cards" onclick="bfcSetLoanView('cards')">▦ Cards</button>
+          <button type="button" class="lm-view-btn${_loanView === "list" ? " active" : ""}" data-view="list" onclick="bfcSetLoanView('list')">☰ List</button>
+        </div>
+      </div>
+      <div id="lm-cards" class="lc-list" style="${_loanView === "list" ? "display:none;" : ""}">${loanCards}</div>
+      <div id="lm-list" class="ll-list" style="${_loanView === "list" ? "" : "display:none;"}">${loanListRows.join("") || `<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">No active loans.</div>`}</div>
       <div class="lm-table-card" style="margin-top:10px;">
         <div class="loan-grid-footer">
           <span style="font-weight:600;color:var(--ink);">Yr ${_activeNumT} Total Interest</span>

@@ -1636,6 +1636,30 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .lc-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--line, #E5E7EB); }
 .lc-btn { font-size: 12px !important; padding: 6px 14px !important; min-height: 0 !important; border-radius: 8px !important; }
 
+/* ── Loan list view (compact rows) + Cards/List switch ── */
+.lm-viewbar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.lm-view { display: inline-flex; border: 1px solid var(--line, #E5E7EB); border-radius: 8px; overflow: hidden; }
+.lm-view-btn {
+  background: transparent !important; color: var(--muted) !important; border: 0 !important; border-radius: 0 !important;
+  padding: 5px 12px !important; min-height: 0 !important; font-size: 12px !important; font-weight: 600; cursor: pointer; box-shadow: none !important;
+}
+.lm-view-btn + .lm-view-btn { border-left: 1px solid var(--line, #E5E7EB) !important; }
+.lm-view-btn.active { background: #2563eb !important; color: #fff !important; }
+.lm-view-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.ll-list { display: flex; flex-direction: column; background: var(--panel, #fff); border: 1px solid var(--line, #E5E7EB); border-radius: 12px; overflow: hidden; }
+.ll-row + .ll-row { border-top: 1px solid var(--line, #E5E7EB); }
+.ll-line { display: flex; align-items: center; gap: 10px; padding: 11px 14px; }
+.ll-tap { cursor: pointer; }
+.ll-tap:hover, .ll-tap:active { background: rgba(37, 99, 235, 0.06); }
+.ll-tap:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.ll-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ll-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ll-name { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ll-sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ll-amt { font-size: 14px; font-weight: 700; color: #2563eb; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.ll-chev { color: var(--muted); font-size: 18px; line-height: 1; flex-shrink: 0; }
+.ll-row .lc-actions { margin: 0 14px 10px; }
+
 /* ── Media: medium ──────────────────────────── */
 @media (min-width: 520px) {
   .metrics    { grid-template-columns: repeat(2, minmax(0, 1fr)); }
