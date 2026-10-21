@@ -6882,7 +6882,7 @@ function showFinancialSignoffModal() {
           ${row("Bank Balance", money(bankBal))}
           ${row("Loans Outstanding", money(loanOutstandingTotal))}
         </div>
-        <p style="margin:-12px 0 20px;font-size:12px;line-height:1.5;color:${mutedCol};">📧 The complete year-by-year details (Year 1 to Year ${yearNum}) are shared with you by email.</p>
+        <p style="margin:-12px 0 20px;font-size:12px;line-height:1.5;color:${mutedCol};">📧 The complete year-by-year breakdown (Year 1 to Year ${yearNum}) will be shared with you by email.</p>
         <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;padding:14px;">Records Look Good ✓</button>
       </div>
     </div>`;
