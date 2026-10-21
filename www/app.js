@@ -5,8 +5,21 @@ const ASSOCIATION_UPI_ID = "mukkaneshwara@ybl";
 const ASSOCIATION_UPI_NAME = "Sri Mukkaneshwara Associates";
 const AUTH_EMAIL_DOMAIN = "banakarfinclub.app";
 const PRESIDENT_EMAIL = "manjunathbs.cloud@gmail.com";
-// All notifications (in-app, email, SMS, push, meeting summary) are switched off. Set to false to turn back on.
-const NOTIFICATIONS_OFF = true;
+// Master switch for all notifications. true = nothing is created or sent.
+const NOTIFICATIONS_OFF = false;
+// Only these events create a notification. Which of them also go out by SMS/push is decided
+// by the notify-email edge function. Anything not listed is not notified at all.
+const ALLOWED_NOTIFICATION_TYPES = new Set([
+  // to the member, about their own money
+  "payment_confirmed", "payment_reminder",
+  "loan_approved", "loan_rejected", "loan_renewal_reminder",
+  "loan_extension_approved", "loan_extension_rejected",
+  "partial_repayment_approved", "loan_cleared", "emi_completed",
+  // to the admin, something to approve
+  "loan_requested", "loan_extension_requested", "partial_repayment_requested",
+]);
+// The monthly reminder is sent automatically after the due date; the manual button stays hidden.
+const MANUAL_PAYMENT_REMINDER = false;
 const appConfig = window.BANAKAR_FINCLUB_CONFIG || {};
 const liveBackendReady = appConfig.backend === "supabase" && Boolean(appConfig.supabaseUrl && appConfig.supabaseAnonKey && window.supabase);
 const supabaseClient = liveBackendReady ? window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseAnonKey) : null;
@@ -4023,7 +4036,7 @@ function renderAdmin() {
                     </div>`;
                 }).join("")}
               </div>
-              ${members.length - paidCount > 0 ? (NOTIFICATIONS_OFF ? "" : `
+              ${members.length - paidCount > 0 ? (!MANUAL_PAYMENT_REMINDER ? "" : `
               <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e5e7eb);text-align:center;">
                 <button class="secondary" data-action="send-payment-reminder" type="button" style="width:100%;font-size:13px;">
                   📣 Send Payment Reminder to All
@@ -5941,7 +5954,7 @@ async function requestLoan(data) {
     const allMemberBody = loanType === "emi"
       ? `${user.name} has applied for an EMI loan of ${money(Number(data.amount))} for ${tenureMonths} months. Pending admin approval.`
       : `${user.name} has applied for a loan of ${money(Number(data.amount))} (full repayment). Pending admin approval.`;
-    await notifyAllActiveMembers("loan_requested", "New Loan Application", allMemberBody);
+    await notifyAdmin("loan_requested", "New loan request", allMemberBody);
     await loadLiveState();
     showToast("Loan request submitted.");
     render();
@@ -6200,14 +6213,6 @@ async function approveLoan(id) {
         id
       );
     }
-    await notifyAllActiveMembers(
-      "loan_disbursed",
-      loanType === "emi" ? "EMI Loan disbursed" : "Loan disbursed",
-      loanType === "emi"
-        ? `An EMI loan of ${money(request.amount)} (${tenure} months · ${money(emiCalc?.emiAmount)}/mo) has been disbursed to ${member?.name || "a member"}.`
-        : `A loan of ${money(request.amount)} has been disbursed to ${member?.name || "a member"}.`,
-      id
-    );
     await _silentResetAcks();
     await loadLiveState();
     await insertStatement("debit", request.amount, `${member?.name || "Member"} debited`, id);
@@ -6257,8 +6262,14 @@ async function notifyAllActiveMembers(type, title, body, relatedId = null) {
     if (admin) await notifyMember(admin.id, type, title, body, relatedId);
   }
 }
+async function notifyAdmin(type, title, body, relatedId = null) {
+  const admin = state.members.find(m => m.role === "president" && m.status === "active");
+  if (admin) await notifyMember(admin.id, type, title, body, relatedId);
+}
+
 async function notifyMember(profileId, type, title, body, relatedId = null) {
   if (NOTIFICATIONS_OFF) return;
+  if (!ALLOWED_NOTIFICATION_TYPES.has(type)) return;
   if (!liveBackendReady || !profileId) return;
   if (!state.settings.notificationsForAll) {
     const target = state.members.find(m => m.id === profileId);
@@ -6299,7 +6310,7 @@ async function requestExtension(loanId) {
   }));
 
   const memberName = loanMemberName(loan);
-  await notifyAllActiveMembers(
+  await notifyAdmin(
     "loan_extension_requested",
     "Loan extension requested",
     `${memberName} has requested a 1-year extension for their loan of ${money(loan.amount)} (renewal: ${loanRenewalDate(loan) || "-"}).`,
@@ -6332,12 +6343,15 @@ async function approveExtension(id, loanId) {
   }).eq("id", loanId));
 
   const memberName = loanMemberName(loan);
-  await notifyAllActiveMembers(
-    "loan_extension_approved",
-    "Loan extension approved",
-    `${memberName}'s loan of ${money(loan.amount)} has been extended. New renewal date: ${newRenewalStr}.`,
-    loanId
-  );
+  const loanOwner = state.members.find(m => loanBelongsToMember(loan, m));
+  if (loanOwner) {
+    await notifyMember(loanOwner.id,
+      "loan_extension_approved",
+      "Loan extension approved",
+      `Hi ${loanOwner.name.split(" ")[0]}, your loan of ${money(loan.amount)} has been extended. New renewal date: ${newRenewalStr}.`,
+      loanId
+    );
+  }
 
   await addLiveAudit(`Approved loan extension for ${memberName}. New renewal: ${newRenewalStr}.`, "loan_extension_approved");
   await loadLiveState();

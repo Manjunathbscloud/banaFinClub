@@ -119,9 +119,26 @@ function buildEmailHtml(firstName: string, type: string, title: string, body: st
 </html>`;
 }
 
+// ─── Which events go out on which channel ────────────────────────────────────
+// Every notification row is in-app already. Only these types also go out by SMS;
+// push goes to every allowed type. No per-event email (only the annual summary emails).
+const SMS_TYPES = new Set([
+  "payment_confirmed", "payment_reminder",
+  "loan_approved", "loan_rejected", "loan_renewal_reminder",
+  "loan_extension_approved", "loan_extension_rejected",
+  "partial_repayment_approved", "loan_cleared", "emi_completed",
+  "loan_requested", "loan_extension_requested",
+]);
+const PUSH_TYPES = new Set([...SMS_TYPES, "partial_repayment_requested"]);
+
+// Safety limits.
+const MAX_AGE_MINUTES = 10;        // older rows (e.g. re-inserted by a restore) are never sent
+const DEDUPE_HOURS = 24;           // same person + type + text within this window is sent once
+const MAX_SMS_PER_DAY = 30;        // hard cap across the club; extra SMS are skipped
+// Test mode: only the President receives SMS/push, whatever the toggle says. Set false to go live.
+const TEST_MODE_ADMIN_ONLY = true;
+
 serve(async (req) => {
-  // NOTIFICATIONS OFF: every notification channel is switched off. Delete this line to turn it back on.
-  return new Response(JSON.stringify({ ok: false, disabled: true, sent: 0 }), { status: 200, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   try {
     const payload = await req.json();
     const record = payload.record;
@@ -130,62 +147,71 @@ serve(async (req) => {
       return new Response("invalid payload", { status: 400 });
     }
 
+    const type = String(record.type || "");
+    if (!PUSH_TYPES.has(type)) {
+      return new Response("in-app only", { status: 200 });
+    }
+
+    // 1. Never send old rows. A restore re-inserts notifications with their original created_at.
+    const createdAt = record.created_at ? new Date(record.created_at).getTime() : Date.now();
+    if (Date.now() - createdAt > MAX_AGE_MINUTES * 60 * 1000) {
+      console.log("skip: old notification", record.id, record.created_at);
+      return new Response("skipped: old notification", { status: 200 });
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("email, full_name, phone, role")
+      .select("full_name, phone, role")
       .eq("id", record.profile_id)
       .single();
     if (!profile) return new Response("recipient not found", { status: 200 });
 
-    // Notifications toggle: off → only the President (admin) receives email/SMS/push.
+    // 2. Notifications toggle: off → only the President (admin) receives SMS/push.
     const { data: settingsRow } = await supabase
       .from("settings")
       .select("value")
       .eq("id", "active_year_info")
       .single();
     const notificationsForAll = Boolean((settingsRow?.value as any)?.notificationsForAll);
-    if (!notificationsForAll && profile.role !== "president") {
-      console.log("Notifications restricted to admin — skipping", record.profile_id);
+    if ((TEST_MODE_ADMIN_ONLY || !notificationsForAll) && profile.role !== "president") {
       return new Response("notifications restricted to admin", { status: 200 });
     }
 
-    const type = record.type || "";
-    const results: string[] = [];
-
-    // Each channel is independent: one failing must not stop the others.
-    if (profile.email && !SKIP_EMAIL_TYPES.has(type)) {
-      try {
-        const firstName = (profile.full_name || "Member").split(" ")[0];
-        const rawHtml = buildEmailHtml(firstName, type, record.title, record.body);
-        const html = rawHtml.split("\n").map((l: string) => l.trimEnd()).join("\n");
-        const client = new SMTPClient({
-          connection: {
-            hostname: "smtp.gmail.com",
-            port: 465,
-            tls: true,
-            auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
-          },
-        });
-        await client.send({
-          from: `Banakar FinClub <${GMAIL_USER}>`,
-          to: profile.email,
-          subject: record.title,
-          content: "auto",
-          html,
-        });
-        await client.close();
-        results.push("email ok");
-      } catch (e) {
-        console.error("email error:", e);
-        results.push("email failed");
-      }
+    // 3. One message per event per person: skip if the same notification was created recently.
+    const since = new Date(Date.now() - DEDUPE_HOURS * 60 * 60 * 1000).toISOString();
+    const { count: dupes } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", record.profile_id)
+      .eq("type", type)
+      .eq("title", record.title)
+      .eq("body", record.body)
+      .neq("id", record.id)
+      .gte("created_at", since);
+    if ((dupes || 0) > 0) {
+      console.log("skip: duplicate", record.id);
+      return new Response("skipped: duplicate", { status: 200 });
     }
 
-    if (profile.phone) {
-      try { results.push(await sendSms(profile.phone, record.title, record.body)); }
-      catch (e) { console.error("sms error:", e); results.push("sms failed"); }
+    const results: string[] = [];
+
+    // 4. SMS, within the daily cap.
+    if (SMS_TYPES.has(type) && profile.phone) {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: recentSms } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .in("type", [...SMS_TYPES])
+        .gte("created_at", dayAgo);
+      if ((recentSms || 0) > MAX_SMS_PER_DAY) {
+        console.warn("skip sms: daily cap reached", recentSms);
+        results.push("sms capped");
+      } else {
+        try { results.push(await sendSms(profile.phone, record.title, record.body)); }
+        catch (e) { console.error("sms error:", e); results.push("sms failed"); }
+      }
     }
 
     try { results.push(await sendPush(record.profile_id, record.title, record.body)); }

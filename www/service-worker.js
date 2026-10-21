@@ -1,4 +1,4 @@
-const CACHE_NAME = "banakar-finclub-v418";
+const CACHE_NAME = "banakar-finclub-v419";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -26,7 +26,7 @@ self.addEventListener("activate", (event) => {
 });
 
 // Notifications are switched off: incoming push messages are ignored.
-const PUSH_OFF = true;
+const PUSH_OFF = false;
 
 self.addEventListener("push", (event) => {
   if (PUSH_OFF) return;
