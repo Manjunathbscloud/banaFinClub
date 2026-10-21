@@ -144,11 +144,12 @@ function buildYearCloseEmailHtml(member: { full_name: string }, data: Record<str
           ${statCard("Member Exit Payouts", inr(exitPayouts), "#fdf2f8", "#9d174d")}
         </div>
         ${exitNoteHtml(data.exitNote)}` : ""}
+        ${Number(data.memberSettlement || 0) > 0 ? `<div style="margin-bottom:10px;">${statCard("Member Settlement", "+" + inr(Number(data.memberSettlement)), "#f0fdf4", "#15803d")}</div>` : ""}
 
         <div style="background:#1a1a2e;border-radius:12px;padding:16px 20px;margin-bottom:10px;">
           <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">Year ${yearNum} Closing Balance</div>
           <div style="font-size:26px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;">${inr(closingBalance)}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">Deposits + Interest − Expenditure − Exit Payouts</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">Deposits + Interest − Expenditure − Exit Payouts${Number(data.memberSettlement || 0) > 0 ? " + Member Settlement" : ""}</div>
         </div>
 
         ${poolBalanceBanner(poolBalance, "Total Pool Balance (Deposits + Outstanding Loans)")}
@@ -552,11 +553,12 @@ function buildAnnualMeetingEmailHtml(
         ${statCard("Total Loans (Club)", inr(loansOutstanding), "#eef2ff", "#4338ca")}
         ${expenditure > 0 ? statCard("Meeting Expenditure", inr(expenditure), "#fef9ec", "#92400e") : statCard("Meeting Expenditure", "Nil", "#f9fafb", "#9ca3af")}
         ${exitPayouts > 0 ? statCard("Member Exit Payouts", inr(exitPayouts), "#fdf2f8", "#9d174d") + exitNoteHtml(data.exitNote) : ""}
+        ${Number(data.memberSettlement || 0) > 0 ? statCard("Member Settlement", "+" + inr(Number(data.memberSettlement)), "#f0fdf4", "#15803d") : ""}
 
         <div style="background:#1a1a2e;border-radius:12px;padding:14px 20px;margin:10px 0;">
           <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">Year ${yearNum} Closing Balance</div>
           <div style="font-size:24px;font-weight:900;color:#fff;">${inr(closingBalance)}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">Deposits + Interest − Expenditure − Exits</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">Deposits + Interest − Expenditure − Exits${Number(data.memberSettlement || 0) > 0 ? " + Member Settlement" : ""}</div>
         </div>
 
         ${poolBalanceBanner(poolBalance, "Total Pool Balance (Deposits + Outstanding Loans)")}

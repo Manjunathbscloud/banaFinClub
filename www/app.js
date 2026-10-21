@@ -6586,7 +6586,11 @@ async function saveMeetingNotes(yearDbYear, data) {
     if (depRow) {
       const prevExpenditure = Number(depRow.expenditure || 0);
       const newExpenditure = data.expense;
-      const newBalance = depRow.principal + depRow.interest - (depRow.exit_payouts || 0) - newExpenditure;
+      // Move the saved balance only by the change in expenses, so other parts of it
+      // (e.g. a member settlement) are kept.
+      const newBalance = depRow.balance != null
+        ? Number(depRow.balance) + prevExpenditure - Number(newExpenditure || 0)
+        : depRow.principal + depRow.interest - (depRow.exit_payouts || 0) - newExpenditure;
       await liveQuery(supabaseClient.from("deposit_summaries")
         .update({ expenditure: newExpenditure, balance: newBalance })
         .eq("year", yearDbYear));
@@ -6717,13 +6721,12 @@ async function closeCurrentYear() {
 
   let totalDeposits, totalInterest, runningBalance, exitPayouts;
   if (yearNum === 6) {
-    const histDeposits = 21000 + 14000 + 11250 + 84000 + 44672;
-    const histInterest = 65000 + 11171;
-    exitPayouts = 121834;
-    totalDeposits  = histDeposits + liveTotalDeposit;
-    totalInterest  = histInterest + liveTotalInterest;
-    const yr6HistFixed = histDeposits + histInterest - exitPayouts + YEAR6_MEMBER_SETTLEMENT;
-    runningBalance = yr6HistFixed + livePayments.reduce((s, p) => s + Number(p.paidAmount || p.amount || 0), 0);
+    // Same figures as the Deposits page and the review members acknowledged.
+    const fin = activeYearFinancials();
+    exitPayouts = fin.exitTotal;
+    totalDeposits  = fin.totalDep;
+    totalInterest  = fin.totalInt;
+    runningBalance = fin.totalDep + fin.totalInt - fin.exitTotal + fin.settlement;
   } else {
     const activeYearExits = state.settings.activeYearExits || [];
     exitPayouts = activeYearExits.reduce((s, e) => s + Number(e.payout || 0), 0);
@@ -6742,7 +6745,7 @@ async function closeCurrentYear() {
   const breakdown = [];
   if (yearNum === 6) {
     const renewalFee = 21000;
-    const monthlyDeposits = (14000 + 11250 + 84000 + 44672) + liveTotalDeposit;
+    const monthlyDeposits = totalDeposits - renewalFee;
     breakdown.push({ description: "Renewal Fee",      details: "Nov 2025 · ₹3,000 × 7 members",           amount: renewalFee });
     breakdown.push({ description: "Total Deposits",   details: "Monthly collections (Nov 2025 – close)",   amount: monthlyDeposits });
     breakdown.push({ description: "Total Interest",   details: "Loan interest earned",                     amount: totalInterest });
@@ -7087,7 +7090,8 @@ async function shareMeetingSummary({ testOnly = false } = {}) {
       interest: Number(depRow.interest || 0),
       expenditure: Number(depRow.expenditure || 0),
       exitPayouts: Number(depRow.exit_payouts || 0),
-      exitNote: closedYearNum === 6 ? `${YEAR6_EXIT_SETTLEMENT_NOTE}. Member Settlement +₹25,166 received 15 Mar 2026. The signed settlement statement is available in the app (Deposits → Year 6).` : "",
+      exitNote: closedYearNum === 6 ? `${YEAR6_EXIT_SETTLEMENT_NOTE}. The signed settlement statement is available in the app (Deposits → Year 6).` : "",
+      memberSettlement: closedYearNum === 6 ? YEAR6_MEMBER_SETTLEMENT : 0,
       balance: Number(depRow.balance || 0),
       loansOutstanding,
       poolBalance,
