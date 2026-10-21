@@ -1939,6 +1939,7 @@ function renderHome() {
                     <strong style="font-size:15px;color:#2563eb;">${money(poolBal)}</strong>
                   </div>
                 </div>
+                <p style="margin:0 0 10px;font-size:12px;line-height:1.5;color:var(--muted);">📧 The complete year-by-year breakdown (Year 1 to Year ${yearNum}) will be shared with you by email.</p>
                 <button class="primary" data-action="acknowledge-financial" type="button" style="width:100%;font-size:14px;">Acknowledge ✓</button>
               </div>
             </details>`);
