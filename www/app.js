@@ -394,6 +394,7 @@ function liveProfileToMember(profile) {
     nomineeRelationship: profile.nominee_relationship || "",
     nomineePhone: profile.nominee_phone || "",
     dob: profile.dob || "",
+    lastSeenAt: profile.last_seen_at || null,
   };
 }
 
@@ -734,6 +735,8 @@ async function loadLiveState() {
 
   // Start realtime chat subscription once logged in
   initRealtimeChat();
+  initPresence();
+  touchLastSeen(true);
   subscribeToPush();
 
   // Persist available loan amount so SQL cron notifications can read it
@@ -3679,19 +3682,23 @@ function showLoanYearModal(yearKey) {
 function renderMembers() {
   const rows = state.members;
   return `
-    <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2></section>
+    <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2>${liveBackendReady ? `<p class="online-summary"><span class="presence-dot-inline"></span><span id="online-summary">${onlineSummaryText()}</span></p>` : ""}</section>
     <section class="card">
       <div class="card-body row-list">
         ${rows.map((member) => `
           <div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px;">
             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-              ${memberAvatarHtml(member, "md")}
+              <span class="presence-wrap${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">
+                ${memberAvatarHtml(member, "md")}
+                <span class="presence-dot" aria-hidden="true"></span>
+              </span>
               <div style="min-width:0;flex:1;">
                 <strong>${escapeHtml(member.name)}</strong>
                 <span>
                   ${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}
                   ${isAdmin() ? `<button type="button" data-action="change-phone" data-id="${member.id}" data-name="${escapeHtml(member.name)}" data-phone="${escapeHtml(member.phone)}" style="font-size:11px;padding:2px 7px;margin-left:6px;min-height:0;vertical-align:middle;background:var(--bg2,#F3F4F6);border:1px solid var(--border,#E5E7EB);border-radius:4px;cursor:pointer;color:var(--muted);">✏️</button>` : ""}
                 </span>
+                ${liveBackendReady && member.status === "active" ? `<span class="presence-text${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">${isMemberOnline(member.id) ? "Online now" : lastSeenLabel(member.lastSeenAt)}</span>` : ""}
                 ${member.id === currentProfileId() && liveBackendReady ? `
                   <label class="change-photo-link" for="member-avatar-input">📷 Change photo</label>
                   <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
@@ -8192,6 +8199,92 @@ async function sendChatMessage() {
     if (btn) btn.disabled = false;
     input?.focus();
   }
+}
+
+// ── Online / last seen ────────────────────────────────────────────────────
+// "Online now" comes from a Realtime presence channel; "last seen" is saved in
+// profiles.last_seen_at through the touch_last_seen() RPC (own row only).
+let presenceChannel = null;
+let onlineMemberIds = new Set();
+let lastSeenTouchedAt = 0;
+
+function touchLastSeen(force = false) {
+  if (!liveBackendReady || !currentProfileId()) return;
+  if (!force && Date.now() - lastSeenTouchedAt < 60 * 1000) return;
+  lastSeenTouchedAt = Date.now();
+  supabaseClient.rpc("touch_last_seen").then(() => {}, () => {});
+}
+
+function isMemberOnline(memberId) {
+  return memberId === currentProfileId() || onlineMemberIds.has(memberId);
+}
+
+function lastSeenLabel(iso) {
+  if (!iso) return "Not seen yet";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 2) return "Last seen just now";
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Last seen ${hours} hour${hours > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Last seen yesterday";
+  if (days < 30) return `Last seen ${days} days ago`;
+  return `Last seen ${new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`;
+}
+
+function onlineSummaryText() {
+  const active = state.members.filter(m => m.status === "active");
+  return `${active.filter(m => isMemberOnline(m.id)).length} of ${active.length} online now`;
+}
+
+// Updates dots and labels in place so an open Members page refreshes without a full re-render.
+function refreshPresenceDom() {
+  document.querySelectorAll("[data-presence-for]").forEach(el => {
+    const id = el.dataset.presenceFor;
+    const member = state.members.find(m => m.id === id);
+    const online = isMemberOnline(id);
+    el.classList.toggle("is-online", online);
+    if (el.classList.contains("presence-text")) {
+      el.textContent = online ? "Online now" : lastSeenLabel(member?.lastSeenAt);
+    }
+  });
+  const summary = document.getElementById("online-summary");
+  if (summary) summary.textContent = onlineSummaryText();
+}
+
+function setPresence(visible) {
+  if (!presenceChannel) return;
+  if (visible) presenceChannel.track({ online_at: new Date().toISOString() }).catch(() => {});
+  else presenceChannel.untrack().catch(() => {});
+}
+
+function initPresence() {
+  if (!liveBackendReady || !currentProfileId() || presenceChannel) return;
+  presenceChannel = supabaseClient.channel("online-members", { config: { presence: { key: currentProfileId() } } });
+  presenceChannel
+    .on("presence", { event: "sync" }, () => {
+      const now = new Set(Object.keys(presenceChannel.presenceState()));
+      // Anyone who just went offline was last seen now.
+      onlineMemberIds.forEach(id => {
+        if (!now.has(id)) {
+          const m = state.members.find(x => x.id === id);
+          if (m) m.lastSeenAt = new Date().toISOString();
+        }
+      });
+      onlineMemberIds = now;
+      refreshPresenceDom();
+    })
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED" && document.visibilityState === "visible") setPresence(true);
+    });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!currentProfileId()) return;
+    const visible = document.visibilityState === "visible";
+    setPresence(visible);
+    touchLastSeen(!visible);
+  });
+  setInterval(() => { if (document.visibilityState === "visible") touchLastSeen(); }, 5 * 60 * 1000);
 }
 
 function initRealtimeChat() {
