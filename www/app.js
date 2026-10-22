@@ -1415,7 +1415,6 @@ function render() {
           <div class="top-actions">
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
-            <button class="icon-button" type="button" data-action="manual-refresh" title="Refresh data" aria-label="Refresh" id="refresh-btn">↻</button>
             ${isAdmin() && !NOTIFICATIONS_OFF ? `<button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
               ${bellIcon()}
               ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount() > 9 ? "9+" : unreadCount()}</span>` : ""}
@@ -4771,18 +4770,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "manual-refresh") {
-    if (!liveBackendReady) { showToast("Not connected to live data."); return; }
-    const btn = document.getElementById("refresh-btn");
-    if (btn) { btn.style.animation = "spin 0.7s linear infinite"; btn.disabled = true; }
-    try {
-      await loadLiveState();
-      render();
-      showToast("Data refreshed.");
-    } catch (_) {
-      showToast("Refresh failed. Check connection.");
-    } finally {
-      if (btn) { btn.style.animation = ""; btn.disabled = false; }
-    }
+    if (await refreshLiveData()) showToast("Data refreshed.");
     return;
   }
 
@@ -7884,63 +7872,116 @@ async function initApp() {
   render();
 }
 
-function initPullToRefresh() {
-  // Removed — replaced by the ↻ Refresh button in the header
-  return;
-  const THRESHOLD = 72;
-  let startY = 0;
-  let pulling = false;
-  let refreshing = false;
+// Reload all live data and redraw the current screen.
+let liveRefreshInFlight = false;
+async function refreshLiveData() {
+  if (!liveBackendReady) { showToast("Not connected to live data."); return false; }
+  if (liveRefreshInFlight) return false;
+  liveRefreshInFlight = true;
+  try {
+    await loadLiveState();
+    render();
+    return true;
+  } catch (_) {
+    showToast("Refresh failed. Check connection.");
+    return false;
+  } finally {
+    liveRefreshInFlight = false;
+  }
+}
 
-  function indicator() {
+// Pull-to-refresh that only fires on a deliberate pull from the top of the page.
+// It stays off when the page has just been scrolled to the top, when a pop-up or panel is open,
+// when the finger is on something that scrolls by itself, or when the drag is not clearly downward.
+function initPullToRefresh() {
+  const TRIGGER = 90;          // px of finger travel needed to refresh
+  const SETTLE_MS = 300;       // page must have been resting at the top this long
+  let lastScrollAt = 0;
+  let startX = 0, startY = 0;
+  let armed = false, active = false, ready = false;
+
+  // The page itself never scrolls (html/body are fixed); the main screen scrolls inside main.content,
+  // which is re-created on every render, so listen for scroll events in the capture phase.
+  const scroller = () => document.querySelector("main.content");
+  document.addEventListener("scroll", (e) => {
+    if (e.target === scroller()) lastScrollAt = Date.now();
+  }, { passive: true, capture: true });
+
+  function bar() {
     let el = document.getElementById("ptr-bar");
     if (!el) {
       el = document.createElement("div");
       el.id = "ptr-bar";
-      el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--panel,#fff);box-shadow:0 1px 4px rgba(0,0,0,.08);transition:height .15s;";
-      el.innerHTML = '<div id="ptr-spinner" style="width:22px;height:22px;border:2.5px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;"></div>';
+      el.setAttribute("aria-live", "polite");
+      el.innerHTML = '<span id="ptr-spinner"></span><span id="ptr-text">Pull to refresh</span>';
       document.body.appendChild(el);
     }
     return el;
   }
+  function show(height, text, spinning) {
+    const el = bar();
+    el.style.height = height + "px";
+    el.classList.toggle("ptr-ready", text === "Release to refresh");
+    document.getElementById("ptr-text").textContent = text;
+    document.getElementById("ptr-spinner").classList.toggle("ptr-spin", Boolean(spinning));
+  }
+  function hide() { const el = document.getElementById("ptr-bar"); if (el) el.style.height = "0"; }
+
+  function overlayOpen() {
+    if (document.body.style.overflow === "hidden") return true;
+    if (chatOpen || aiChatOpen) return true;
+    return Boolean(document.querySelector(
+      ".rules-modal-overlay, .notif-panel-wrap, #signoff-modal, #mark-payment-modal, #loan-detail-modal, #loan-year-modal, #deposit-year-modal, .lightbox, #gallery-lightbox"
+    ));
+  }
+  function insideOwnScroller(target) {
+    const main = scroller();
+    for (let el = target; el && el !== main && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        const oy = getComputedStyle(el).overflowY;
+        if (oy === "auto" || oy === "scroll") return true;
+      }
+    }
+    return false;
+  }
+  function atTop() { const main = scroller(); return Boolean(main) && main.scrollTop <= 0; }
 
   document.addEventListener("touchstart", (e) => {
-    if (refreshing) return;
+    armed = false; active = false; ready = false;
+    if (liveRefreshInFlight || e.touches.length !== 1) return;
+    if (!atTop() || Date.now() - lastScrollAt < SETTLE_MS) return;
+    if (!scroller()?.contains(e.target)) return;   // only pulls on the main screen
+    if (overlayOpen() || insideOwnScroller(e.target)) return;
+    startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    // Only arm pull-to-refresh when genuinely at the very top
-    pulling = (document.documentElement.scrollTop || document.body.scrollTop) === 0;
+    armed = true;
   }, { passive: true });
 
   document.addEventListener("touchmove", (e) => {
-    if (!pulling || refreshing) return;
-    const dist = e.touches[0].clientY - startY;
-    // Abort if user scrolls sideways or upward — don't show indicator
-    if (dist <= 0) { pulling = false; indicator().style.height = "0"; return; }
-    if (dist > 12) {
-      indicator().style.height = Math.min(dist * 0.5, 56) + "px";
+    if (!armed) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!atTop() || dy <= 0 || (!active && Math.abs(dx) > dy)) {
+      armed = false; active = false; ready = false; hide(); return;
     }
+    if (!active && dy < 15) return;   // ignore tiny wobbles
+    active = true;
+    const pull = Math.min(dy * 0.5, 110);
+    ready = dy >= TRIGGER;
+    show(Math.min(pull, 60), ready ? "Release to refresh" : "Pull to refresh", false);
   }, { passive: true });
 
-  document.addEventListener("touchend", async (e) => {
-    if (!pulling) return;
-    pulling = false;
-    const dist = e.changedTouches[0].clientY - startY;
-    const bar = indicator();
-    if (dist >= THRESHOLD && liveBackendReady && !refreshing) {
-      refreshing = true;
-      bar.style.height = "52px";
-      const spinner = document.getElementById("ptr-spinner");
-      if (spinner) spinner.style.animation = "spin 0.7s linear infinite";
-      try {
-        await loadLiveState();
-        render();
-      } catch (_) {
-        showToast("Refresh failed. Check connection.");
-      }
-      refreshing = false;
-    }
-    bar.style.height = "0";
-  });
+  const finish = async () => {
+    const shouldRefresh = armed && active && ready;
+    armed = false; active = false; ready = false;
+    if (!shouldRefresh) { hide(); return; }
+    show(52, "Refreshing…", true);
+    const ok = await refreshLiveData();
+    if (ok) showToast("Data refreshed.");
+    hide();
+  };
+  document.addEventListener("touchend", finish, { passive: true });
+  document.addEventListener("touchcancel", () => { armed = false; active = false; ready = false; hide(); }, { passive: true });
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────

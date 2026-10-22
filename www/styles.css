@@ -3067,3 +3067,25 @@ tr:hover td { background: rgba(249,115,22,0.025); }
 .presence-wrap.is-online .presence-dot { display: block; }
 .presence-text { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 .presence-text.is-online { color: #16a34a; font-weight: 600; }
+
+/* ── Pull to refresh ─────────────────────────────────────── */
+/* Stop the browser's own pull-to-refresh (it reloads the whole app); ours reloads data only. */
+html, body { overscroll-behavior-y: none; }
+#ptr-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--panel, #fff); color: var(--muted);
+  font-size: 12px; font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+  transition: height .15s;
+  pointer-events: none;
+}
+#ptr-bar.ptr-ready { color: #2563eb; }
+#ptr-spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--line, #e5e7eb); border-top-color: #2563eb;
+}
+#ptr-spinner.ptr-spin { animation: spin .7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { #ptr-spinner.ptr-spin { animation-duration: 2s; } }
