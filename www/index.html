@@ -20,8 +20,27 @@
     <script src="app.js"></script>
     <script>
       if ("serviceWorker" in navigator) {
+        const pageOpenedAt = Date.now();
+        const hadOldVersion = Boolean(navigator.serviceWorker.controller);
         window.addEventListener("load", () => {
-          navigator.serviceWorker.register("./service-worker.js", { scope: "./" });
+          navigator.serviceWorker.register("./service-worker.js", { scope: "./", updateViaCache: "none" })
+            .then((reg) => {
+              // Look for a new version whenever the app comes back to the screen.
+              document.addEventListener("visibilitychange", () => {
+                if (document.visibilityState === "visible") reg.update().catch(() => {});
+              });
+            })
+            .catch(() => {});
+        });
+        // If a new version takes over while the app is still starting up, reload once
+        // so the new code runs now. Later in a session, it waits for the next open.
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!hadOldVersion || Date.now() - pageOpenedAt > 15000) return;
+          try {
+            if (sessionStorage.getItem("bfc_sw_reloaded")) return;
+            sessionStorage.setItem("bfc_sw_reloaded", "1");
+          } catch (_) {}
+          window.location.reload();
         });
       }
     </script>

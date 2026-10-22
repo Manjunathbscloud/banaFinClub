@@ -1,4 +1,4 @@
-const CACHE_NAME = "banakar-finclub-v422";
+const CACHE_NAME = "banakar-finclub-v423";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -63,8 +63,11 @@ self.addEventListener("fetch", (event) => {
 
   if (!isAppAsset) return;
 
+  // "no-cache" makes the browser ask the server whether the file changed on every load
+  // (a cheap 304 when it hasn't), so a new deploy shows on the next open instead of
+  // after GitHub Pages' 10-minute cache expires. Offline still falls back to the cache below.
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-cache" })
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
