@@ -1162,6 +1162,28 @@ button:focus-visible {
 
 .dash-summary-col small { font-size: 11px; font-weight: 600; }
 
+/* Monthly Due box: looks and feels tappable */
+.dash-summary-col.due-tap {
+  cursor: pointer;
+  background: rgba(255,255,255,0.15);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.32);
+  transition: background 0.2s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.dash-summary-col.due-tap:hover { background: rgba(255,255,255,0.2); }
+.dash-summary-col.due-tap:active { transform: scale(0.97); background: rgba(255,255,255,0.24); }
+.dash-summary-col.due-tap:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.due-tap-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 7px; padding: 5px 11px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--saffron-deep, #b45309);
+  font-size: 11px; font-weight: 800; line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+}
+.due-tap-btn span { font-size: 14px; line-height: 1; }
+
 .dash-summary-divider {
   width: 1px;
   background: rgba(255,255,255,0.2);

@@ -2010,14 +2010,15 @@ function renderHome() {
           <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
           <small>For new loans</small>
         </div>
-        <div class="dash-summary-col" data-action="show-due-breakdown" style="cursor:pointer;">
-          <p style="display:flex;align-items:center;gap:5px;">Monthly Due <span style="font-size:16px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1;">›</span></p>
+        <div class="dash-summary-col due-tap" data-action="show-due-breakdown" role="button" tabindex="0" aria-label="View monthly due breakdown">
+          <p>Monthly Due</p>
           <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
           ${paymentStatus === "paid"
-            ? `<small style="color:#4ade80;font-weight:700;">✓ Paid</small>`
+            ? `<small style="display:block;color:#4ade80;font-weight:700;">✓ Paid</small>`
             : payInitiated
-              ? `<small class="awaiting-label">⏳ Awaiting approval</small>`
-              : `<small style="color:rgba(255,255,255,0.6);font-size:10px;">tap for breakdown</small>`}
+              ? `<small class="awaiting-label" style="display:block;">⏳ Awaiting approval</small>`
+              : ""}
+          <span class="due-tap-btn">View breakdown <span aria-hidden="true">›</span></span>
         </div>
       </div>
     </div>
