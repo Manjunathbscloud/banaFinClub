@@ -847,6 +847,25 @@ function loanOutstanding(loan) {
   return Math.max(0, Number(loan.amount) - Number(loan.principalPaid || 0));
 }
 
+// Partial repayment rule: each part must be at least 30% of the original loan AND leave at
+// least 30% still owing. When no amount can do both, the member pays everything that's left.
+function partialRepaymentRule(loan) {
+  const outstanding = loanOutstanding(loan);
+  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
+  const maxPartial = outstanding - minPartial;
+  return { outstanding, minPartial, maxPartial, mustClear: maxPartial < minPartial };
+}
+
+function partialRepaymentError(loan, amount) {
+  const r = partialRepaymentRule(loan);
+  if (amount > r.outstanding + 0.5) return `Amount cannot be more than the remaining loan (${money(r.outstanding)}).`;
+  if (Math.abs(amount - r.outstanding) < 1) return null;
+  if (r.mustClear) return `Only ${money(r.outstanding)} is left. Pay the full ${money(r.outstanding)} to close the loan.`;
+  if (amount < r.minPartial) return `Pay at least ${money(r.minPartial)} (30% of the loan), or ${money(r.outstanding)} to close it.`;
+  if (amount > r.maxPartial) return `At least ${money(r.minPartial)} (30%) must stay after a part payment. Pay up to ${money(r.maxPartial)}, or ${money(r.outstanding)} to close the loan.`;
+  return null;
+}
+
 function calcEmi(principal, tenureMonths) {
   const r = Number(state.settings.emiLoanInterestRateMonthly || 1.25) / 100;
   const emiAmount = Math.round(principal * (1 + r * tenureMonths) / tenureMonths);
@@ -4847,9 +4866,8 @@ document.addEventListener("click", async (event) => {
       if (!amount || amount <= 0) { showToast("Enter a valid amount."); return; }
       const loan = state.loans.find(l => l.id === loanId);
       if (loan) {
-        const outstanding = loanOutstanding(loan);
-        const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-        if (outstanding > minPartial && amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of loan amount).`); return; }
+        const ruleError = partialRepaymentError(loan, amount);
+        if (ruleError) { showToast(ruleError); return; }
       }
       action.disabled = true;
       await requestPartialRepayment(loanId, amount);
@@ -4926,9 +4944,8 @@ document.addEventListener("click", async (event) => {
       if (amount <= 0) { showToast("Enter a valid amount."); return; }
       const loan = state.loans.find(l => l.id === loanId);
       if (loan) {
-        const outstanding = loanOutstanding(loan);
-        const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-        if (outstanding > minPartial && amount < minPartial) { showToast(`Minimum partial payment is ${money(minPartial)} (30% of loan amount).`); return; }
+        const ruleError = partialRepaymentError(loan, amount);
+        if (ruleError) { showToast(ruleError); return; }
       }
       action.disabled = true;
       try { await recordPartialPayment(loanId, amount, date); } finally { action.disabled = false; }
@@ -5818,9 +5835,7 @@ function showPartialPaymentModal(loanId) {
 
   const loan = state.loans.find(l => l.id === loanId);
   if (!loan) return;
-  const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-  const isFinalClearance = outstanding <= minPartial;
+  const { outstanding, minPartial, maxPartial, mustClear: isFinalClearance } = partialRepaymentRule(loan);
   const memberName = loanMemberName(loan);
 
   const modal = document.createElement("div");
@@ -5837,7 +5852,7 @@ function showPartialPaymentModal(loanId) {
       </div>
       <div style="padding:20px;">
         ${isFinalClearance ? `<div style="background:#fef9ec;border:1.5px solid #fbbf24;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400e;line-height:1.5;">
-          Remaining balance <strong>${money(outstanding)}</strong> is less than the 30% minimum (${money(minPartial)}). Pay this amount to fully close the loan.
+          Remaining balance is <strong>${money(outstanding)}</strong>. A part payment must be at least ${money(minPartial)} and leave at least ${money(minPartial)} (30% each), which isn't possible now, so the full amount closes the loan.
         </div>` : ""}
         <div style="margin-bottom:14px;">
           <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px;">Amount Repaid (₹)</label>
@@ -5845,7 +5860,7 @@ function showPartialPaymentModal(loanId) {
             value="${isFinalClearance ? outstanding : ""}"
             placeholder="${isFinalClearance ? money(outstanding) : "Min " + money(minPartial)}"
             ${isFinalClearance ? 'readonly style="width:100%;padding:10px 12px;border:1.5px solid #fbbf24;border-radius:10px;font-size:15px;background:#fef9ec;color:var(--text);box-sizing:border-box;font-weight:700;"' : 'style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;background:var(--panel);color:var(--text);box-sizing:border-box;"'} />
-          <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${isFinalClearance ? "This payment will fully close the loan." : "Minimum 30% of loan amount · " + money(minPartial) + " – " + money(outstanding)}</p>
+          <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${isFinalClearance ? "This payment will fully close the loan." : "Part payment: " + money(minPartial) + " – " + money(maxPartial) + " (at least 30% must stay) · or " + money(outstanding) + " to close the loan"}</p>
         </div>
         <div style="margin-bottom:20px;">
           <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px;">Date of Payment</label>
@@ -5869,8 +5884,9 @@ async function recordPartialPayment(loanId, amount, date) {
   const loan = state.loans.find(l => l.id === loanId);
   if (!loan) { showToast("Loan not found."); return; }
   const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-  const isFinalClearance = outstanding <= minPartial || amount >= outstanding;
+  const ruleError = partialRepaymentError(loan, amount);
+  if (ruleError) { showToast(ruleError); return; }
+  const isFinalClearance = amount >= outstanding - 0.5;
   // Fetch the live principal_paid from DB to avoid TOCTOU with concurrent sessions
   const { data: freshRow } = await supabaseClient.from("current_loans").select("principal_paid").eq("id", loanId).single();
   const newPrincipalPaid = Number(freshRow?.principal_paid || 0) + amount;
@@ -6384,9 +6400,7 @@ async function rejectExtension(id, profileId) {
 function showPartialRepaymentRequestModal(loanId) {
   const loan = state.loans.find(l => l.id === loanId);
   if (!loan) return;
-  const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-  const isFinalClearance = outstanding <= minPartial;
+  const { outstanding, minPartial, maxPartial, mustClear: isFinalClearance } = partialRepaymentRule(loan);
   const existing = document.getElementById("partial-req-modal");
   if (existing) existing.remove();
   const modal = document.createElement("div");
@@ -6402,7 +6416,7 @@ function showPartialRepaymentRequestModal(loanId) {
       <div class="rules-modal-body">
         <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Outstanding balance: <strong style="color:var(--ink);">${money(outstanding)}</strong></p>
         ${isFinalClearance ? `<div style="background:#fef9ec;border:1.5px solid #fbbf24;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400e;line-height:1.5;">
-          Your remaining balance <strong>${money(outstanding)}</strong> is less than the 30% minimum. Notify admin to clear the full remaining amount and close this loan.
+          Your remaining balance is <strong>${money(outstanding)}</strong>. A part payment must be at least ${money(minPartial)} and leave at least ${money(minPartial)} (30% each), so now the full amount must be paid to close this loan.
         </div>` : ""}
         <label class="field">
           <span>Amount to repay (₹)</span>
@@ -6410,7 +6424,7 @@ function showPartialRepaymentRequestModal(loanId) {
             value="${isFinalClearance ? outstanding : ""}"
             placeholder="${isFinalClearance ? money(outstanding) : "Min " + money(minPartial)}"
             ${isFinalClearance ? "readonly" : ""} style="font-size:16px;${isFinalClearance ? "font-weight:700;" : ""}" />
-          <span style="font-size:11px;color:var(--muted);">${isFinalClearance ? "This will notify admin to close your loan." : "Minimum 30% of loan amount (" + money(minPartial) + "). Maximum is full outstanding amount."}</span>
+          <span style="font-size:11px;color:var(--muted);">${isFinalClearance ? "This will notify admin to close your loan." : "Part payment: " + money(minPartial) + " – " + money(maxPartial) + " (at least 30% must stay), or " + money(outstanding) + " to close the loan."}</span>
         </label>
         <button class="primary" data-action="submit-partial-repayment-request" data-loan-id="${loanId}" type="button" style="width:100%;margin-bottom:10px;margin-top:8px;">${isFinalClearance ? "Notify Admin — Close Loan" : "Notify Admin"}</button>
         <button class="secondary" data-action="close-partial-req-modal" type="button" style="width:100%;">Cancel</button>
@@ -6427,16 +6441,10 @@ async function requestPartialRepayment(loanId, amount) {
   if (!loan) { showToast("Loan not found."); return; }
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const outstanding = loanOutstanding(loan);
-  const minPartial = Math.ceil(Number(loan.amount) * 0.30);
-  const isFinalClearance = outstanding <= minPartial;
-  if (!isFinalClearance && amount < minPartial) {
-    showToast(`Amount must be between ${money(minPartial)} (30% of loan) and ${money(outstanding)}.`);
-    const btn = document.querySelector("[data-action='submit-partial-repayment-request']");
-    if (btn) btn.disabled = false;
-    return;
-  }
-  if (amount > outstanding) {
-    showToast(`Amount cannot exceed outstanding balance (${money(outstanding)}).`);
+  const isFinalClearance = amount >= outstanding - 0.5;
+  const ruleError = partialRepaymentError(loan, amount);
+  if (ruleError) {
+    showToast(ruleError);
     const btn = document.querySelector("[data-action='submit-partial-repayment-request']");
     if (btn) btn.disabled = false;
     return;
