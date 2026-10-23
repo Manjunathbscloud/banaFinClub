@@ -611,7 +611,7 @@ async function loadLiveState() {
 
   const [settingsRows, profiles, deposits, payments, loanRequests, loans, loanHistory, audit, notifications, rulesData, extensionRequests, messages, statementsData, loanEmisData, meetingRecordsData, acknowledgementsData, loanPartialPaymentsData, partialRepaymentRequestsData, galleryPhotosData, loanInterestPaymentsData] = await Promise.all([
     liveQuery(supabaseClient.from("settings").select("id,value")),
-    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone,dob").order("created_at", { ascending: true })),
+    liveQuery(supabaseClient.from("profiles").select("id,full_name,phone,email,role,status,auth_user_id,avatar_url,mpin_hash,nominee_name,nominee_relationship,nominee_phone,dob,last_seen_at").order("created_at", { ascending: true })),
     liveQuery(supabaseClient.from("deposit_summaries").select("*").order("year", { ascending: true })),
     liveQuery(supabaseClient.from("monthly_payments").select("*").gte("month", "2025-11").order("created_at", { ascending: false })),
     liveQuery(supabaseClient.from("loan_requests").select("*").order("requested_at", { ascending: false })),
@@ -8271,17 +8271,18 @@ function isMemberOnline(memberId) {
   return memberId === currentProfileId() || onlineMemberIds.has(memberId);
 }
 
+// Exact date and time, e.g. "Last seen today, 4:35 PM" / "yesterday, 9:10 AM" / "21 Oct 2026, 7:02 PM".
 function lastSeenLabel(iso) {
   if (!iso) return "Not seen yet";
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 2) return "Last seen just now";
-  if (mins < 60) return `Last seen ${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `Last seen ${hours} hour${hours > 1 ? "s" : ""} ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Last seen yesterday";
-  if (days < 30) return `Last seen ${days} days ago`;
-  return `Last seen ${new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`;
+  const seen = new Date(iso);
+  if (Date.now() - seen.getTime() < 60 * 1000) return "Last seen just now";
+  const time = seen.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).toUpperCase();
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+  if (seen >= startOfToday) return `Last seen today, ${time}`;
+  if (seen >= startOfYesterday) return `Last seen yesterday, ${time}`;
+  const date = seen.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return `Last seen ${date}, ${time}`;
 }
 
 function onlineSummaryText() {
