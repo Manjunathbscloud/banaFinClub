@@ -5584,14 +5584,16 @@ function showDueBreakdownSheet() {
   const user = currentUser();
   if (!user) return;
 
-  const deposit    = expectedMonthlyDeposit(user);
+  // Display only. Uses the same month as the Monthly Due tile (memberMonthlyDue): the new
+  // year's first month once it has been started but not yet begun, otherwise this month.
+  const month      = currentMonth() < activeYearCutoffMonth() ? activeYearCutoffMonth() : currentMonth();
+  const deposit    = expectedMonthlyDeposit(user, month);
   const interest   = memberMonthlyInterest(user.id);
   const emi        = memberEmiMonthly(user);
   const total      = deposit + interest + emi;
-  const month      = currentMonth();
   const isFirst    = month === activeYearCutoffMonth();
   const renewalFee = isFirst ? Number(state.settings.activeYearRenewalFeePerMember || 0) : 0;
-  const payment    = currentMonthPayment(user.id);
+  const payment    = state.monthlyPayments.find((p) => p.memberId === user.id && p.month === month);
   const isPaid     = payment?.status === "paid";
 
   const row = (label, amount, color = "var(--ink)") =>
