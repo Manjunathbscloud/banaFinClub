@@ -1883,6 +1883,46 @@ function renderHome() {
       </div>
     </section>
 
+    <div class="dash-summary-card">
+      <div class="dash-summary-top">
+        <div class="dash-summary-brand">
+          <span class="dash-summary-dot">●</span>
+          <div>
+            <p class="dash-summary-label">Banakar FinClub · Year ${state.settings.activeYearNumber || 6} of 10</p>
+            <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
+          </div>
+        </div>
+        <span class="badge warn">Active</span>
+      </div>
+      <div class="dash-summary-grid">
+        <div class="dash-summary-col">
+          <p>Pool Balance</p>
+          <strong data-count-up="${poolBal}">${money(poolBal)}</strong>
+          <small>Total association pool</small>
+        </div>
+        <div class="dash-summary-col">
+          <p>Bank Balance</p>
+          <strong data-count-up="${bankBal}">${money(bankBal)}</strong>
+          <small>Estimated</small>
+        </div>
+        <div class="dash-summary-col">
+          <p>Available Loan</p>
+          <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
+          <small>For new loans</small>
+        </div>
+        <div class="dash-summary-col due-tap" data-action="show-due-breakdown" role="button" tabindex="0" aria-label="View monthly due breakdown">
+          <p>Monthly Due</p>
+          <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
+          ${paymentStatus === "paid"
+            ? `<small style="display:block;color:#4ade80;font-weight:700;">✓ Paid</small>`
+            : payInitiated
+              ? `<small class="awaiting-label" style="display:block;">⏳ Awaiting approval</small>`
+              : ""}
+          <span class="due-tap-btn">View breakdown <span aria-hidden="true">›</span></span>
+        </div>
+      </div>
+    </div>
+
     <section class="dash-tiles">
       ${tiles.map(tile => `
         <div class="dash-tile dash-tile-clickable"
@@ -1982,46 +2022,6 @@ function renderHome() {
 
       return banners.length > 0 ? `<div style="padding:0 16px 4px;">${banners.join("")}</div>` : "";
     })()}
-
-    <div class="dash-summary-card">
-      <div class="dash-summary-top">
-        <div class="dash-summary-brand">
-          <span class="dash-summary-dot">●</span>
-          <div>
-            <p class="dash-summary-label">Banakar FinClub · Year ${state.settings.activeYearNumber || 6} of 10</p>
-            <p class="dash-summary-sub">Sri Mukkanneshwara Associate</p>
-          </div>
-        </div>
-        <span class="badge warn">Active</span>
-      </div>
-      <div class="dash-summary-grid">
-        <div class="dash-summary-col">
-          <p>Pool Balance</p>
-          <strong data-count-up="${poolBal}">${money(poolBal)}</strong>
-          <small>Total association pool</small>
-        </div>
-        <div class="dash-summary-col">
-          <p>Bank Balance</p>
-          <strong data-count-up="${bankBal}">${money(bankBal)}</strong>
-          <small>Estimated</small>
-        </div>
-        <div class="dash-summary-col">
-          <p>Available Loan</p>
-          <strong data-count-up="${availLoan}">${money(availLoan)}</strong>
-          <small>For new loans</small>
-        </div>
-        <div class="dash-summary-col due-tap" data-action="show-due-breakdown" role="button" tabindex="0" aria-label="View monthly due breakdown">
-          <p>Monthly Due</p>
-          <strong data-count-up="${monthlyDue}">${money(monthlyDue)}</strong>
-          ${paymentStatus === "paid"
-            ? `<small style="display:block;color:#4ade80;font-weight:700;">✓ Paid</small>`
-            : payInitiated
-              ? `<small class="awaiting-label" style="display:block;">⏳ Awaiting approval</small>`
-              : ""}
-          <span class="due-tap-btn">View breakdown <span aria-hidden="true">›</span></span>
-        </div>
-      </div>
-    </div>
 
     <section style="margin-top:14px;">
       <div class="card">
