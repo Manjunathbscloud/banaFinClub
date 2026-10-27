@@ -956,6 +956,75 @@ function loanRenewalDate(loan) {
   return loan.renewalOrReturnDate || "";
 }
 
+// ── Home: loan renewals this month (shown from the 1st to the 15th) ───────
+function renewalLoansThisMonth() {
+  const month = currentMonth();
+  return state.loans
+    .filter(l => l.status === "active" && l.loanType !== "emi" && l.notes !== "emi_entry"
+      && String(loanRenewalDate(l)).slice(0, 7) === month)
+    .sort((a, b) => String(loanRenewalDate(a)).localeCompare(String(loanRenewalDate(b))));
+}
+
+// Newest extension request for a loan (the list is loaded newest first).
+function latestExtensionStatus(loanId) {
+  return (state.extensionRequests || []).find(e => e.loanId === loanId)?.status || null;
+}
+
+function renderRenewalBanners() {
+  if (new Date().getDate() > 15) return "";
+  const loans = renewalLoansThisMonth();
+  if (!loans.length) return "";
+  const user = currentUser();
+  const todayStr = today();
+  const fmtDate = (d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const isPassed = (l) => String(loanRenewalDate(l)) < todayStr;
+
+  const mine = loans.filter(l => loanBelongsToMember(l, user));
+  const others = loans.filter(l => !loanBelongsToMember(l, user));
+
+  const myCards = mine.map(l => {
+    const date = fmtDate(loanRenewalDate(l));
+    const ext = latestExtensionStatus(l.id);
+    const text = isPassed(l)
+      ? `The renewal date (${date}) has passed. Please repay your loan of ${money(loanOutstanding(l))} or request an extension.`
+      : `Your loan of ${money(loanOutstanding(l))} must be repaid or extended by ${date}.`;
+    const actions = ext === "pending"
+      ? `<p class="rn-status">⏳ Extension requested · waiting for admin</p>`
+      : `${ext === "rejected" ? `<p class="rn-status rn-declined">Your last extension request was declined.</p>` : ""}
+         <div class="rn-actions">
+           <button class="primary small" type="button" data-action="request-extension" data-loan-id="${l.id}">Request extension</button>
+           <button class="secondary small" type="button" data-action="view-loan-detail" data-loan-id="${l.id}">View loan ›</button>
+         </div>`;
+    return `<div class="rn-card">
+      <p class="rn-title">⏳ Your loan renews this month</p>
+      <p class="rn-text">${text}</p>
+      ${actions}
+    </div>`;
+  }).join("");
+
+  let othersCard = "";
+  if (others.length) {
+    const tags = (l) => {
+      const out = [];
+      if (isPassed(l)) out.push(`<span class="rn-tag">date passed</span>`);
+      if (isAdmin() && latestExtensionStatus(l.id) === "pending") out.push(`<span class="rn-tag rn-tag-blue">extension requested</span>`);
+      return out.join("");
+    };
+    const body = others.length === 1
+      ? `<p class="rn-text">${escapeHtml(loanMemberName(others[0]))} has a loan of ${money(loanOutstanding(others[0]))} renewing on ${fmtDate(loanRenewalDate(others[0]))}. ${tags(others[0])}</p>`
+      : others.map(l => `<div class="rn-row">
+          <span class="rn-name">${escapeHtml(loanMemberName(l))}</span>
+          <span class="rn-meta">${money(loanOutstanding(l))} · ${fmtDate(loanRenewalDate(l))} ${tags(l)}</span>
+        </div>`).join("");
+    othersCard = `<div class="rn-card">
+      <p class="rn-title">⏳ Loan renewals this month</p>
+      ${body}
+    </div>`;
+  }
+
+  return `<div class="rn-wrap">${myCards}${othersCard}</div>`;
+}
+
 function loanMemberName(loan) {
   const byId = memberById(loan.memberId);
   if (byId) return byId.name;
@@ -1922,6 +1991,8 @@ function renderHome() {
         </div>
       </div>
     </div>
+
+    ${renderRenewalBanners()}
 
     <section class="dash-tiles">
       ${tiles.map(tile => `
