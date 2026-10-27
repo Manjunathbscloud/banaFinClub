@@ -17,6 +17,8 @@ const ALLOWED_NOTIFICATION_TYPES = new Set([
   "partial_repayment_approved", "loan_cleared", "emi_completed",
   // to the admin, something to approve
   "loan_requested", "loan_extension_requested", "partial_repayment_requested",
+  // to all other members, for information
+  "loan_extension_announcement",
 ]);
 // The monthly reminder is sent automatically after the due date; the manual button stays hidden.
 const MANUAL_PAYMENT_REMINDER = false;
@@ -970,24 +972,32 @@ function latestExtensionStatus(loanId) {
   return (state.extensionRequests || []).find(e => e.loanId === loanId)?.status || null;
 }
 
+// Everything in the club is due by the same day of the month (the 10th): payments, loan
+// renewals, extension requests and repayments. The cards show from the 1st to the 15th;
+// after the due day an unresolved renewal is tagged "overdue".
+function renewalDueDay() {
+  return Number(state.settings.dueDay || 10);
+}
+
 function renderRenewalBanners() {
-  if (new Date().getDate() > 15) return "";
+  const now = new Date();
+  if (now.getDate() > 15) return "";
   const loans = renewalLoansThisMonth();
   if (!loans.length) return "";
   const user = currentUser();
-  const todayStr = today();
-  const fmtDate = (d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  const isPassed = (l) => String(loanRenewalDate(l)) < todayStr;
+  const dueDay = renewalDueDay();
+  const dueLabel = new Date(now.getFullYear(), now.getMonth(), dueDay)
+    .toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const overdue = now.getDate() > dueDay;
 
   const mine = loans.filter(l => loanBelongsToMember(l, user));
   const others = loans.filter(l => !loanBelongsToMember(l, user));
 
   const myCards = mine.map(l => {
-    const date = fmtDate(loanRenewalDate(l));
     const ext = latestExtensionStatus(l.id);
-    const text = isPassed(l)
-      ? `The renewal date (${date}) has passed. Please repay your loan of ${money(loanOutstanding(l))} or request an extension.`
-      : `Your loan of ${money(loanOutstanding(l))} must be repaid or extended by ${date}.`;
+    const text = overdue
+      ? `The last date (${dueLabel}) has passed. Please repay your loan of ${money(loanOutstanding(l))} or request an extension.`
+      : `Your loan of ${money(loanOutstanding(l))} must be repaid or extended by ${dueLabel}.`;
     const actions = ext === "pending"
       ? `<p class="rn-status">⏳ Extension requested · waiting for admin</p>`
       : `${ext === "rejected" ? `<p class="rn-status rn-declined">Your last extension request was declined.</p>` : ""}
@@ -1006,18 +1016,19 @@ function renderRenewalBanners() {
   if (others.length) {
     const tags = (l) => {
       const out = [];
-      if (isPassed(l)) out.push(`<span class="rn-tag">date passed</span>`);
+      if (overdue) out.push(`<span class="rn-tag">overdue</span>`);
       if (isAdmin() && latestExtensionStatus(l.id) === "pending") out.push(`<span class="rn-tag rn-tag-blue">extension requested</span>`);
       return out.join("");
     };
     const body = others.length === 1
-      ? `<p class="rn-text">${escapeHtml(loanMemberName(others[0]))} has a loan of ${money(loanOutstanding(others[0]))} renewing on ${fmtDate(loanRenewalDate(others[0]))}. ${tags(others[0])}</p>`
+      ? `<p class="rn-text">${escapeHtml(loanMemberName(others[0]))} has a loan of ${money(loanOutstanding(others[0]))} due for renewal by ${dueLabel}. ${tags(others[0])}</p>`
       : others.map(l => `<div class="rn-row">
           <span class="rn-name">${escapeHtml(loanMemberName(l))}</span>
-          <span class="rn-meta">${money(loanOutstanding(l))} · ${fmtDate(loanRenewalDate(l))} ${tags(l)}</span>
+          <span class="rn-meta">${money(loanOutstanding(l))} ${tags(l)}</span>
         </div>`).join("");
     othersCard = `<div class="rn-card">
       <p class="rn-title">⏳ Loan renewals this month</p>
+      ${others.length > 1 ? `<p class="rn-text" style="margin-bottom:4px;">Due by ${dueLabel}</p>` : ""}
       ${body}
     </div>`;
   }
@@ -6429,11 +6440,21 @@ async function approveExtension(id, loanId) {
 
   const memberName = loanMemberName(loan);
   const loanOwner = state.members.find(m => loanBelongsToMember(loan, m));
+  const newRenewalMonth = fmtMonthLong(newRenewalStr.slice(0, 7));
   if (loanOwner) {
     await notifyMember(loanOwner.id,
       "loan_extension_approved",
       "Loan extension approved",
-      `Hi ${loanOwner.name.split(" ")[0]}, your loan of ${money(loan.amount)} has been extended. New renewal date: ${newRenewalStr}.`,
+      `Hi ${loanOwner.name.split(" ")[0]}, your loan of ${money(loanOutstanding(loan))} has been extended by one year. Next renewal: ${newRenewalMonth}.`,
+      loanId
+    );
+  }
+  // Let every other member know (SMS + push + in-app).
+  for (const m of state.members.filter(x => x.status === "active" && x.id !== loanOwner?.id)) {
+    await notifyMember(m.id,
+      "loan_extension_announcement",
+      "Loan extended",
+      `${memberName}'s loan of ${money(loanOutstanding(loan))} has been extended by one year (next renewal: ${newRenewalMonth}).`,
       loanId
     );
   }

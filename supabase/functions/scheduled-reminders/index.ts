@@ -9,7 +9,6 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const RENEWAL_NOTICE_DAYS = 30;
 // Test mode: reminders are created only for the President. Set false to go live.
 const TEST_MODE_ADMIN_ONLY = false;
 
@@ -63,21 +62,27 @@ serve(async (req) => {
     return new Response("availability reminders are not sent", { status: 200, headers: CORS });
   }
 
-  // ─── Loan renewal: once per loan, about 30 days before the renewal date ──
+  // ─── Loan renewal: loans renewing this month, due by the 10th (once per loan) ──
   if (type === "renewal") {
-    const today = ymd(now);
-    const until = ymd(new Date(now.getTime() + RENEWAL_NOTICE_DAYS * 24 * 60 * 60 * 1000));
+    const { data: rulesRow } = await supabase.from("settings").select("value").eq("id", "rules").single();
+    const dueDay = Number((rulesRow?.value as any)?.dueDay || 10);
+    const y = now.getUTCFullYear(), m = now.getUTCMonth();
+    const monthStart = ymd(new Date(Date.UTC(y, m, 1)));
+    const monthEnd = ymd(new Date(Date.UTC(y, m + 1, 0)));
+    const dueLabel = new Date(Date.UTC(y, m, dueDay))
+      .toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
     const { data: loans } = await supabase
       .from("current_loans")
-      .select("id, profile_id, principal, renewal_or_return_date")
+      .select("id, profile_id, principal, principal_paid, renewal_or_return_date, loan_type, notes")
       .eq("status", "active")
-      .gte("renewal_or_return_date", today)
-      .lte("renewal_or_return_date", until);
+      .gte("renewal_or_return_date", monthStart)
+      .lte("renewal_or_return_date", monthEnd);
 
     const remindSince = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
     let count = 0;
     for (const loan of loans || []) {
+      if (loan.loan_type === "emi" || loan.notes === "emi_entry") continue;   // EMI loans close by themselves
       const owner = profiles.find((p) => p.id === loan.profile_id);
       if (!owner || !allowed(owner)) continue;
       const { count: already } = await supabase
@@ -88,10 +93,9 @@ serve(async (req) => {
         .gte("created_at", remindSince);
       if ((already || 0) > 0) continue;
       const firstName = (owner.full_name || "Member").split(" ")[0];
-      const dueDateStr = new Date(loan.renewal_or_return_date)
-        .toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-      await notify(owner.id, "loan_renewal_reminder", "Loan renewal coming up",
-        `Hi ${firstName}, your loan of ${formatMoney(Number(loan.principal || 0))} is due for renewal on ${dueDateStr}. Open the app to repay or request an extension.`,
+      const owed = Math.max(0, Number(loan.principal || 0) - Number(loan.principal_paid || 0));
+      await notify(owner.id, "loan_renewal_reminder", "Loan renewal this month",
+        `Hi ${firstName}, your loan of ${formatMoney(owed)} is due for renewal this month. Please repay or request an extension by ${dueLabel} in the app.`,
         loan.id);
       count++;
     }

@@ -128,6 +128,7 @@ const SMS_TYPES = new Set([
   "loan_extension_approved", "loan_extension_rejected",
   "partial_repayment_approved", "loan_cleared", "emi_completed",
   "loan_requested", "loan_extension_requested",
+  "loan_extension_announcement",
 ]);
 const PUSH_TYPES = new Set([...SMS_TYPES, "partial_repayment_requested"]);
 
