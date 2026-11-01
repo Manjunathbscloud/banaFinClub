@@ -21,18 +21,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_lip_loan_month ON loan_interest_payments(l
 
 ALTER TABLE loan_interest_payments ENABLE ROW LEVEL SECURITY;
 
--- Admin (president) can read, insert, delete
-CREATE POLICY "lip_admin_select" ON loan_interest_payments FOR SELECT
+-- profiles.id is NOT the login id; the login id is profiles.auth_user_id.
+-- Admin (president): full access. Members: can read their own rows.
+CREATE POLICY "lip_admin_all" ON loan_interest_payments FOR ALL TO authenticated
   USING (EXISTS (
-    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'president'
-  ));
-
-CREATE POLICY "lip_admin_insert" ON loan_interest_payments FOR INSERT
+    SELECT 1 FROM profiles WHERE profiles.auth_user_id = auth.uid() AND profiles.role = 'president' AND profiles.status = 'active'
+  ))
   WITH CHECK (EXISTS (
-    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'president'
+    SELECT 1 FROM profiles WHERE profiles.auth_user_id = auth.uid() AND profiles.role = 'president' AND profiles.status = 'active'
   ));
 
-CREATE POLICY "lip_admin_delete" ON loan_interest_payments FOR DELETE
-  USING (EXISTS (
-    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'president'
-  ));
+CREATE POLICY "lip_member_select_own" ON loan_interest_payments FOR SELECT TO authenticated
+  USING (profile_id IN (SELECT id FROM profiles WHERE profiles.auth_user_id = auth.uid()));

@@ -7806,18 +7806,26 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
             .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry" && l.loanType !== "emi")
             .map(l => ({ loan: l, amount: loanInterestForMonth(l) }))
         : due.interestLoans;
+      // A failure here must not stop the bank statement and notification below.
+      let interestRecordFailed = false;
       for (const { loan, amount: interestAmt } of interestRows) {
         if (interestAmt > 0) {
-          await liveQuery(supabaseClient.from("loan_interest_payments").upsert({
-            loan_id: loan.id,
-            profile_id: memberId,
-            month,
-            amount: interestAmt,
-            paid_on: today(),
-            source: "monthly_payment",
-          }, { onConflict: "loan_id,month" }));
+          try {
+            await liveQuery(supabaseClient.from("loan_interest_payments").upsert({
+              loan_id: loan.id,
+              profile_id: memberId,
+              month,
+              amount: interestAmt,
+              paid_on: today(),
+              source: "monthly_payment",
+            }, { onConflict: "loan_id,month" }));
+          } catch (err) {
+            interestRecordFailed = true;
+            console.error("loan_interest_payments save failed:", err);
+          }
         }
       }
+      if (interestRecordFailed) showToast("Payment recorded, but the per-loan interest record could not be saved. Please tell the developer.");
     }
     // Auto-track and auto-close legacy emi_entry catch-up loans
     const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
