@@ -553,7 +553,11 @@ async function addLiveAudit(message, action = "activity") {
 
 async function insertStatement(type, amount, description, relatedId = null) {
   if (!liveBackendReady) return;
-  const lastBalance = state.statementRows[0]?.balance || 0;
+  // Read the newest balance from the database so the running balance stays right even when
+  // the data on screen is a little old (e.g. the reload now happens once, after all steps).
+  const { data: latest } = await supabaseClient.from("statements")
+    .select("balance").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const lastBalance = Number(latest?.balance ?? state.statementRows[0]?.balance ?? 0);
   const balance = type === "credit" ? lastBalance + amount : lastBalance - amount;
   const row = { date: today(), type, amount, description, balance, related_id: relatedId };
   await liveQuery(supabaseClient.from("statements").insert(row));
@@ -4922,7 +4926,19 @@ document.addEventListener("click", async (event) => {
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
     if (action.dataset.action === "show-mark-payment-modal") { showMarkPaymentModal(action.dataset.memberId); }
     if (action.dataset.action === "close-mark-payment-modal") { document.getElementById("mark-payment-modal")?.remove(); document.body.style.overflow = ""; }
-    if (action.dataset.action === "confirm-mark-paid") { action.disabled = true; await markPaymentPaid(action.dataset.memberId, action.dataset.month); document.getElementById("mark-payment-modal")?.remove(); document.body.style.overflow = ""; }
+    if (action.dataset.action === "confirm-mark-paid") {
+      // Close the window straight away; the save carries on and a toast confirms it.
+      action.disabled = true;
+      document.getElementById("mark-payment-modal")?.remove();
+      document.body.style.overflow = "";
+      showToast("Recording payment…");
+      try {
+        await markPaymentPaid(action.dataset.memberId, action.dataset.month);
+      } catch (err) {
+        console.error("mark paid failed:", err);
+        showToast("Could not record the payment. Please check your connection and try again.");
+      }
+    }
     if (action.dataset.action === "send-payment-reminder") { action.disabled = true; await sendPaymentReminder(); action.disabled = false; }
     if (action.dataset.action === "revoke-member") await revokeMemberAccess(action.dataset.id);
 
@@ -7759,13 +7775,33 @@ function showMarkPaymentModal(memberId) {
   document.body.style.overflow = "hidden";
 }
 
+// Payments being saved right now, so the same member+month cannot be recorded twice.
+const markPaidInFlight = new Set();
+
 async function markPaymentPaid(memberId, month = currentMonth()) {
   const member = memberById(memberId);
   if (!member) return;
+  const key = `${memberId}|${month}`;
+  if (markPaidInFlight.has(key)) { showToast(`${member.name}'s payment is already being recorded.`); return; }
+  if (state.monthlyPayments.some(p => p.memberId === memberId && p.month === month && p.status === "paid")) {
+    showToast(`${member.name} is already marked as paid for ${fmtMonthLong(month)}.`);
+    return;
+  }
+  markPaidInFlight.add(key);
+  try {
+    await markPaymentPaidSteps(member, memberId, month);
+  } finally {
+    markPaidInFlight.delete(key);
+  }
+}
+
+async function markPaymentPaidSteps(member, memberId, month) {
   const due = memberDueForMonth(member, month);
   const amount = due.total;
   if (liveBackendReady) {
     const split = due.isCurrent ? paymentSplit(member, month, amount) : due.split;
+
+    // 1. The payment itself. Everything else depends on this succeeding.
     await liveQuery(supabaseClient.from("monthly_payments").upsert({
       profile_id: memberId,
       month,
@@ -7776,15 +7812,27 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
       status: "paid",
       source: "manual",
     }, { onConflict: "profile_id,month" }));
-    await _silentResetAcks();
-    await loadLiveState();
-    // Auto-mark the current pending EMI for all EMI loans of this member
-    const emiLoans = state.loans.filter(l =>
-      l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member)
-    );
-    for (const loan of emiLoans) {
-      const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
-      if (nextEmi) {
+
+    // 2. Work out the follow-up writes from the data already loaded…
+    const emiWork = state.loans
+      .filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member))
+      .map(loan => ({ loan, nextEmi: state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending") }))
+      .filter(x => x.nextEmi);
+    const interestRows = month >= "2026-11"
+      ? (due.isCurrent
+          ? state.loans
+              .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry" && l.loanType !== "emi")
+              .map(l => ({ loan: l, amount: loanInterestForMonth(l) }))
+          : due.interestLoans
+        ).filter(x => x.amount > 0)
+      : [];
+    const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
+
+    // 3. …and run them together instead of one after another.
+    const followUps = [_silentResetAcks()];
+
+    for (const { loan, nextEmi } of emiWork) {
+      followUps.push((async () => {
         await liveQuery(supabaseClient.from("loan_emis").update({ status: "paid", paid_at: today() }).eq("id", nextEmi.id));
         const newEmisPaid = loan.emisPaid + 1;
         const allPaid = newEmisPaid >= loan.tenureMonths;
@@ -7796,55 +7844,58 @@ async function markPaymentPaid(memberId, month = currentMonth()) {
           showToast(`${loanMemberName(loan)} — all EMIs paid, loan closed!`);
           await notifyMember(memberId, "emi_completed", "EMI Loan fully paid! 🎉", `Congratulations ${member.name}! You have successfully completed all ${loan.tenureMonths} EMI payments. Your loan is now closed. Thank you!`);
         }
-      }
+      })());
     }
-    if (emiLoans.length > 0) await loadLiveState();
-    // Record per-loan interest in loan_interest_payments (from Year 7 / Nov 2026 onwards)
-    if (month >= "2026-11") {
-      const interestRows = due.isCurrent
-        ? state.loans
-            .filter(l => loanOpenIn(l, month) && !l.isInterestFree && loanBelongsToMember(l, member) && l.notes !== "emi_entry" && l.loanType !== "emi")
-            .map(l => ({ loan: l, amount: loanInterestForMonth(l) }))
-        : due.interestLoans;
-      // A failure here must not stop the bank statement and notification below.
-      let interestRecordFailed = false;
-      for (const { loan, amount: interestAmt } of interestRows) {
-        if (interestAmt > 0) {
-          try {
-            await liveQuery(supabaseClient.from("loan_interest_payments").upsert({
-              loan_id: loan.id,
-              profile_id: memberId,
-              month,
-              amount: interestAmt,
-              paid_on: today(),
-              source: "monthly_payment",
-            }, { onConflict: "loan_id,month" }));
-          } catch (err) {
-            interestRecordFailed = true;
-            console.error("loan_interest_payments save failed:", err);
-          }
-        }
-      }
-      if (interestRecordFailed) showToast("Payment recorded, but the per-loan interest record could not be saved. Please tell the developer.");
+
+    // Per-loan interest (from Year 7 / Nov 2026): one call for all loans. A failure here
+    // must not stop the bank statement and notification.
+    if (interestRows.length) {
+      followUps.push(
+        liveQuery(supabaseClient.from("loan_interest_payments").upsert(
+          interestRows.map(({ loan, amount: interestAmt }) => ({
+            loan_id: loan.id,
+            profile_id: memberId,
+            month,
+            amount: interestAmt,
+            paid_on: today(),
+            source: "monthly_payment",
+          })),
+          { onConflict: "loan_id,month" }
+        )).catch(err => {
+          console.error("loan_interest_payments save failed:", err);
+          showToast("Payment recorded, but the per-loan interest record could not be saved. Please tell the developer.");
+        })
+      );
     }
-    // Auto-track and auto-close legacy emi_entry catch-up loans
-    const legacyEmiLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member));
+
+    // Legacy catch-up EMI (emi_entry): count this payment and close it when complete.
     if (legacyEmiLoan) {
-      const newPaid = (legacyEmiLoan.emisPaid || 0) + 1;
-      const tenure = legacyEmiLoan.tenureMonths || 0;
-      const allDone = tenure > 0 && newPaid >= tenure;
-      await liveQuery(supabaseClient.from("current_loans").update({
-        emis_paid: newPaid,
-        ...(allDone ? { status: "clear", principal_paid: legacyEmiLoan.amount, closed_at: today() } : {}),
-      }).eq("id", legacyEmiLoan.id));
-      await loadLiveState();
-      if (allDone) {
-        showToast(`${member.name} — catch-up deposits complete, loan closed!`);
-        await notifyMember(memberId, "emi_completed", "Catch-up complete! 🎉", `Congratulations ${member.name}! You have completed all ${legacyEmiLoan.tenureMonths} catch-up payments. Your loan is now closed.`);
-      }
+      followUps.push((async () => {
+        const newPaid = (legacyEmiLoan.emisPaid || 0) + 1;
+        const tenure = legacyEmiLoan.tenureMonths || 0;
+        const allDone = tenure > 0 && newPaid >= tenure;
+        await liveQuery(supabaseClient.from("current_loans").update({
+          emis_paid: newPaid,
+          ...(allDone ? { status: "clear", principal_paid: legacyEmiLoan.amount, closed_at: today() } : {}),
+        }).eq("id", legacyEmiLoan.id));
+        if (allDone) {
+          showToast(`${member.name} — catch-up deposits complete, loan closed!`);
+          await notifyMember(memberId, "emi_completed", "Catch-up complete! 🎉", `Congratulations ${member.name}! You have completed all ${legacyEmiLoan.tenureMonths} catch-up payments. Your loan is now closed.`);
+        }
+      })());
     }
-    await insertStatement("credit", amount, `${member.name} credited · ${fmtMonthLong(month)} dues`);
-    await notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`);
+
+    followUps.push(insertStatement("credit", amount, `${member.name} credited · ${fmtMonthLong(month)} dues`));
+    followUps.push(notifyMember(memberId, "payment_confirmed", "Payment confirmed ✓", `Hi ${member.name}, your payment of ${money(amount)} for ${month} has been recorded successfully. Thank you!`));
+
+    const failed = (await Promise.allSettled(followUps)).filter(r => r.status === "rejected");
+    if (failed.length) {
+      console.error("mark-paid follow-up steps failed:", failed.map(r => r.reason));
+      showToast("Payment saved, but some steps failed. Pull down to refresh and check the statement.");
+    }
+
+    // 4. Reload once at the end.
+    await loadLiveState();
   } else {
     const existing = state.monthlyPayments.find((p) => p.memberId === memberId && p.month === month);
     if (existing) existing.status = "paid";
