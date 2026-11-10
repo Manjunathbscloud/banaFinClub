@@ -1,9 +1,10 @@
-const CACHE_NAME = "banakar-finclub-v432";
+const CACHE_NAME = "banakar-finclub-v433";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./game.js",
   "./config.js",
   "./manifest.json",
   "./icon.svg",

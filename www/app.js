@@ -743,6 +743,7 @@ async function loadLiveState() {
   initRealtimeChat();
   initPresence();
   touchLastSeen(true);
+  if (typeof initGameInvites === "function") initGameInvites();
   subscribeToPush();
 
   // Persist available loan amount so SQL cron notifications can read it
@@ -846,9 +847,12 @@ function expectedMonthlyDeposit(member, month = currentMonth()) {
 }
 
 function loanOutstanding(loan) {
-  if (loan.loanType === "emi") {
-    const principalPerEmi = loan.amount / (loan.tenureMonths || 1);
-    return Math.max(0, loan.amount - principalPerEmi * loan.emisPaid);
+  // EMI loans (new, and the older catch-up "emi_entry" one) go down by one EMI share per
+  // recorded payment; principal_paid is not updated by monthly payments for these.
+  if (loan.loanType === "emi" || loan.notes === "emi_entry") {
+    const tenure = loan.tenureMonths || (loan.notes === "emi_entry" ? 18 : 1);
+    const principalPerEmi = loan.amount / tenure;
+    return Math.max(0, loan.amount - principalPerEmi * Number(loan.emisPaid || 0));
   }
   return Math.max(0, Number(loan.amount) - Number(loan.principalPaid || 0));
 }
@@ -1951,6 +1955,7 @@ function renderHome() {
     { icon: "📒", title: "STATEMENT", sub: "Transaction history & balances", tab: "statement" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     { icon: "🖼️", title: "GALLERY", sub: `Club photos & memories · ${state.galleryPhotos.length} photo${state.galleryPhotos.length !== 1 ? "s" : ""}`, tab: "gallery" },
+    { icon: "🎮", title: "GAMES", sub: "Tic-Tac-Toe · 3 pieces · vs member or computer", action: "open-game" },
     isAdmin()
       ? { icon: "📅", title: "MEETINGS", sub: "Annual meeting records & photos", tab: "history" }
       : null,
@@ -4038,7 +4043,7 @@ function renderDashboard() {
           const emiLoan = currentLoanBookRows().find(l => loanBelongsToMember(l, m) && l.loanType === "emi" && l.status === "active");
           if (emiLoan) return { name: m.name, paid: emiLoan.emisPaid, total: emiLoan.tenureMonths, emi: emiLoan.emiAmount, outstanding: loanOutstanding(emiLoan) };
           const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && loanBelongsToMember(l, m) && l.status === "active");
-          if (legacyLoan) { const emi = Number(legacyLoan.emiAmount || 7445); const paid = legacyLoan.emisPaid || 0; const total = legacyLoan.tenureMonths || 18; return { name: m.name, paid, total, emi, outstanding: emi * Math.max(0, total - paid) }; }
+          if (legacyLoan) { const emi = Number(legacyLoan.emiAmount || 7445); const paid = legacyLoan.emisPaid || 0; const total = legacyLoan.tenureMonths || 18; return { name: m.name, paid, total, emi, outstanding: loanOutstanding(legacyLoan) }; }
           return null;
         }).filter(Boolean);
         if (!emiRows.length) return "";
@@ -4063,7 +4068,7 @@ function renderDashboard() {
         const paid = emiLoan ? emiLoan.emisPaid : (legacyLoan?.emisPaid || 0);
         const total = emiLoan ? emiLoan.tenureMonths : (legacyLoan?.tenureMonths || 18);
         const emiAmt = emiLoan ? emiLoan.emiAmount : Number(legacyLoan?.emiAmount || 7445);
-        const outstanding = emiLoan ? loanOutstanding(emiLoan) : emiAmt * Math.max(0, total - paid);
+        const outstanding = loanOutstanding(emiLoan || legacyLoan);
         return `
           <div class="card" style="margin-top:12px;">
             <div class="card-header"><div><h3>💳 Your EMI Loan</h3><p>Monthly repayment progress</p></div></div>
@@ -4849,6 +4854,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "open-settlement-doc") { event.preventDefault(); openSettlementDoc(); return; }
+  if (action.dataset.action === "open-game") { event.preventDefault(); if (typeof openGameLobby === "function") openGameLobby(); return; }
   if (action.dataset.action === "open-notifications") {
     await openNotifications();
     return;
@@ -5771,24 +5777,28 @@ function showLoanDetailModal(loanId) {
   const loanStart = (loan.from || "").slice(0, 7);
   const months = loanStart ? monthsBetween(loanStart, currentMonth()) : [];
   const monthlyInt = loanMonthlyInterest(loan);
-  const LIVE_CUTOFF = "2026-11"; // from Year 7 onwards: use loan_interest_payments table
+  const LIVE_CUTOFF = "2026-11"; // from Year 7 onwards regular loans use loan_interest_payments
+  // EMI loans have no separate interest record (the EMI is part of the monthly payment),
+  // so every month of an EMI loan is read from monthly_payments.
+  const isEmiLoan = loan.loanType === "emi" || loan.notes === "emi_entry";
+  const useInterestRecords = (mo) => mo >= LIVE_CUTOFF && !isEmiLoan;
+  const interestRecord = (mo) => state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
+  const paidViaMonthly = (mo) => Boolean(state.monthlyPayments.find(p =>
+    (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
+    p.month === mo && p.status === "paid"
+  ));
+  const isMonthPaid = (mo) => (useInterestRecords(mo) ? Boolean(interestRecord(mo)) : paidViaMonthly(mo));
 
   const rows = months.map(mo => {
     let intAmt = 0;
     let status = "pending";
 
-    if (mo >= LIVE_CUTOFF) {
-      // Year 7+: look up in loan_interest_payments table
-      const rec = state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
+    if (useInterestRecords(mo)) {
+      const rec = interestRecord(mo);
       if (rec) { intAmt = rec.amount; status = "paid"; }
       else if (mo < currentMonth()) status = "missed";
     } else {
-      // Year 6: derive from monthly_payments
-      const payment = state.monthlyPayments.find(p =>
-        (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
-        p.month === mo && p.status === "paid"
-      );
-      if (payment) { intAmt = monthlyInt; status = "paid"; }
+      if (paidViaMonthly(mo)) { intAmt = monthlyInt; status = "paid"; }
       else if (mo < currentMonth()) status = "missed";
     }
 
@@ -5808,16 +5818,9 @@ function showLoanDetailModal(loanId) {
       </div>`;
   }).join("");
 
-  const totalIntPaid = state.loanInterestPayments
-    .filter(p => p.loanId === loanId)
-    .reduce((s, p) => s + p.amount, 0) +
-    months.filter(mo => mo < LIVE_CUTOFF).reduce((s, mo) => {
-      const payment = state.monthlyPayments.find(p =>
-        (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
-        p.month === mo && p.status === "paid"
-      );
-      return s + (payment ? monthlyInt : 0);
-    }, 0);
+  const totalIntPaid = months.reduce((s, mo) => s + (useInterestRecords(mo)
+    ? Number(interestRecord(mo)?.amount || 0)
+    : (paidViaMonthly(mo) ? monthlyInt : 0)), 0);
 
   const partials = (state.loanPartialPayments || []).filter(p => p.loanId === loanId);
 
@@ -5826,21 +5829,8 @@ function showLoanDetailModal(loanId) {
   const extCount = (state.extensionRequests || []).filter(r => r.loanId === loanId && r.status === "approved").length;
   const pastYears = (state.loanHistory || []).filter(h => h.loanId === loanId);
 
-  const paidCount  = months.filter((mo, i) => {
-    if (mo >= LIVE_CUTOFF) return !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
-    return !!state.monthlyPayments.find(p =>
-      (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
-      p.month === mo && p.status === "paid"
-    );
-  }).length;
-  const missedCount = months.filter(mo => mo < currentMonth() && !(
-    mo >= LIVE_CUTOFF
-      ? !!state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo)
-      : !!state.monthlyPayments.find(p =>
-          (p.memberId === loan.memberId || (member && p.memberId === member.id)) &&
-          p.month === mo && p.status === "paid"
-        )
-  )).length;
+  const paidCount  = months.filter(isMonthPaid).length;
+  const missedCount = months.filter(mo => mo < currentMonth() && !isMonthPaid(mo)).length;
 
   const modal = document.createElement("div");
   modal.id = "loan-detail-modal";
