@@ -3592,9 +3592,11 @@ function showLoanYearModal(yearKey) {
       const extInfo = dueThisMonth ? loanExtensionStatus(loan.id) : null;
       const rowStatus = dueThisMonth ? "due" : loan.status;
       const memberName = loanMemberName(loan);
-      const intPerMo = loan.status === "active" ? loanMonthlyInterest(loan) : 0;
-      const outstanding = loanOutstanding(loan);
       const isEmiType = loan.loanType === "emi" || loan.notes === "emi_entry";
+      // EMI loans show their EMI (a deposit), not interest. Display only.
+      const intPerMo = loan.status !== "active" ? 0
+        : (isEmiType ? (Number(loan.emiAmount) || loanMonthlyInterest(loan)) : loanMonthlyInterest(loan));
+      const outstanding = loanOutstanding(loan);
 
       const statusBadgeHtml = dueThisMonth
         ? `<span class="badge warn">Due this month</span>`
@@ -3629,7 +3631,7 @@ function showLoanYearModal(yearKey) {
       const dotColor = dueThisMonth ? "#f59e0b" : loan.status === "clear" ? "#16a34a" : "#2563eb";
       const subParts = [
         `Due ${fmtMonthYearShort(loanRenewalDate(loan))}`,
-        intPerMo > 0 ? `${money(intPerMo)}/mo` : "",
+        intPerMo > 0 ? `${money(intPerMo)}/mo${isEmiType ? " EMI" : ""}` : "",
         isEmiType ? "EMI" : "",
         dueThisMonth ? "Due this month" : (loan.status === "clear" ? "Cleared" : ""),
       ].filter(Boolean);
@@ -3654,7 +3656,7 @@ function showLoanYearModal(yearKey) {
           </div>
           <div class="lc-amount-block">
             <span class="lc-amount">${money(loan.amount)}</span>
-            ${intPerMo > 0 ? `<span class="lc-int">${money(intPerMo)}/mo interest</span>` : ""}
+            ${intPerMo > 0 ? `<span class="lc-int">${money(intPerMo)}/mo ${isEmiType ? "EMI" : "interest"}</span>` : ""}
           </div>
         </div>
         <div class="lc-meta">
@@ -5776,11 +5778,13 @@ function showLoanDetailModal(loanId) {
 
   const loanStart = (loan.from || "").slice(0, 7);
   const months = loanStart ? monthsBetween(loanStart, currentMonth()) : [];
-  const monthlyInt = loanMonthlyInterest(loan);
   const LIVE_CUTOFF = "2026-11"; // from Year 7 onwards regular loans use loan_interest_payments
   // EMI loans have no separate interest record (the EMI is part of the monthly payment),
   // so every month of an EMI loan is read from monthly_payments.
   const isEmiLoan = loan.loanType === "emi" || loan.notes === "emi_entry";
+  // For EMI loans the monthly amount is the EMI, which counts as deposit, not interest (display only).
+  const monthlyInt = isEmiLoan ? (Number(loan.emiAmount) || loanMonthlyInterest(loan)) : loanMonthlyInterest(loan);
+  const emiTenure = loan.tenureMonths || (loan.notes === "emi_entry" ? 18 : 1);
   const useInterestRecords = (mo) => mo >= LIVE_CUTOFF && !isEmiLoan;
   const interestRecord = (mo) => state.loanInterestPayments.find(p => p.loanId === loanId && p.month === mo);
   const paidViaMonthly = (mo) => Boolean(state.monthlyPayments.find(p =>
@@ -5858,25 +5862,29 @@ function showLoanDetailModal(loanId) {
             <div style="font-size:16px;font-weight:800;color:${outstanding > 0 ? "#dc2626" : "#16a34a"};margin-top:2px;">${money(outstanding)}</div>
           </div>
           <div style="background:#f0fdf4;border-radius:10px;padding:10px 12px;">
-            <div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Int. Paid</div>
-            <div style="font-size:16px;font-weight:800;color:#16a34a;margin-top:2px;">${money(totalIntPaid)}</div>
+            <div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">${isEmiLoan ? "EMIs Paid" : "Int. Paid"}</div>
+            <div style="font-size:16px;font-weight:800;color:#16a34a;margin-top:2px;">${isEmiLoan ? `${Number(loan.emisPaid || 0)} / ${emiTenure}` : money(totalIntPaid)}</div>
           </div>
         </div>
 
         <!-- Loan meta row -->
         <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:14px;padding:10px 12px;background:var(--surface-alt,#f8fafc);border-radius:8px;">
+          ${isEmiLoan ? `
+          <span>EMI <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
+          <span>·</span>
+          <span>No interest · <strong style="color:var(--ink);">EMI counts as deposit</strong></span>` : `
           <span>Interest <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
           <span>·</span>
           <span>Rate <strong style="color:var(--ink);">${loan.interestRateMonthly}%/mo</strong></span>
           <span>·</span>
-          <span>Principal paid <strong style="color:var(--ink);">${money(loan.principalPaid)}</strong></span>
+          <span>Principal paid <strong style="color:var(--ink);">${money(loan.principalPaid)}</strong></span>`}
           ${extCount > 0 ? `<span>·</span><span>Extended <strong style="color:var(--ink);">${extCount} time${extCount > 1 ? "s" : ""}</strong></span>` : ""}
           ${loan.originalFrom && String(loan.originalFrom).slice(0, 10) !== String(loan.from || "").slice(0, 10) ? `<span>·</span><span>First taken <strong style="color:var(--ink);">${fmtMonthYearShort(loan.originalFrom)}</strong></span>` : ""}
         </div>
 
         <!-- Monthly interest history -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">Monthly Interest</h4>
+          <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">${isEmiLoan ? "Monthly EMI (deposit)" : "Monthly Interest"}</h4>
           <div style="display:flex;gap:6px;">
             <span style="font-size:11px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:600;">${paidCount} paid</span>
             ${missedCount > 0 ? `<span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:600;">${missedCount} missed</span>` : ""}
