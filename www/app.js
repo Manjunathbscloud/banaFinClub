@@ -1209,14 +1209,25 @@ function currentMonthPayment(memberId) {
   return state.monthlyPayments.find((payment) => payment.memberId === memberId && payment.month === currentMonth());
 }
 
-function memberEmiMonthly(member) {
+// The EMI a payment for `month` covers: the earliest unpaid EMI that is due by that month.
+// Mark Paid, the monthly due and the deposit/interest split all use this, so they always agree,
+// and an EMI that is already paid is never charged again (e.g. when a missed month is paid late).
+// Recorded payments keep their own stored split, so this is only used when recording.
+function emiRowForMonth(loan, month) {
+  return (state.loanEmis || [])
+    .filter(e => e.loanId === loan.id && e.status === "pending" && e.dueMonth <= month)
+    .sort((a, b) => a.emiNumber - b.emiNumber)[0] || null;
+}
+
+function memberEmiMonthly(member, month) {
+  const dueMonth = month || (currentMonth() < activeYearCutoffMonth() ? activeYearCutoffMonth() : currentMonth());
   // New generalised EMI loans (loan_type = 'emi')
   const emiLoans = state.loans.filter(l =>
     l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member)
   );
   const newEmi = emiLoans.reduce((sum, loan) => {
-    const nextEmi = state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending");
-    return sum + (nextEmi ? nextEmi.amount : 0);
+    const row = emiRowForMonth(loan, dueMonth);
+    return sum + (row ? Number(row.amount || 0) : 0);
   }, 0);
   // Legacy: Appanna's hardcoded EMI (notes === 'emi_entry')
   if (newEmi === 0) {
@@ -1263,7 +1274,7 @@ function memberDueForMonth(member, month) {
   state.loans
     .filter(l => l.loanType === "emi" && loanBelongsToMember(l, member) && loanExistedIn(l, month))
     .forEach(l => {
-      const row = state.loanEmis.find(e => e.loanId === l.id && e.dueMonth === month);
+      const row = emiRowForMonth(l, month);
       if (row) { emiPrincipal += Number(row.principalPart || 0); emiInterest += Number(row.interestPart || 0); }
     });
   const legacyLoan = state.loans.find(l => l.notes === "emi_entry" && l.status === "active" && loanBelongsToMember(l, member) && loanExistedIn(l, month));
@@ -1275,7 +1286,8 @@ function memberDueForMonth(member, month) {
   return {
     isCurrent: false,
     total: deposit + interest + emiPrincipal + emiInterest + legacyEmi,
-    split: { dep: deposit + emiPrincipal + legacyEmi, interest: interest + emiInterest },
+    // EMI principal is loan repayment, so it is left out of both deposit and interest.
+    split: { dep: deposit + legacyEmi, interest: interest + emiInterest },
     interestLoans,
   };
 }
@@ -1322,17 +1334,18 @@ function paymentSplit(mem, month, paidAmount) {
     return { dep: Math.max(0, paidAmount - interest), interest };
   }
 
-  // New EMI loans — keep existing logic (baseDep + emiPrincipal = deposit, rest = interest)
+  // New EMI loans: the EMI's principal part is loan repayment (it lowers the loan outstanding),
+  // so it is neither deposit nor interest. Deposit = the normal monthly deposit; interest = the rest.
   const emiLoans = state.loans.filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, mem) && loanExistedIn(l, month));
   if (emiLoans.length > 0) {
     const baseDep = expectedMonthlyDeposit(mem, month);
     let emiPrincipal = 0;
     for (const loan of emiLoans) {
-      const emiRow = state.loanEmis.find(e => e.loanId === loan.id && e.dueMonth === month);
+      const emiRow = emiRowForMonth(loan, month);
       if (emiRow) emiPrincipal += Number(emiRow.principalPart || 0);
     }
-    const dep = baseDep + emiPrincipal;
-    return { dep, interest: Math.max(0, paidAmount - dep) };
+    const dep = baseDep;
+    return { dep, interest: Math.max(0, paidAmount - dep - emiPrincipal) };
   }
 
   // Full loans: interest = exact monthly interest from loan records, deposit = everything else
@@ -5782,7 +5795,13 @@ function showLoanDetailModal(loanId) {
   // EMI loans have no separate interest record (the EMI is part of the monthly payment),
   // so every month of an EMI loan is read from monthly_payments.
   const isEmiLoan = loan.loanType === "emi" || loan.notes === "emi_entry";
-  // For EMI loans the monthly amount is the EMI, which counts as deposit, not interest (display only).
+  // Catch-up EMI (emi_entry): the EMI counts as deposit, no interest.
+  // New EMI loans: each EMI = principal (loan repayment) + interest, read from the loan_emis schedule.
+  const isLegacyEmi = loan.notes === "emi_entry";
+  const emiSchedule = loan.loanType === "emi" && !isLegacyEmi
+    ? (state.loanEmis || []).filter(e => e.loanId === loanId).sort((a, b) => a.emiNumber - b.emiNumber)
+    : [];
+  const isNewEmi = emiSchedule.length > 0;
   const monthlyInt = isEmiLoan ? (Number(loan.emiAmount) || loanMonthlyInterest(loan)) : loanMonthlyInterest(loan);
   const emiTenure = loan.tenureMonths || (loan.notes === "emi_entry" ? 18 : 1);
   const useInterestRecords = (mo) => mo >= LIVE_CUTOFF && !isEmiLoan;
@@ -5793,7 +5812,26 @@ function showLoanDetailModal(loanId) {
   ));
   const isMonthPaid = (mo) => (useInterestRecords(mo) ? Boolean(interestRecord(mo)) : paidViaMonthly(mo));
 
-  const rows = months.map(mo => {
+  const MON_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const emiStatus = (e) => e.status === "paid" ? "paid" : (e.dueMonth < currentMonth() ? "missed" : "pending");
+  const rows = isNewEmi ? emiSchedule.map(e => {
+    const status = emiStatus(e);
+    const [yr, mn] = String(e.dueMonth).split("-");
+    const dotColor = status === "paid" ? "#22c55e" : status === "missed" ? "#ef4444" : "#d1d5db";
+    const statusText = status === "paid" ? "Paid" : status === "missed" ? "Missed" : "Pending";
+    const statusColor = status === "paid" ? "#15803d" : status === "missed" ? "#b91c1c" : "#9ca3af";
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border,#f0f0f0);">
+        <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
+        <span style="width:22px;font-size:11px;color:var(--muted);font-weight:700;">${e.emiNumber}</span>
+        <span style="flex:1;font-size:13px;color:var(--ink);">${MON_SHORT[Number(mn)-1]} ${yr}</span>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">
+          <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:${status === "paid" ? "var(--ink)" : "var(--muted)"};">${money(e.amount)}</span>
+          <span style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;">P ${money(e.principalPart)} · I ${money(e.interestPart)}</span>
+        </span>
+        <span style="font-size:11px;font-weight:600;color:${statusColor};min-width:46px;text-align:right;">${statusText}</span>
+      </div>`;
+  }).join("") : months.map(mo => {
     let intAmt = 0;
     let status = "pending";
 
@@ -5822,9 +5860,13 @@ function showLoanDetailModal(loanId) {
       </div>`;
   }).join("");
 
-  const totalIntPaid = months.reduce((s, mo) => s + (useInterestRecords(mo)
-    ? Number(interestRecord(mo)?.amount || 0)
-    : (paidViaMonthly(mo) ? monthlyInt : 0)), 0);
+  const paidEmis = emiSchedule.filter(e => e.status === "paid");
+  const totalIntPaid = isNewEmi
+    ? paidEmis.reduce((s, e) => s + Number(e.interestPart || 0), 0)
+    : months.reduce((s, mo) => s + (useInterestRecords(mo)
+      ? Number(interestRecord(mo)?.amount || 0)
+      : (paidViaMonthly(mo) ? monthlyInt : 0)), 0);
+  const emiPrincipalRepaid = paidEmis.reduce((s, e) => s + Number(e.principalPart || 0), 0);
 
   const partials = (state.loanPartialPayments || []).filter(p => p.loanId === loanId);
 
@@ -5833,8 +5875,10 @@ function showLoanDetailModal(loanId) {
   const extCount = (state.extensionRequests || []).filter(r => r.loanId === loanId && r.status === "approved").length;
   const pastYears = (state.loanHistory || []).filter(h => h.loanId === loanId);
 
-  const paidCount  = months.filter(isMonthPaid).length;
-  const missedCount = months.filter(mo => mo < currentMonth() && !isMonthPaid(mo)).length;
+  const paidCount  = isNewEmi ? paidEmis.length : months.filter(isMonthPaid).length;
+  const missedCount = isNewEmi
+    ? emiSchedule.filter(e => emiStatus(e) === "missed").length
+    : months.filter(mo => mo < currentMonth() && !isMonthPaid(mo)).length;
 
   const modal = document.createElement("div");
   modal.id = "loan-detail-modal";
@@ -5862,17 +5906,24 @@ function showLoanDetailModal(loanId) {
             <div style="font-size:16px;font-weight:800;color:${outstanding > 0 ? "#dc2626" : "#16a34a"};margin-top:2px;">${money(outstanding)}</div>
           </div>
           <div style="background:#f0fdf4;border-radius:10px;padding:10px 12px;">
-            <div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">${isEmiLoan ? "EMIs Paid" : "Int. Paid"}</div>
-            <div style="font-size:16px;font-weight:800;color:#16a34a;margin-top:2px;">${isEmiLoan ? `${Number(loan.emisPaid || 0)} / ${emiTenure}` : money(totalIntPaid)}</div>
+            <div style="font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">${isLegacyEmi ? "EMIs Paid" : "Int. Paid"}</div>
+            <div style="font-size:16px;font-weight:800;color:#16a34a;margin-top:2px;">${isLegacyEmi ? `${Number(loan.emisPaid || 0)} / ${emiTenure}` : money(totalIntPaid)}</div>
           </div>
         </div>
 
         <!-- Loan meta row -->
         <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:14px;padding:10px 12px;background:var(--surface-alt,#f8fafc);border-radius:8px;">
-          ${isEmiLoan ? `
+          ${isLegacyEmi ? `
           <span>EMI <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
           <span>·</span>
-          <span>No interest · <strong style="color:var(--ink);">EMI counts as deposit</strong></span>` : `
+          <span>No interest · <strong style="color:var(--ink);">EMI counts as deposit</strong></span>` : isEmiLoan ? `
+          <span>EMI <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
+          <span>·</span>
+          <span>Rate <strong style="color:var(--ink);">${loan.interestRateMonthly}%/mo flat</strong></span>
+          <span>·</span>
+          <span>EMIs paid <strong style="color:var(--ink);">${Number(loan.emisPaid || 0)} of ${emiTenure}</strong></span>
+          <span>·</span>
+          <span>Principal repaid <strong style="color:var(--ink);">${money(emiPrincipalRepaid)}</strong></span>` : `
           <span>Interest <strong style="color:var(--ink);">${money(monthlyInt)}/mo</strong></span>
           <span>·</span>
           <span>Rate <strong style="color:var(--ink);">${loan.interestRateMonthly}%/mo</strong></span>
@@ -5884,7 +5935,7 @@ function showLoanDetailModal(loanId) {
 
         <!-- Monthly interest history -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">${isEmiLoan ? "Monthly EMI (deposit)" : "Monthly Interest"}</h4>
+          <h4 style="margin:0;font-size:13px;font-weight:700;color:var(--ink);">${isLegacyEmi ? "Monthly EMI (deposit)" : isNewEmi ? "EMI Schedule" : "Monthly Interest"}</h4>
           <div style="display:flex;gap:6px;">
             <span style="font-size:11px;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-weight:600;">${paidCount} paid</span>
             ${missedCount > 0 ? `<span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:20px;font-weight:600;">${missedCount} missed</span>` : ""}
@@ -6302,7 +6353,8 @@ async function approveLoan(id) {
     }).select("id").single());
     // Generate EMI schedule for EMI-type loans
     if (loanType === "emi" && loanRow?.id && tenure) {
-      const startMonth = currentMonth();
+      // First EMI is due the month after approval (like interest on a normal loan).
+      const startMonth = nextMonthKey(currentMonth());
       const [sy, sm] = startMonth.split("-").map(Number);
       const emiRows = Array.from({ length: tenure }, (_, i) => {
         const d = new Date(sy, sm - 1 + i);
@@ -7814,8 +7866,8 @@ async function markPaymentPaidSteps(member, memberId, month) {
     // 2. Work out the follow-up writes from the data already loaded…
     const emiWork = state.loans
       .filter(l => l.loanType === "emi" && l.status === "active" && loanBelongsToMember(l, member))
-      .map(loan => ({ loan, nextEmi: state.loanEmis.find(e => e.loanId === loan.id && e.status === "pending") }))
-      .filter(x => x.nextEmi);
+      .map(loan => ({ loan, nextEmi: emiRowForMonth(loan, month) }))
+      .filter(x => x.nextEmi && x.nextEmi.status === "pending");
     const interestRows = month >= "2026-11"
       ? (due.isCurrent
           ? state.loans
