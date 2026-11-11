@@ -3137,15 +3137,19 @@ html, body { overscroll-behavior-y: none; }
 /* ── Tic-Tac-Toe · 3 pieces ─────────────────────────────── */
 #ttt-overlay {
   position: fixed; inset: 0; z-index: 1200;
-  background: rgba(15, 23, 42, 0.55);
-  display: flex; align-items: flex-end; justify-content: center;
+  background: var(--panel, #fff);
+  display: flex; align-items: stretch; justify-content: center;
 }
+/* Full screen on phones; a centred column on wide screens. */
 .ttt-sheet {
-  width: 100%; max-width: 480px; max-height: 94vh; overflow-y: auto;
+  width: 100%; max-width: 520px; height: 100%; overflow-y: auto;
   background: var(--panel, #fff); color: var(--ink);
-  border-radius: 22px 22px 0 0;
-  padding: 12px 16px calc(22px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(22px + env(safe-area-inset-bottom, 0px));
 }
+.ttt-sheet .ttt-body { flex: 1; }
+/* Short screens (game, coin toss, waiting) sit in the middle of the page. */
+.ttt-body.view-game, .ttt-body.view-toss, .ttt-body.view-waiting { justify-content: center; }
 .ttt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .ttt-head h3 { flex: 1; margin: 0; text-align: center; font-size: 16px; font-weight: 800; }
 .ttt-icon, .ttt-icon-space { width: 34px; height: 34px; flex-shrink: 0; }
@@ -3199,7 +3203,7 @@ html, body { overscroll-behavior-y: none; }
 /* Wooden board, like the physical set */
 .ttt-board {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-  width: min(100%, 320px); aspect-ratio: 1 / 1; align-self: center;
+  width: min(100%, 380px); aspect-ratio: 1 / 1; align-self: center; margin: 6px 0;
   padding: 12px; border-radius: 18px;
   background: repeating-linear-gradient(90deg, #c98f55 0 6px, #c4894e 6px 9px, #cf9760 9px 14px);
   box-shadow: inset 0 0 0 3px #a8703c, 0 4px 14px rgba(0,0,0,.18);
@@ -3211,7 +3215,7 @@ html, body { overscroll-behavior-y: none; }
 }
 .ttt-cell.can { cursor: pointer; box-shadow: inset 0 3px 6px rgba(0,0,0,.35), 0 0 0 2px rgba(255,255,255,.55); }
 .ttt-cell.sel { box-shadow: inset 0 3px 6px rgba(0,0,0,.35), 0 0 0 3px #facc15; }
-.ttt-x { color: #6b2a1f; font-size: 46px; font-weight: 900; line-height: 1; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+.ttt-x { color: #6b2a1f; font-size: 58px; font-weight: 900; line-height: 1; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
 .ttt-o { width: 58%; aspect-ratio: 1 / 1; border-radius: 50%; border: 9px solid #2f5d3a; box-shadow: 0 2px 0 rgba(0,0,0,.25); }
 .ttt-x.sm { font-size: 15px; text-shadow: none; }
 .ttt-o.sm { width: 13px; border-width: 3px; box-shadow: none; display: inline-block; }

@@ -167,15 +167,29 @@ function tttRender() {
     waiting: tttWaitingHtml, toss: tttTossHtml, game: tttGameHtml, leaderboard: tttLeaderboardHtml };
   const body = (views[ttt.view] || tttLobbyHtml)();
   const inGame = ttt.view === "game" && ttt.game?.status === "active";
-  el.innerHTML = `
-    <div class="ttt-sheet" role="dialog" aria-label="Tic-Tac-Toe">
-      <div class="ttt-head">
+  const head = `
         ${["members", "cpu-setup", "leaderboard"].includes(ttt.view) ? `<button class="ttt-icon" data-ttt="back" aria-label="Back">‹</button>` : `<span class="ttt-icon-space"></span>`}
         <h3>🎮 Tic-Tac-Toe · 3 pieces</h3>
-        <button class="ttt-icon" data-ttt="${inGame ? "leave" : "close"}" aria-label="Close">✕</button>
-      </div>
-      <div class="ttt-body">${body}</div>
+        <button class="ttt-icon" data-ttt="${inGame ? "leave" : "close"}" aria-label="Close">✕</button>`;
+  // Keep the sheet itself and only swap its contents, so it doesn't flash or lose its scroll.
+  const sheet = el.querySelector(".ttt-sheet");
+  if (sheet) {
+    sheet.querySelector(".ttt-head").innerHTML = head;
+    sheet.querySelector(".ttt-body").innerHTML = body;
+    sheet.querySelector(".ttt-body").className = `ttt-body view-${ttt.view}`;
+  } else {
+    el.innerHTML = `
+    <div class="ttt-sheet" role="dialog" aria-label="Tic-Tac-Toe">
+      <div class="ttt-head">${head}</div>
+      <div class="ttt-body view-${ttt.view}">${body}</div>
     </div>`;
+  }
+  tttUpdateClocks();
+}
+
+// What the board shows; used to skip redraws when an update changes nothing visible.
+function tttSig(g) {
+  return g ? JSON.stringify([g.status, g.turn, g.board, g.missed_x, g.missed_o, g.winner, g.player_x, g.player_o]) : "";
 }
 
 function tttLobbyHtml() {
@@ -468,6 +482,7 @@ function tttLeaveGameChannel() {
 function tttOnGameUpdate(row) {
   if (!ttt.game || row.id !== ttt.game.id) return;
   const wasWaiting = ttt.game.status === "invited";
+  const prevSig = tttSig(ttt.game);
   ttt.game = row;
   if (row.status === "declined" || row.status === "expired") {
     if (ttt.view === "waiting") {
@@ -486,8 +501,10 @@ function tttOnGameUpdate(row) {
     setTimeout(() => { if (ttt.game?.id === row.id) { ttt.view = "game"; tttRender(); } }, 1800);
     return;
   }
-  if (row.status === "finished") { ttt.selected = null; tttLoadStats(); }
-  if (ttt.view === "game") tttRender();
+  if (row.status === "finished" && prevSig !== tttSig(row)) { ttt.selected = null; }
+  if (row.status === "finished") tttLoadStats();
+  // The same move arrives twice (our save + the live echo): redraw only if something changed.
+  if (ttt.view === "game" && tttSig(row) !== prevSig) tttRender();
 }
 
 // One update per move, guarded by turn_started_at so a late or duplicate write is ignored.
@@ -544,12 +561,21 @@ async function tttTapCell(i) {
     return tttMaybeCpuMove();
   }
 
-  await tttWrite(g, {
+  const patch = {
     board, turn: tttOther(my), move_count: (g.move_count || 0) + 1,
     [my === "X" ? "missed_x" : "missed_o"]: 0,
     turn_started_at: tttIso(),
     ...(won ? { status: "finished", winner: my, end_reason: "three_in_row" } : {}),
-  });
+  };
+  // Show the move straight away; save it in the background.
+  ttt.game = { ...g, ...patch };
+  tttRender();
+  const saved = await tttWrite(g, patch);
+  if (!saved) {
+    const { data } = await supabaseClient.from("ttt_games").select("*").eq("id", g.id).maybeSingle();
+    if (data && ttt.game?.id === g.id) { ttt.game = tttParse(data); tttRender(); }
+    showToast("That move didn't go through. Please try again.");
+  }
 }
 
 // ── Clock: turn time, game time, invite expiry ────────────────────────────
