@@ -22,19 +22,27 @@ const CORS = {
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-async function sendSms(phone: string, message: string) {
-  if (!TEXTBEE_API_KEY || !TEXTBEE_DEVICE_ID) return "not_configured";
+// Returns TextBee's own answer so the admin can see why an SMS did not go out.
+async function sendSms(phone: string, message: string): Promise<{ sms: string; sms_detail: string }> {
+  if (!TEXTBEE_API_KEY || !TEXTBEE_DEVICE_ID) return { sms: "failed", sms_detail: "SMS is not set up on the server (TextBee secrets missing)." };
   try {
     const res = await fetch(`https://api.textbee.dev/api/v1/gateway/devices/${TEXTBEE_DEVICE_ID}/send-sms`, {
       method: "POST",
       headers: { "x-api-key": TEXTBEE_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ recipients: [`+91${phone}`], message }),
     });
-    return res.ok ? "sent" : `failed_${res.status}`;
-  } catch (_) {
-    return "failed";
+    const text = (await res.text()).slice(0, 300);
+    console.log(`add-demo-user sms ${res.status}: ${text}`);
+    return { sms: res.ok ? "sent" : "failed", sms_detail: `TextBee ${res.status}: ${text}` };
+  } catch (err) {
+    return { sms: "failed", sms_detail: `Could not reach TextBee: ${String((err as Error)?.message || err)}` };
   }
 }
+
+const loginSms = (realName: string, phone: string, pwd: string) =>
+  `BanakarFinClub\nHi ${realName.split(" ")[0]}, you have been added as a guest (demo) user.\n` +
+  `App: ${APP_URL}\nUser ID: ${phone}\nPassword: ${pwd}\n` +
+  `You can view the app and play games.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -52,8 +60,24 @@ serve(async (req) => {
       return json(403, { error: "Only the admin can add demo users." });
     }
 
+    const payload = await req.json();
+
+    // Resend: set a new password for an existing demo user and text it again.
+    if (payload.mode === "resend") {
+      const pwd = String(payload.password || "");
+      if (pwd.length < 6) return json(400, { error: "Password must be at least 6 characters." });
+      const { data: prof } = await db.from("profiles").select("id, phone, status, auth_user_id")
+        .eq("id", payload.profile_id).maybeSingle();
+      if (!prof || prof.status !== "demo" || !prof.auth_user_id) return json(404, { error: "Demo user not found." });
+      const { data: demo } = await db.from("demo_accounts").select("real_name").eq("profile_id", prof.id).maybeSingle();
+      const { error: pwErr } = await db.auth.admin.updateUserById(prof.auth_user_id, { password: pwd });
+      if (pwErr) return json(500, { error: `Could not set the new password: ${pwErr.message}` });
+      const result = await sendSms(prof.phone, loginSms(demo?.real_name || "there", prof.phone, pwd));
+      return json(200, { ok: true, ...result });
+    }
+
     // 2. Check the details.
-    const { name, phone, password } = await req.json();
+    const { name, phone, password } = payload;
     const realName = String(name || "").trim();
     const normalized = String(phone || "").replace(/\D/g, "").slice(-10);
     const pwd = String(password || "");
@@ -115,13 +139,9 @@ serve(async (req) => {
     });
 
     // 5. Text the login details. The account is created even if the SMS fails.
-    const firstName = realName.split(" ")[0];
-    const sms = await sendSms(normalized,
-      `🏦 BanakarFinClub\nHi ${firstName}, you have been added as a guest (demo) user.\n` +
-      `App: ${APP_URL}\nUser ID: ${normalized}\nPassword: ${pwd}\n` +
-      `You can view the app and play games.`);
+    const result = await sendSms(normalized, loginSms(realName, normalized, pwd));
 
-    return json(200, { ok: true, demo_number: demoNumber, sms });
+    return json(200, { ok: true, demo_number: demoNumber, ...result });
   } catch (err) {
     console.error("add-demo-user error:", err);
     return json(500, { error: String((err as Error)?.message || err) });

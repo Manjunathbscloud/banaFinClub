@@ -551,7 +551,7 @@ function isDemoUser() {
 const DEMO_VIEW_ONLY_MSG = "Demo account: view only. You can browse and play games.";
 const DEMO_BLOCKED_ACTIONS = new Set([
   "acknowledge-financial", "acknowledge-records", "approve-extension", "approve-loan", "approve-partial-repayment",
-  "approve-signup", "open-add-demo-user", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
+  "approve-signup", "open-add-demo-user", "resend-demo-sms", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
   "confirm-close-year", "confirm-gallery-upload", "confirm-mark-paid", "delete-current-loan", "delete-gallery-photo",
   "delete-meeting-photo", "delete-rule", "edit-rule", "save-rule", "open-ai-chat", "send-ai-message", "open-chat",
   "send-chat", "open-financial-signoff", "open-meeting-signoff", "toggle-financial-signoff", "toggle-meeting-signoff",
@@ -3870,6 +3870,7 @@ function renderMembers() {
               </div>
               <div class="member-actions">
                 ${statusBadge(member.status)}
+                ${isAdmin() && member.isDemo ? `<button class="secondary" data-action="resend-demo-sms" data-id="${member.id}" type="button">Resend SMS</button>` : ""}
                 ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
               </div>
             </div>
@@ -4986,6 +4987,7 @@ document.addEventListener("click", async (event) => {
   try {
     if (action.dataset.action === "approve-signup") await approveSignup(action.dataset.id);
     if (action.dataset.action === "open-add-demo-user") showAddDemoUserModal();
+    if (action.dataset.action === "resend-demo-sms") await resendDemoSms(action.dataset.id);
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
@@ -6389,9 +6391,31 @@ async function addDemoUser(data) {
   document.getElementById("add-demo-modal")?.remove();
   await loadLiveState();
   render();
-  showToast(res?.sms === "sent"
-    ? `${name} added as Demo ${res.demo_number}. SMS sent.`
-    : `${name} added as Demo ${res?.demo_number}, but the SMS could not be sent. Share the login details yourself.`);
+  if (res?.sms === "sent") showToast(`${name} added as Demo ${res.demo_number}. SMS sent.`);
+  else window.alert(`${name} was added as Demo ${res?.demo_number}, but the SMS was not sent.\n\nReason: ${res?.sms_detail || "unknown"}\n\nShare the login details yourself, or use "Resend SMS" in the Members list.`);
+}
+
+// Admin: set a new password for a demo user and text the login details again.
+async function resendDemoSms(profileId) {
+  const m = memberById(profileId);
+  if (!isAdmin() || !liveBackendReady || !m?.isDemo) return;
+  const letters = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const suggested = Array.from({ length: 8 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+  const pwd = window.prompt(`Send login SMS again to ${m.name} (${m.phone})?\n\nThis sets a NEW password. Keep or change it:`, suggested);
+  if (pwd === null) return;
+  if (pwd.trim().length < 6) { showToast("Password must be at least 6 characters."); return; }
+  showToast("Sending…");
+  const { data: res, error } = await supabaseClient.functions.invoke("add-demo-user", {
+    body: { mode: "resend", profile_id: profileId, password: pwd.trim() },
+  });
+  if (error) {
+    let msg = "Could not resend the SMS.";
+    try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; } catch (_) {}
+    window.alert(msg);
+    return;
+  }
+  if (res?.sms === "sent") showToast(`New password set and SMS sent to ${m.name}.`);
+  else window.alert(`New password is set, but the SMS was not sent.\n\nReason: ${res?.sms_detail || "unknown"}\n\nNew password: ${pwd.trim()}`);
 }
 
 async function rejectSignup(id) {
