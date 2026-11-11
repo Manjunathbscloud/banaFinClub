@@ -6334,46 +6334,64 @@ function showAddDemoUserModal() {
   const suggested = Array.from({ length: 8 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
   const modal = document.createElement("div");
   modal.id = "add-demo-modal";
-  modal.className = "rules-modal-overlay";
+  modal.className = "demo-add-overlay";
   modal.innerHTML = `
-    <div class="rules-modal-sheet" style="max-width:460px;">
-      <div class="rules-modal-header">
+    <div class="demo-add-dialog" role="dialog" aria-modal="true" aria-labelledby="demo-add-title">
+      <div class="demo-add-head">
         <div>
-          <h3 style="margin:0;font-size:15px;font-weight:700;">Add demo user</h3>
-          <p style="margin:3px 0 0;font-size:12px;color:var(--muted);">View only + games. Members will see them as "Demo".</p>
+          <h3 id="demo-add-title">Add demo user</h3>
+          <p>They can view the app and play games. Members see them as "Demo".</p>
         </div>
-        <button class="rules-modal-close" type="button" data-close-demo>✕</button>
+        <button class="demo-add-close" type="button" data-close-demo aria-label="Close">✕</button>
       </div>
-      <form data-form="add-demo-user" class="form-grid" style="padding:14px 16px 22px;display:grid;gap:12px;">
-        <label>Full name<input id="demo-name" name="name" required autocomplete="off" placeholder="Their real name" /></label>
-        <label>Mobile number (their user ID)<input id="demo-phone" name="phone" required inputmode="numeric" maxlength="10" placeholder="10-digit mobile number" /></label>
-        <label>Password<input id="demo-password" name="password" required minlength="6" value="${suggested}" autocomplete="off" /></label>
-        <p style="margin:0;font-size:12px;color:var(--muted);">They will get an SMS with the app link, user ID and this password.</p>
-        <button class="primary" type="submit">Add user &amp; send SMS</button>
+      <form data-form="add-demo-user" class="demo-add-form" novalidate>
+        <label class="field"><span>Full name</span>
+          <input id="demo-name" name="name" type="text" required autocomplete="off" placeholder="Their real name" /></label>
+        <label class="field"><span>Mobile number (user ID)</span>
+          <input id="demo-phone" name="phone" type="tel" inputmode="numeric" maxlength="10" required placeholder="10-digit number" /></label>
+        <label class="field"><span>Password</span>
+          <input id="demo-password" name="password" type="text" required minlength="6" autocomplete="off" value="${suggested}" /></label>
+        <p class="demo-add-note">An SMS with the app link, user ID and password is sent to this number.</p>
+        <p class="demo-add-error" id="demo-add-error" role="alert" hidden></p>
+        <div class="demo-add-actions">
+          <button class="secondary" type="button" data-close-demo>Cancel</button>
+          <button class="primary" type="submit">Add &amp; send SMS</button>
+        </div>
       </form>
     </div>`;
   document.body.appendChild(modal);
   const close = () => modal.remove();
-  modal.querySelector("[data-close-demo]").addEventListener("click", close);
+  modal.querySelectorAll("[data-close-demo]").forEach((b) => b.addEventListener("click", close));
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  setTimeout(() => modal.querySelector("#demo-name")?.focus(), 50);
 }
 
 async function addDemoUser(data) {
   if (!isAdmin() || !liveBackendReady) return;
+  const errBox = document.getElementById("demo-add-error");
+  const showErr = (msg) => { if (errBox) { errBox.textContent = msg; errBox.hidden = false; } throw new Error(msg); };
+  if (errBox) errBox.hidden = true;
+  const name = String(data.name || "").trim();
+  const phone = String(data.phone || "").replace(/\D/g, "").slice(-10);
+  const password = String(data.password || "");
+  if (!name) showErr("Enter the person's name.");
+  if (!/^[6-9]\d{9}$/.test(phone)) showErr("Enter a valid 10-digit mobile number.");
+  if (password.length < 6) showErr("Password must be at least 6 characters.");
+
   const { data: res, error } = await supabaseClient.functions.invoke("add-demo-user", {
-    body: { name: data.name, phone: data.phone, password: data.password },
+    body: { name, phone, password },
   });
   if (error) {
-    let msg = error.message || "Could not add the demo user.";
-    try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; } catch (_) {}
-    throw new Error(msg);
+    let msg = "Could not add the demo user. Please try again.";
+    try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; else if (body?.message) msg = body.message; } catch (_) {}
+    showErr(msg);
   }
   document.getElementById("add-demo-modal")?.remove();
   await loadLiveState();
   render();
   showToast(res?.sms === "sent"
-    ? `${data.name} added as Demo ${res.demo_number}. SMS sent.`
-    : `${data.name} added as Demo ${res?.demo_number}, but the SMS could not be sent. Share the login details yourself.`);
+    ? `${name} added as Demo ${res.demo_number}. SMS sent.`
+    : `${name} added as Demo ${res?.demo_number}, but the SMS could not be sent. Share the login details yourself.`);
 }
 
 async function rejectSignup(id) {

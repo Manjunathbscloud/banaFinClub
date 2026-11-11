@@ -79,3 +79,10 @@ SELECT tablename, policyname, permissive, cmd
 FROM pg_policies
 WHERE schemaname = 'public' AND (policyname LIKE 'demo%' OR policyname = 'ttt_insert_demo')
 ORDER BY tablename, policyname;
+
+-- 7. (Added after first test) Allow the new "demo" status on profiles.
+--    The existing check only allowed pending/active/rejected/disabled/exited,
+--    so creating a demo user was refused and rolled back.
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_status_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_status_check
+  CHECK (status IN ('pending', 'active', 'rejected', 'disabled', 'exited', 'demo'));
