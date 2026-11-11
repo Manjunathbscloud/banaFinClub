@@ -210,9 +210,16 @@ function tttLobbyHtml() {
     </div>`;
 }
 
+// Everyone who can play: active members plus demo users. Demo users show as "Demo N" to
+// members (that is their profile name); the admin's app shows their real name.
+function tttPlayers() {
+  const pool = state.allMembers?.length ? state.allMembers : state.members;
+  return pool.filter((m) => m.status === "active" || m.status === "demo");
+}
+
 function tttMembersHtml() {
   const me = currentProfileId();
-  const others = state.members.filter((m) => m.status === "active" && m.id !== me);
+  const others = tttPlayers().filter((m) => m.id !== me);
   const online = others.filter((m) => isMemberOnline(m.id));
   const offline = others.filter((m) => !isMemberOnline(m.id));
   const row = (m, on) => `
@@ -323,7 +330,7 @@ function tttGameHtml() {
 }
 
 function tttLeaderboardHtml() {
-  const rows = state.members.filter((m) => m.status === "active").map((m) => ({ m, r: tttRecord(m.id) }))
+  const rows = tttPlayers().map((m) => ({ m, r: tttRecord(m.id) }))
     .filter((x) => x.r.w + x.r.d + x.r.l > 0)
     .sort((a, b) => b.r.w - a.r.w || b.r.d - a.r.d || a.r.l - b.r.l);
   if (!ttt.stats) return `<p class="ttt-muted">Loading…</p>`;

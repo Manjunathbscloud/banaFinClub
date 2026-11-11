@@ -397,6 +397,7 @@ function liveProfileToMember(profile) {
     nomineePhone: profile.nominee_phone || "",
     dob: profile.dob || "",
     lastSeenAt: profile.last_seen_at || null,
+    isDemo: profile.status === "demo",
   };
 }
 
@@ -542,8 +543,28 @@ function currentProfileId() {
   return state.currentUserId;
 }
 
+// Demo account: can view the app and play games, nothing else.
+function isDemoUser() {
+  const u = currentUser();
+  return Boolean(u && u.status === "demo");
+}
+const DEMO_VIEW_ONLY_MSG = "Demo account: view only. You can browse and play games.";
+const DEMO_BLOCKED_ACTIONS = new Set([
+  "acknowledge-financial", "acknowledge-records", "approve-extension", "approve-loan", "approve-partial-repayment",
+  "approve-signup", "open-add-demo-user", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
+  "confirm-close-year", "confirm-gallery-upload", "confirm-mark-paid", "delete-current-loan", "delete-gallery-photo",
+  "delete-meeting-photo", "delete-rule", "edit-rule", "save-rule", "open-ai-chat", "send-ai-message", "open-chat",
+  "send-chat", "open-financial-signoff", "open-meeting-signoff", "toggle-financial-signoff", "toggle-meeting-signoff",
+  "toggle-meeting-editor", "pay-now", "record-partial-payment", "submit-partial-payment", "reject-extension",
+  "reject-loan", "reject-partial-repayment", "reject-signup", "request-extension", "request-partial-repayment",
+  "submit-partial-repayment-request", "revoke-member", "save-meeting-decisions", "save-meeting-expense",
+  "save-meeting-notes", "send-payment-reminder", "show-mark-payment-modal", "test-meeting-summary", "test-notif",
+  "toggle-emi", "toggle-notifications-for-all", "toggle-partial-repayment", "toggle-year-close", "open-settlement-doc",
+  "share-summary",
+]);
+
 async function addLiveAudit(message, action = "activity") {
-  if (!liveBackendReady || !currentProfileId()) return;
+  if (!liveBackendReady || !currentProfileId() || isDemoUser()) return;
   await liveQuery(supabaseClient.from("audit_logs").insert({
     actor_profile_id: currentProfileId(),
     action,
@@ -640,8 +661,23 @@ async function loadLiveState() {
 
   const settingsById = Object.fromEntries(settingsRows.map((row) => [row.id, row.value]));
   const current = profiles.find((profile) => profile.auth_user_id === authData.user.id);
+  // Demo users (status "demo") can log in to view the app and play games. They are not
+  // "active", so every member count, due, deposit, reminder and report leaves them out.
+  const loggedIn = Boolean(current && (current.status === "active" || current.status === "demo"));
+  const viewerIsAdmin = Boolean(current && current.role === "president" && current.status === "active");
+  // Real names of demo users live in an admin-only table; members only ever see "Demo N".
+  const demoRows = viewerIsAdmin
+    ? await liveOptionalList(supabaseClient.from("demo_accounts").select("profile_id,real_name,demo_number"))
+    : [];
+  const demoNames = new Map(demoRows.map((r) => [r.profile_id, r]));
+  const toMember = (profile) => {
+    const m = liveProfileToMember(profile);
+    const d = demoNames.get(profile.id);
+    if (m.isDemo && d?.real_name) { m.demoLabel = m.name; m.name = d.real_name; }
+    return m;
+  };
   // Notifications were fetched with a stale null currentUserId; re-fetch with the resolved id
-  if (current?.id && current.status === "active") {
+  if (current?.id && loggedIn) {
     const freshNotifs = await liveOptionalList(
       supabaseClient.from("notifications").select("*")
         .eq("profile_id", current.id)
@@ -651,9 +687,10 @@ async function loadLiveState() {
   }
   const visibleProfiles = profiles.filter((profile) => {
     if (profile.id === current?.id) return true;
+    if (profile.status === "demo" && !viewerIsAdmin) return false; // demo users are hidden from members (except in games)
     return profile.auth_user_id && !["rejected", "disabled", "exited"].includes(profile.status);
   });
-  const members = visibleProfiles.map(liveProfileToMember);
+  const members = visibleProfiles.map(toMember);
   state = {
     ...structuredClone(initialState),
     ...prefs,
@@ -672,9 +709,9 @@ async function loadLiveState() {
       monthlyDeposit: Number(settingsById.monthly_deposit?.amount ?? settingsById.active_year_info?.monthlyDeposit ?? 2000),
       annualReportSentYear: Number(settingsById.annual_report_status?.value?.annualReportSentYear || 0),
     },
-    currentUserId: current?.status === "active" ? current.id : null,
+    currentUserId: loggedIn ? current.id : null,
     members,
-    allMembers: profiles.map(liveProfileToMember),
+    allMembers: profiles.map(toMember),
     signupRequests: profiles
       .filter((profile) => profile.status === "pending" && profile.auth_user_id)
       .map((profile) => ({ id: profile.id, name: profile.full_name, phone: profile.phone, date: String(profile.created_at || "").slice(0, 10) })),
@@ -732,7 +769,7 @@ async function loadLiveState() {
 
   // Cache identity + MPIN hash locally so the MPIN lock can greet the member on
   // next open even before the live session is restored.
-  const activeUser = current?.status === "active" ? state.members.find((m) => m.id === current.id) : null;
+  const activeUser = loggedIn ? state.members.find((m) => m.id === current.id) : null;
   if (activeUser?.mpinHash) saveMpinIdentity(activeUser);
 
   // Clear payInitiated flag if this user's current month payment is already paid
@@ -744,6 +781,7 @@ async function loadLiveState() {
   initPresence();
   touchLastSeen(true);
   if (typeof initGameInvites === "function") initGameInvites();
+  if (isDemoUser()) return; // view only: no push subscription, no settings writes
   subscribeToPush();
 
   // Persist available loan amount so SQL cron notifications can read it
@@ -834,6 +872,7 @@ function roleLabel(role) {
 }
 
 function expectedMonthlyDeposit(member, month = currentMonth()) {
+  if (member?.status === "demo") return 0; // demo users are not club members
   const monthNumber = Number(month.slice(5, 7));
   let base;
   if (monthNumber !== 12) base = state.settings.monthlyDeposit;
@@ -1528,7 +1567,7 @@ function render() {
             ${memberAvatarHtml(user)}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
-              <span>${escapeHtml(roleLabel(user.role))}</span>
+              <span>${escapeHtml(user.status === "demo" ? "Demo · view only" : roleLabel(user.role))}</span>
               <span style="font-size:10px;color:#F59E0B;letter-spacing:0.2px;">Edit Profile ›</span>
             </div>
           </div>
@@ -3807,7 +3846,7 @@ function showLoanYearModal(yearKey) {
 function renderMembers() {
   const rows = state.members;
   return `
-    <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2>${liveBackendReady ? `<p class="online-summary"><span class="presence-dot-inline"></span><span id="online-summary">${onlineSummaryText()}</span></p>` : ""}</section>
+    <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2>${isAdmin() && liveBackendReady ? `<button class="primary small" data-action="open-add-demo-user" type="button" style="margin-top:8px;">＋ Add demo user</button>` : ""}${liveBackendReady ? `<p class="online-summary"><span class="presence-dot-inline"></span><span id="online-summary">${onlineSummaryText()}</span></p>` : ""}</section>
     <section class="card">
       <div class="card-body row-list">
         ${rows.map((member) => `
@@ -3818,12 +3857,12 @@ function renderMembers() {
                 <span class="presence-dot" aria-hidden="true"></span>
               </span>
               <div style="min-width:0;flex:1;">
-                <strong>${escapeHtml(member.name)}</strong>
+                <strong>${escapeHtml(member.name)}</strong>${member.demoLabel ? ` <small style="color:var(--muted);font-weight:500;">(${escapeHtml(member.demoLabel)})</small>` : ""}
                 <span>
-                  ${escapeHtml(member.phone)} · ${escapeHtml(roleLabel(member.role))}
+                  ${isDemoUser() ? "" : `${escapeHtml(member.phone)} · `}${escapeHtml(member.isDemo ? "Demo · view only" : roleLabel(member.role))}
                   ${isAdmin() ? `<button type="button" data-action="change-phone" data-id="${member.id}" data-name="${escapeHtml(member.name)}" data-phone="${escapeHtml(member.phone)}" style="font-size:11px;padding:2px 7px;margin-left:6px;min-height:0;vertical-align:middle;background:var(--bg2,#F3F4F6);border:1px solid var(--border,#E5E7EB);border-radius:4px;cursor:pointer;color:var(--muted);">✏️</button>` : ""}
                 </span>
-                ${liveBackendReady && member.status === "active" ? `<span class="presence-text${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">${isMemberOnline(member.id) ? "Online now" : lastSeenLabel(member.lastSeenAt)}</span>` : ""}
+                ${liveBackendReady && (member.status === "active" || member.isDemo) ? `<span class="presence-text${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">${isMemberOnline(member.id) ? "Online now" : lastSeenLabel(member.lastSeenAt)}</span>` : ""}
                 ${member.id === currentProfileId() && liveBackendReady ? `
                   <label class="change-photo-link" for="member-avatar-input">📷 Change photo</label>
                   <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
@@ -4558,6 +4597,10 @@ document.addEventListener("click", async (event) => {
 
   const action = event.target.closest("[data-action]");
   if (!action) return;
+  if (isDemoUser() && DEMO_BLOCKED_ACTIONS.has(action.dataset.action)) {
+    showToast(DEMO_VIEW_ONLY_MSG);
+    return;
+  }
 
   // If the resolved action element is a modal overlay, only fire when the user
   // clicked the dark background itself or an explicit ✕ close button —
@@ -4942,6 +4985,7 @@ document.addEventListener("click", async (event) => {
   _actionBusy = true;
   try {
     if (action.dataset.action === "approve-signup") await approveSignup(action.dataset.id);
+    if (action.dataset.action === "open-add-demo-user") showAddDemoUserModal();
     if (action.dataset.action === "reject-signup") await rejectSignup(action.dataset.id);
     if (action.dataset.action === "approve-loan") await approveLoan(action.dataset.id);
     if (action.dataset.action === "reject-loan") await rejectLoan(action.dataset.id);
@@ -5140,6 +5184,11 @@ document.addEventListener("change", (event) => {
   }
 
   // Gallery photo upload
+  if (isDemoUser() && event.target.closest("[data-action='upload-gallery-photos'],[data-action='upload-meeting-photo'],[data-action='upload-avatar']")) {
+    event.target.value = "";
+    showToast(DEMO_VIEW_ONLY_MSG);
+    return;
+  }
   const galleryInput = event.target.closest("[data-action='upload-gallery-photos']");
   if (galleryInput && galleryInput.files?.length > 0) {
     if (!liveBackendReady) { showToast("Live backend required."); return; }
@@ -5356,6 +5405,7 @@ function showMpinResetModal() {
 
 function showMpinSetupModal() {
   if (document.getElementById("mpin-setup-modal")) return;
+  if (isDemoUser()) return;
   let pin1 = "";
   const modal = document.createElement("div");
   modal.id = "mpin-setup-modal";
@@ -5409,6 +5459,10 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
   const type = form.dataset.form;
+  if (isDemoUser() && !["login", "signup", "reset", "set-new-password"].includes(type)) {
+    showToast(DEMO_VIEW_ONLY_MSG);
+    return;
+  }
   setFormLoading(form, true);
   try {
     if (type === "login") await login(data);
@@ -5427,6 +5481,7 @@ document.addEventListener("submit", async (event) => {
       form.reset();
     }
     if (type === "start-next-year") await startNextYear(data);
+    if (type === "add-demo-user") await addDemoUser(data);
     if (type === "update-max-loan") {
       const maxLoan = Number(data.maxLoan);
       if (!maxLoan || maxLoan < 0) throw new Error("Enter a valid loan amount.");
@@ -5490,7 +5545,7 @@ async function login(data) {
         render();
         return;
       }
-      if (profile && profile.status !== "active") {
+      if (profile && profile.status !== "active" && profile.status !== "demo") {
         await supabaseClient.auth.signOut();
         state.currentUserId = null;
         showToast("Account is pending admin approval.");
@@ -5507,7 +5562,7 @@ async function login(data) {
       render();
       return;
     }
-    if (member.status !== "active") {
+    if (member.status !== "active" && member.status !== "demo") {
       await supabaseClient.auth.signOut();
       state.currentUserId = null;
       showToast("Account is pending admin approval.");
@@ -6266,6 +6321,59 @@ async function approveSignup(id) {
   saveState();
   showToast("Member approved.");
   render();
+}
+
+// Admin adds a demo user from the Members page. The add-demo-user Edge Function creates the
+// login (user ID = phone number), saves the profile as "Demo N" with status "demo" (never
+// counted as a member), keeps the real name in the admin-only demo_accounts table, and
+// texts the app link, user ID and password to the person.
+function showAddDemoUserModal() {
+  if (!isAdmin() || !liveBackendReady) return;
+  document.getElementById("add-demo-modal")?.remove();
+  const letters = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const suggested = Array.from({ length: 8 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+  const modal = document.createElement("div");
+  modal.id = "add-demo-modal";
+  modal.className = "rules-modal-overlay";
+  modal.innerHTML = `
+    <div class="rules-modal-sheet" style="max-width:460px;">
+      <div class="rules-modal-header">
+        <div>
+          <h3 style="margin:0;font-size:15px;font-weight:700;">Add demo user</h3>
+          <p style="margin:3px 0 0;font-size:12px;color:var(--muted);">View only + games. Members will see them as "Demo".</p>
+        </div>
+        <button class="rules-modal-close" type="button" data-close-demo>✕</button>
+      </div>
+      <form data-form="add-demo-user" class="form-grid" style="padding:14px 16px 22px;display:grid;gap:12px;">
+        <label>Full name<input id="demo-name" name="name" required autocomplete="off" placeholder="Their real name" /></label>
+        <label>Mobile number (their user ID)<input id="demo-phone" name="phone" required inputmode="numeric" maxlength="10" placeholder="10-digit mobile number" /></label>
+        <label>Password<input id="demo-password" name="password" required minlength="6" value="${suggested}" autocomplete="off" /></label>
+        <p style="margin:0;font-size:12px;color:var(--muted);">They will get an SMS with the app link, user ID and this password.</p>
+        <button class="primary" type="submit">Add user &amp; send SMS</button>
+      </form>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector("[data-close-demo]").addEventListener("click", close);
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+}
+
+async function addDemoUser(data) {
+  if (!isAdmin() || !liveBackendReady) return;
+  const { data: res, error } = await supabaseClient.functions.invoke("add-demo-user", {
+    body: { name: data.name, phone: data.phone, password: data.password },
+  });
+  if (error) {
+    let msg = error.message || "Could not add the demo user.";
+    try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  document.getElementById("add-demo-modal")?.remove();
+  await loadLiveState();
+  render();
+  showToast(res?.sms === "sent"
+    ? `${data.name} added as Demo ${res.demo_number}. SMS sent.`
+    : `${data.name} added as Demo ${res?.demo_number}, but the SMS could not be sent. Share the login details yourself.`);
 }
 
 async function rejectSignup(id) {
