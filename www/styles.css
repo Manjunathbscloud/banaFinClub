@@ -3438,20 +3438,13 @@ html, body { overscroll-behavior-y: none; }
 .cb-enter { width: 100%; font-size: 12px; font-weight: 700; color: #15803d; }
 
 .cb-shells { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 44px; }
-.cb-shell {
-  position: relative; width: 26px; height: 36px; border-radius: 50%;
-  background: radial-gradient(ellipse at 40% 30%, #fffdf5, #efe3c4 60%, #c9b48a);
-  box-shadow: 0 2px 3px rgba(0,0,0,.25);
-}
-.cb-shell.up::after {
-  content: ""; position: absolute; left: 50%; top: 18%; bottom: 18%; width: 4px; transform: translateX(-50%);
-  border-radius: 3px; background: repeating-linear-gradient(#6b4f2a 0 2px, #f5ecd6 2px 4px);
-}
-.cb-shells.rolling .cb-shell { animation: cb-roll .35s ease-in-out infinite alternate; }
+.cb-shell { width: 34px; height: 48px; display: inline-block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.25)); }
+.cb-shell svg { width: 100%; height: 100%; display: block; }
+.cb-shells.rolling .cb-shell { animation: cb-roll .32s ease-in-out infinite alternate; }
 .cb-shells.rolling .cb-shell:nth-child(2) { animation-delay: .08s; }
 .cb-shells.rolling .cb-shell:nth-child(3) { animation-delay: .16s; }
 .cb-shells.rolling .cb-shell:nth-child(4) { animation-delay: .24s; }
-@keyframes cb-roll { from { transform: translateY(0) rotate(-25deg); } to { transform: translateY(-10px) rotate(25deg); } }
+@keyframes cb-roll { from { transform: translateY(0) rotate(-35deg); } to { transform: translateY(-12px) rotate(35deg); } }
 .cb-roll {
   min-width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
   background: var(--charcoal); color: #fff; font-weight: 800; font-size: 18px;
@@ -3462,3 +3455,18 @@ html, body { overscroll-behavior-y: none; }
   .cb-cell.can .cb-tok.mine, .cb-shells.rolling .cb-shell { animation: none; }
 }
 .ttt-result-actions button { min-width: 120px; font-size: 14px !important; padding: 10px 14px !important; min-height: 0 !important; }
+
+/* Chowka: a fixed layout so the board never moves or resizes between turns */
+#cb-overlay .ttt-body.view-game { justify-content: flex-start; gap: 8px; }
+.cb-board { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(0, 1fr)); flex-shrink: 0; }
+.cb-cell { overflow: hidden; }
+.cb-tray { height: 42px; flex-wrap: nowrap; padding: 0 12px; flex-shrink: 0; }
+.cb-tray-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-tray-unlock { flex: 1; font-size: 11.5px; font-weight: 600; color: #15803d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-shells { height: 58px; min-height: 0; flex-shrink: 0; }
+.cb-status { min-height: 50px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cb-status .ttt-turn { margin: 0; }
+.cb-info { min-height: 40px; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.cb-info p { margin: 0; }
+.cb-sound { min-height: 0 !important; padding: 2px 8px !important; border-radius: 999px !important; border: 1px solid var(--line) !important; background: var(--page) !important; font-size: 14px !important; line-height: 1.4; cursor: pointer; }
+.ttt-clocks { align-items: center; }

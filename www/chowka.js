@@ -1,9 +1,9 @@
 // ── Chowka Bhara · 5×5 ─────────────────────────────────────────────────────
 // Two players (bottom "A", top "B"), 4 pieces each, 4 cowrie shells.
 // Shells mouth-up 1/2/3/4 move 1/2/3/4; all four down moves 8.
-// A piece enters on the player's home square on any throw. Pieces go round the outer
+// All 4 pieces start on the player's home square (✕). Pieces go round the outer
 // ring anticlockwise (16 squares), then the inner ring clockwise (8), then the centre
-// (exact throw). Landing on an opponent piece on a normal square sends it back; on a
+// (exact throw). Landing on an opponent piece on a normal square sends it back home; on a
 // safe square (✕: the four homes and the centre) pieces sit together. A player must
 // capture at least once before their pieces can enter the inner ring; until then they
 // keep going round the outer ring. A throw of 4 or 8, or a capture, earns another throw.
@@ -39,7 +39,7 @@ const cbKey = (side, pos) => cbSquare(side, pos).join(",");
 
 function cbNewState(first = "A") {
   return {
-    pieces: { A: Array(CB_PIECES).fill(-1), B: Array(CB_PIECES).fill(-1) },
+    pieces: { A: Array(CB_PIECES).fill(0), B: Array(CB_PIECES).fill(0) },   // all start on the home ✕
     cap: { A: false, B: false },
     turn: first, phase: "throw", roll: null, shells: null, last: null,
   };
@@ -54,7 +54,6 @@ function cbThrow() {
 // Where a piece at `pos` ends up with `roll`, or null if it can't move.
 function cbTarget(st, side, pos, roll) {
   if (pos === CB_FINISH) return null;
-  if (pos === -1) return 0;                                   // enter on any throw
   let to = pos + roll;
   if (!st.cap[side] && pos < CB_OUTER && to >= CB_OUTER) to -= CB_OUTER;   // no capture yet: keep circling
   return to > CB_FINISH ? null : to;                           // exact throw for the centre
@@ -83,7 +82,7 @@ function cbApply(st, side, mv, roll) {
   const key = cbKey(side, mv.to);
   if (mv.to !== CB_FINISH && !CB_SAFE.has(key)) {
     next.pieces[opp] = next.pieces[opp].map((p) => {
-      if (p >= 0 && p < CB_FINISH && cbKey(opp, p) === key) { captured++; return -1; }
+      if (p >= 0 && p < CB_FINISH && cbKey(opp, p) === key) { captured++; return 0; }   // back to their home ✕
       return p;
     });
   }
@@ -136,7 +135,7 @@ function cbComputerMove(st, side, roll, level) {
     if (won) s += 1000;
     s += captured * 120;
     if (mv.to === CB_FINISH) s += 90;
-    if (mv.from === -1) s += 25;
+    if (mv.from === 0) s += 15;                                                 // spread pieces out
     if (mv.from >= 0 && mv.from < CB_OUTER && mv.to >= CB_OUTER) s += 40;   // into the inner ring
     if (CB_SAFE.has(cbKey(side, mv.to))) s += 20;
     s -= cbDanger(after, side, mv.to) * 45;
@@ -155,6 +154,75 @@ if (typeof module !== "undefined") {
 // ════════════════════════════════════════════════════════════════════════════
 // App side (browser only)
 // ════════════════════════════════════════════════════════════════════════════
+// ── Sound (made in the browser with Web Audio; no sound files) ────────────────
+let cbAudio = null;
+let cbMuted = (() => { try { return localStorage.getItem("bfc_game_sound") === "off"; } catch (_) { return false; } })();
+function cbCtx() {
+  if (cbMuted) return null;
+  try {
+    if (!cbAudio) cbAudio = new (window.AudioContext || window.webkitAudioContext)();
+    if (cbAudio.state === "suspended") cbAudio.resume();
+    return cbAudio;
+  } catch (_) { return null; }
+}
+function cbTone(ctx, { f = 440, f2 = null, at = 0, dur = 0.15, type = "sine", vol = 0.2 }) {
+  const t = ctx.currentTime + at;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function cbClick(ctx, at, vol = 0.35, hp = 1800) {
+  // A short burst of noise: shells knocking together.
+  const t = ctx.currentTime + at;
+  const len = Math.floor(ctx.sampleRate * 0.03);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  src.buffer = buf; f.type = "highpass"; f.frequency.value = hp; g.gain.value = vol;
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(t);
+}
+function cbSound(name) {
+  const ctx = cbCtx();
+  if (!ctx) return;
+  if (name === "rattle") { for (let i = 0; i < 9; i++) cbClick(ctx, i * 0.06 + Math.random() * 0.03, 0.22 + Math.random() * 0.15, 1500 + Math.random() * 1500); }
+  if (name === "land") { cbClick(ctx, 0, 0.45, 900); cbClick(ctx, 0.05, 0.3, 1200); cbClick(ctx, 0.09, 0.25, 1000); }
+  if (name === "move") { cbTone(ctx, { f: 520, f2: 260, dur: 0.09, type: "triangle", vol: 0.25 }); }
+  if (name === "capture") { cbTone(ctx, { f: 700, f2: 180, dur: 0.22, type: "square", vol: 0.12 }); cbClick(ctx, 0.04, 0.5, 300); }
+  if (name === "home") { [660, 880, 1320].forEach((f, i) => cbTone(ctx, { f, at: i * 0.09, dur: 0.25, vol: 0.16 })); }
+  if (name === "turn") { cbTone(ctx, { f: 880, dur: 0.18, vol: 0.12 }); cbTone(ctx, { f: 1175, at: 0.1, dur: 0.22, vol: 0.1 }); }
+  if (name === "win") { [523, 659, 784, 1047].forEach((f, i) => cbTone(ctx, { f, at: i * 0.12, dur: 0.3, type: "triangle", vol: 0.2 })); }
+  if (name === "lose") { [392, 330, 262].forEach((f, i) => cbTone(ctx, { f, at: i * 0.16, dur: 0.32, type: "sine", vol: 0.15 })); }
+}
+// Plays the right sounds for a change from one game state to the next.
+function cbSoundsFor(prev, next) {
+  if (!prev || !next || next.status === "invited") return;
+  const my = cbMySide(next);
+  const a = prev.state, b = next.state;
+  if (next.status === "finished" && prev.status !== "finished") {
+    return cbSound(next.winner === my ? "win" : next.winner === "draw" ? "home" : "lose");
+  }
+  if (!a || !b) return;
+  const thrown = (b.phase === "move" && a.phase !== "move") || (b.last?.noMove && JSON.stringify(b.last) !== JSON.stringify(a.last));
+  const moved = b.last && !b.last.noMove && !b.last.missed && b.last.to != null && JSON.stringify(b.last) !== JSON.stringify(a.last);
+  if (thrown) {
+    const mine = (b.phase === "move" ? b.turn : b.last?.side) === my;
+    if (!mine) cbSound("rattle");                 // my own rattle already played when I tapped
+    setTimeout(() => cbSound("land"), mine ? 0 : 450);
+  }
+  if (moved) cbSound(b.last.captured ? "capture" : b.last.to === CB_FINISH ? "home" : "move");
+  if (next.status === "active" && b.turn === my && b.phase === "throw" && !(a.turn === my && a.phase === "throw")) {
+    setTimeout(() => cbSound("turn"), moved || thrown ? 350 : 0);
+  }
+}
+
 const cb = {
   view: null,          // lobby | members | cpu-setup | waiting | toss | game | leaderboard
   game: null,          // { mode, id?, player_a, player_b, status, state, missed_a, missed_b, ... }
@@ -309,8 +377,8 @@ function cbLobbyHtml() {
     <button class="ttt-link" data-cb="leaderboard">🏆 Leaderboard ›</button>
     <div class="ttt-rules">
       <b>How to play</b>
-      <p>Throw the 4 shells: 1, 2, 3 or 4 facing up moves that many squares; all four down moves <b>8</b>. A piece can come onto your home square (✕) on any throw.</p>
-      <p>Go round the outer ring, then the inner ring, then into the centre (exact throw needed). Land on an opponent's piece to send it back. On a ✕ square everyone is safe.</p>
+      <p>Throw the 4 shells: 1, 2, 3 or 4 facing up moves that many squares; all four down moves <b>8</b>. All 4 of your pieces start on your home square (✕).</p>
+      <p>Go round the outer ring, then the inner ring, then into the centre (exact throw needed). Land on an opponent's piece to send it back to their home. On a ✕ square everyone is safe.</p>
       <p><b>You must capture a piece before you can enter the inner ring.</b> A 4, an 8 or a capture gives you another throw. First to get all 4 pieces to the centre wins.</p>
       <p>30 seconds per throw or move · missing 2 in a row loses · 30 minutes per game, then most pieces home wins.</p>
     </div>`;
@@ -370,7 +438,24 @@ function cbTossHtml() {
 }
 
 // One shell: mouth-up shows the slit.
-const cbShell = (up) => `<span class="cb-shell${up ? " up" : ""}" aria-hidden="true"></span>`;
+// A cowrie: mouth-up shows the toothed opening; mouth-down shows the glossy speckled back.
+const CB_SHELL_UP = `<svg viewBox="0 0 40 56" aria-hidden="true">
+  <defs><radialGradient id="cbsu" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#fffaf0"/><stop offset=".6" stop-color="#f1e4c6"/><stop offset="1" stop-color="#c8ad7c"/></radialGradient></defs>
+  <ellipse cx="20" cy="28" rx="17" ry="25" fill="url(#cbsu)" stroke="#a88b5a" stroke-width="1"/>
+  <path d="M20 7 C16 18 16 38 20 49 C24 38 24 18 20 7Z" fill="#5a3d1c"/>
+  <g stroke="#f7efdc" stroke-width="1.6" stroke-linecap="round">
+    <path d="M17.6 14h-3M17 19h-3.4M16.8 24h-3.6M16.8 29h-3.6M16.8 34h-3.6M17 39h-3.4M17.6 44h-3"/>
+    <path d="M22.4 14h3M23 19h3.4M23.2 24h3.6M23.2 29h3.6M23.2 34h3.6M23 39h3.4M22.4 44h3"/>
+  </g>
+</svg>`;
+const CB_SHELL_DOWN = `<svg viewBox="0 0 40 56" aria-hidden="true">
+  <defs><radialGradient id="cbsd" cx="38%" cy="30%" r="75%"><stop offset="0" stop-color="#fff8e8"/><stop offset=".45" stop-color="#e8c98f"/><stop offset="1" stop-color="#9c7438"/></radialGradient></defs>
+  <ellipse cx="20" cy="28" rx="17" ry="25" fill="url(#cbsd)" stroke="#8a6630" stroke-width="1"/>
+  <ellipse cx="20" cy="28" rx="11" ry="18" fill="none" stroke="#b98a45" stroke-width="1.2" opacity=".7"/>
+  <g fill="#8a5a22" opacity=".55"><circle cx="15" cy="20" r="1.4"/><circle cx="24" cy="17" r="1.1"/><circle cx="26" cy="31" r="1.5"/><circle cx="14" cy="34" r="1.2"/><circle cx="21" cy="41" r="1.3"/><circle cx="18" cy="27" r="1"/></g>
+  <ellipse cx="14" cy="15" rx="4" ry="6" fill="#fff" opacity=".55"/>
+</svg>`;
+const cbShell = (up) => `<span class="cb-shell${up ? " up" : ""}">${up ? CB_SHELL_UP : CB_SHELL_DOWN}</span>`;
 
 function cbGameHtml() {
   const g = cb.game;
@@ -382,10 +467,8 @@ function cbGameHtml() {
   const moves = myTurn && st.phase === "move" && st.roll ? cbMoves(st, my, st.roll) : [];
   const fromSquares = new Map();   // "r,c" of a movable piece -> move
   const targets = new Set();
-  let enterMove = null;
   for (const mv of moves) {
-    if (mv.from === -1) enterMove = mv;
-    else if (!fromSquares.has(cbKey(my, mv.from))) fromSquares.set(cbKey(my, mv.from), mv);
+    if (!fromSquares.has(cbKey(my, mv.from))) fromSquares.set(cbKey(my, mv.from), mv);
     targets.add(cbKey(my, mv.to));
   }
   // What sits on each square.
@@ -411,17 +494,13 @@ function cbGameHtml() {
     cells += `<button class="${cls}" data-cb="cell" data-k="${k}" ${can ? "" : "tabindex=\"-1\""} aria-label="Square ${vr * 5 + vc + 1}">${tokens}</button>`;
   }
 
-  const tray = (side) => {
-    const waiting = st.pieces[side].filter((p) => p === -1).length;
-    const home = cbHome(st, side);
-    const canEnter = side === my && enterMove;
-    return `<div class="cb-tray ${side === my ? "mine" : "theirs"}${canEnter ? " can" : ""}" ${canEnter ? `data-cb="enter" role="button" tabindex="0"` : ""}>
+  const tray = (side) => `
+    <div class="cb-tray ${side === my ? "mine" : "theirs"}">
+      <span class="cb-tok sm ${side === my ? "mine" : "theirs"}"></span>
       <span class="cb-tray-name${st.turn === side && active ? " now" : ""}">${escapeHtml(cbSideName(g, side))}</span>
-      <span class="cb-tray-pcs">${Array.from({ length: waiting }, () => `<span class="cb-tok sm ${side === my ? "mine" : "theirs"}"></span>`).join("") || `<span class="ttt-muted">none waiting</span>`}</span>
-      <span class="cb-tray-home">🏠 ${home}/4</span>
-      ${canEnter ? `<span class="cb-enter">Tap to bring a piece in</span>` : ""}
+      <span class="cb-tray-unlock">${st.cap[side] ? "🔓 inner ring open" : ""}</span>
+      <span class="cb-tray-home">🏠 ${cbHome(st, side)}/4</span>
     </div>`;
-  };
 
   // Shells + status line.
   const shells = st.shells || (st.last?.shells) || [false, false, false, false];
@@ -445,7 +524,7 @@ function cbGameHtml() {
   } else if (myTurn && st.phase === "throw") {
     status = `<button class="primary cb-throw" data-cb="throw" ${cb.rolling ? "disabled" : ""}>🐚 Throw shells</button>`;
   } else if (myTurn && st.phase === "move") {
-    status = `<p class="ttt-turn mine">You threw <b>${st.roll}</b>: ${enterMove && fromSquares.size ? "tap a glowing piece, or bring a new one in" : enterMove ? "bring a new piece in" : "tap a glowing piece to move it"}</p>`;
+    status = `<p class="ttt-turn mine">You threw <b>${st.roll}</b>: tap a glowing piece to move it</p>`;
   } else {
     status = `<p class="ttt-turn">${escapeHtml(cbSideName(g, st.turn))} ${st.phase === "move" ? `threw <b>${st.roll}</b>, moving…` : "is throwing…"}</p>`;
   }
@@ -464,17 +543,20 @@ function cbGameHtml() {
   return `
     <div class="ttt-clocks">
       <span>Game time <b id="cb-game-clock">30:00</b></span>
+      <button class="cb-sound" data-cb="sound" aria-label="${cbMuted ? "Turn sound on" : "Turn sound off"}">${cbMuted ? "🔇" : "🔊"}</button>
       <span>⏱ <b id="cb-turn-clock">0:30</b></span>
     </div>
     ${tray(opp)}
     <div class="cb-board${flip ? " flip" : ""}">${cells}</div>
     ${tray(my)}
     <div class="cb-shells${cb.rolling ? " rolling" : ""}">${shells.map(cbShell).join("")}
-      ${st.roll && st.phase === "move" ? `<span class="cb-roll">${st.roll}</span>` : ""}</div>
-    ${status}
-    ${lastLine ? `<p class="ttt-muted" style="text-align:center;">${lastLine}</p>` : ""}
-    ${active && !st.cap[my] ? `<p class="cb-lock">🔒 Capture a piece to unlock the inner ring</p>` : ""}
-    ${active && myMissed ? `<p class="ttt-warn">⚠️ Missed turns: ${myMissed} of ${CB_MAX_MISSED}</p>` : ""}
+      <span class="cb-roll"${st.roll && st.phase === "move" ? "" : ' style="visibility:hidden"'}>${st.roll || 0}</span></div>
+    <div class="cb-status">${status}</div>
+    <div class="cb-info">
+      ${lastLine ? `<p class="ttt-muted">${lastLine}</p>` : ""}
+      ${active && !st.cap[my] ? `<p class="cb-lock">🔒 Capture a piece to unlock the inner ring</p>` : ""}
+      ${active && myMissed ? `<p class="ttt-warn">⚠️ Missed turns: ${myMissed} of ${CB_MAX_MISSED}</p>` : ""}
+    </div>
     ${cb.confirmLeave ? `<div class="ttt-confirm"><p>Leave the game? You will lose it.</p>
         <button class="secondary small" data-cb="leave-cancel">Keep playing</button>
         <button class="primary small" data-cb="leave-yes">Leave</button></div>` : ""}`;
@@ -511,6 +593,7 @@ function cbUpdateClocks() {
 
 // ── Clicks ────────────────────────────────────────────────────────────────────
 async function cbOnClick(e) {
+  cbCtx();   // phones only allow sound after a tap: any tap in the game unlocks it
   const btn = e.target.closest("[data-cb]");
   if (!btn) return;
   const act = btn.dataset.cb;
@@ -525,7 +608,12 @@ async function cbOnClick(e) {
   if (act === "challenge") return cbChallenge(btn.dataset.id);
   if (act === "cancel-invite") return cbCancelInvite();
   if (act === "throw") return cbDoThrow();
-  if (act === "enter") return cbTapEnter();
+  if (act === "sound") {
+    cbMuted = !cbMuted;
+    try { localStorage.setItem("bfc_game_sound", cbMuted ? "off" : "on"); } catch (_) {}
+    if (!cbMuted) cbSound("move");
+    return cbRender();
+  }
   if (act === "cell") return cbTapCell(btn.dataset.k);
   if (act === "leave") { cb.confirmLeave = true; return cbRender(); }
   if (act === "leave-cancel") { cb.confirmLeave = false; return cbRender(); }
@@ -540,10 +628,13 @@ async function cbCommit(patch) {
   const now = cbIso();
   const full = { ...patch, turn_started_at: now };
   if (g.mode === "cpu") {
+    const before = { ...g, state: g.state };
     Object.assign(g, full);
+    cbSoundsFor(before, g);
     cbRender();
     return cbMaybeCpu();
   }
+  cbSoundsFor(g, { ...g, ...full });
   cb.game = { ...g, ...full };     // show it straight away; save in the background
   cbRender();
   const saved = await cbWrite(g, full);
@@ -568,6 +659,7 @@ async function cbDoThrow() {
   if (!g || g.status !== "active" || g.state.turn !== my || g.state.phase !== "throw" || cb.rolling) return;
   const { roll, shells } = cbThrow();
   cb.rolling = true;
+  cbSound("rattle");
   cbRender();
   await new Promise((r) => setTimeout(r, 650));
   cb.rolling = false;
@@ -586,19 +678,11 @@ function cbMovePatch(g, side, mv) {
   };
 }
 
-function cbTapEnter() {
-  const g = cb.game;
-  const my = cbMySide(g);
-  if (!g || g.status !== "active" || g.state.turn !== my || g.state.phase !== "move") return;
-  const mv = cbMoves(g.state, my, g.state.roll).find((m) => m.from === -1);
-  if (mv) cbCommit(cbMovePatch(g, my, mv));
-}
-
 function cbTapCell(k) {
   const g = cb.game;
   const my = cbMySide(g);
   if (!g || g.status !== "active" || g.state.turn !== my || g.state.phase !== "move") return;
-  const mv = cbMoves(g.state, my, g.state.roll).find((m) => m.from >= 0 && cbKey(my, m.from) === k);
+  const mv = cbMoves(g.state, my, g.state.roll).find((m) => cbKey(my, m.from) === k);
   if (mv) cbCommit(cbMovePatch(g, my, mv));
 }
 
@@ -614,11 +698,14 @@ function cbStartCpu() {
   cb.confirmLeave = false;
   cbRender();
   cbStartTicker();
+  if (me === "A") cbSound("turn");
   cbMaybeCpu();
 }
 
 function cbFinishLocal(winner, reason) {
+  const before = { ...cb.game };
   Object.assign(cb.game, { status: "finished", winner, end_reason: reason });
+  cbSoundsFor(before, cb.game);
   cbRender();
 }
 
@@ -727,6 +814,7 @@ function cbOnGameUpdate(row) {
   if (!cb.game || row.id !== cb.game.id) return;
   const wasWaiting = cb.game.status === "invited";
   const prevSig = cbSig(cb.game);
+  if (cbSig(row) !== prevSig) cbSoundsFor(cb.game, row);
   cb.game = row;
   if (row.status === "declined" || row.status === "expired") {
     if (cb.view === "waiting") {
@@ -861,6 +949,7 @@ function cbShowInvite(row) {
       </div>
     </div>`;
   el.addEventListener("click", (e) => {
+    cbCtx();
     const b = e.target.closest("[data-inv]");
     if (b) cbAnswerInvite(b.dataset.inv === "accept");
   });
