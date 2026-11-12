@@ -552,7 +552,7 @@ const DEMO_VIEW_ONLY_MSG = "Demo account: view only. You can browse and play gam
 const DEMO_BLOCKED_ACTIONS = new Set([
   "acknowledge-financial", "acknowledge-records", "approve-extension", "approve-loan", "approve-partial-repayment",
   "approve-signup", "open-add-demo-user", "resend-demo-sms", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
-  "confirm-close-year", "confirm-gallery-upload", "confirm-mark-paid", "delete-current-loan", "delete-gallery-photo",
+  "confirm-close-year", "confirm-mark-paid", "delete-current-loan", "delete-gallery-photo",
   "delete-meeting-photo", "delete-rule", "edit-rule", "save-rule", "open-ai-chat", "send-ai-message", "open-chat",
   "send-chat", "open-financial-signoff", "open-meeting-signoff", "toggle-financial-signoff", "toggle-meeting-signoff",
   "toggle-meeting-editor", "pay-now", "record-partial-payment", "submit-partial-payment", "reject-extension",
@@ -782,7 +782,7 @@ async function loadLiveState() {
   touchLastSeen(true);
   if (typeof initGameInvites === "function") initGameInvites();
   if (typeof cbInitInvites === "function") cbInitInvites();
-  if (isDemoUser()) return; // view only: no push subscription, no settings writes
+  if (isDemoUser()) { await loadGuestOverview(); return; } // view only: no push, no settings writes
   subscribeToPush();
 
   // Persist available loan amount so SQL cron notifications can read it
@@ -1587,12 +1587,16 @@ function render() {
         ${renderTab()}
       </main>
       <nav class="nav" aria-label="App navigation">
+        ${isDemoUser() ? `
+        ${navButton("dashboard", "⌂", "Home")}
+        ${navButton("history", "📅", "Meetings")}
+        ${navButton("gallery", "🖼", "Gallery")}` : `
         ${navButton("dashboard", "⌂", t("dashboard"))}
         ${navButton("deposits", "₹", t("deposits"))}
         ${navButton("loans", "⇄", t("loans"))}
         ${navButton("members", "☷", t("members"))}
         ${navButton("meetings", "📊", "Dashboard")}
-        ${isAdmin() ? navButton("admin", "⚙", t("admin")) : ""}
+        ${isAdmin() ? navButton("admin", "⚙", t("admin")) : ""}`}
       </nav>
     </div>
   `;
@@ -1642,28 +1646,34 @@ function memberAvatarHtml(member, size = "") {
   return `<div class="${cls}">${initials(member?.name || "?")}</div>`;
 }
 
+// Shrinks a photo. Resolves to null (never hangs) if the phone can't decode it.
 async function compressImage(file, maxDim = 400, quality = 0.85) {
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
+    const timer = setTimeout(() => { URL.revokeObjectURL(url); resolve(null); }, 20000);
+    img.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(url); resolve(null); };
     img.onload = () => {
+      clearTimeout(timer);
       let { width: w, height: h } = img;
       if (w > maxDim || h > maxDim) {
         if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
         else { w = Math.round(w * maxDim / h); h = maxDim; }
       }
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(resolve, "image/jpeg", quality);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((blob) => { canvas.width = canvas.height = 0; resolve(blob); }, "image/jpeg", quality);
+      } catch (_) { URL.revokeObjectURL(url); resolve(null); }
     };
     img.src = url;
   });
 }
 
 async function uploadAvatarPhoto(file, profileId) {
-  const blob = await compressImage(file, 400, 0.85);
+  const blob = (await compressImage(file, 400, 0.85)) || file;
   const path = `${profileId}.jpg`;
   const { error } = await supabaseClient.storage.from("Avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
   if (error) throw error;
@@ -1949,6 +1959,11 @@ function renderSetNewPassword() {
 }
 
 function renderTab() {
+  // Demo users (guests) see only the non-money parts of the club.
+  if (isDemoUser()) {
+    const guestTabs = { dashboard: renderGuestHome, history: renderGuestMeetings, gallery: renderGallery, profile: renderProfile };
+    return (guestTabs[state.activeTab] || renderGuestHome)();
+  }
   const tabs = {
     dashboard: renderHome,
     deposits: renderDeposits,
@@ -2529,6 +2544,109 @@ async function saveNominee(data) {
   }
   showToast(isNew ? "Nominee added successfully." : "Nominee updated.");
   render();
+}
+
+// ── Guest mode (demo users) ───────────────────────────────────────────────────
+// Guests get the club year and a player list (name, online, photo) from club_overview():
+// no phone numbers and no money. Everything else they could see is meetings and photos.
+async function loadGuestOverview() {
+  const { data, error } = await supabaseClient.rpc("club_overview");
+  if (error || !data) return;
+  if (data.year_number) state.settings.activeYearNumber = Number(data.year_number);
+  const players = (data.players || []).map((p) => ({
+    id: p.id, name: p.full_name, phone: "", email: "", role: p.role, status: p.status,
+    avatarUrl: p.avatar_url || "", lastSeenAt: p.last_seen_at || null, isDemo: p.status === "demo",
+  }));
+  const me = currentUser();
+  state.allMembers = players.some((p) => p.id === me?.id) ? players : [...players, me].filter(Boolean);
+  state.guestOverview = { memberCount: players.filter((p) => p.status === "active").length };
+  render();
+}
+
+// Removes lines that mention money (amounts, %, interest, loans, deposits, fees…).
+const GUEST_MONEY_WORDS = /₹|\brs\.?\s*\d|%|\d{1,3}(,\d{2,3})+|\b(?!(19|20)\d{2}\b)\d{4,}\b|interest|renewal|loan|deposit|fee|emi\b|share|balance|payout|settle|amount|paid|payable|expens|cost|lakh|rupee|fund|profit|bank/i;
+function guestSafeLines(lines) {
+  return (lines || []).map((l) => String(l || "").trim()).filter((l) => l && !GUEST_MONEY_WORDS.test(l));
+}
+
+function renderGuestHome() {
+  const user = currentUser();
+  const yearNum = state.settings.activeYearNumber || 7;
+  const players = (state.allMembers || []).filter((m) => m.status === "active");
+  const online = players.filter((m) => isMemberOnline(m.id)).length;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const tile = (icon, title, sub, attrs) => `
+    <button class="guest-tile" type="button" ${attrs}>
+      <span class="guest-tile-icon">${icon}</span>
+      <span class="guest-tile-text"><b>${title}</b><span>${sub}</span></span>
+      <span class="guest-tile-go">›</span>
+    </button>`;
+  return `
+    <section class="dash-hero"><div class="dash-greeting"><p>${greeting}</p><h2>${escapeHtml(user?.name || "Guest")}</h2></div></section>
+    <section class="guest-about">
+      <p class="guest-eyebrow">Welcome to</p>
+      <h3>Banakar FinClub</h3>
+      <p class="guest-sub">Sri Mukkaneshwara Associates · a family club since 2020</p>
+      <div class="guest-facts">
+        <div><b>Year ${yearNum}</b><span>running now</span></div>
+        <div><b>${players.length || "—"}</b><span>members</span></div>
+        <div><b>${online}</b><span>online now</span></div>
+      </div>
+      <p class="guest-note">You are a guest: you can see our meetings and photos, and play games with the family.</p>
+    </section>
+    <div class="guest-tiles">
+      ${tile("🎮", "Games", "Tic-Tac-Toe · Chowka Bhara", `data-action="open-game"`)}
+      ${tile("📅", "Meetings", "Our yearly meetings, highlights & photos", `data-tab="history"`)}
+      ${tile("🖼️", "Gallery", `Club photos & memories${state.galleryPhotos?.length ? ` · ${state.galleryPhotos.length}` : ""}`, `data-tab="gallery"`)}
+    </div>`;
+}
+
+function renderGuestMeetings() {
+  const activeYearNum = state.settings.activeYearNumber || 7;
+  const STATIC_PHOTOS = [4, 3, 3, 3, 5];
+  const years = [];
+  for (let y = activeYearNum - 1; y >= 1; y--) {
+    const dbYear = 2020 + y;
+    let m;
+    if (y <= 5) {
+      const im = initialState.meetings.find((x) => x.year === y);
+      if (!im) continue;
+      m = { date: im.date, venue: im.venue, notes: "", decisions: im.decisions || [],
+        photos: Array.from({ length: STATIC_PHOTOS[y - 1] || 0 }, (_, i) => `./images/meetings/yr${y}/meeting${i + 1}.jpg`) };
+    } else {
+      const mr = state.meetingRecords.find((r) => r.year === dbYear);
+      if (!mr) continue;
+      m = { date: mr.date, venue: mr.venue, notes: mr.notes, decisions: mr.decisions, photos: mr.photos || [] };
+    }
+    years.push({ y, dbYear, ...m });
+  }
+  if (!years.length) {
+    return `<section class="page-title"><p>Banakar FinClub</p><h2>Meetings</h2></section>
+      <div class="card"><div class="card-body"><p class="ttt-muted">No meetings to show yet.</p></div></div>`;
+  }
+  return `
+    <section class="page-title"><p>Banakar FinClub</p><h2>Meetings</h2></section>
+    ${years.map((m) => {
+      const highlights = guestSafeLines(String(m.notes || "").split(/\n+/).map((l) => l.replace(/^[-•*]\s*/, "")));
+      const decisions = guestSafeLines(m.decisions);
+      const gallery = escapeHtml(JSON.stringify(m.photos));
+      return `
+      <article class="guest-meet">
+        <header>
+          <span class="guest-meet-year">Year ${m.y}</span>
+          <div><h3>${escapeHtml(m.venue || `Annual meeting ${m.dbYear}`)}</h3>
+          <p>${escapeHtml(m.date || String(m.dbYear))}</p></div>
+        </header>
+        ${m.photos.length ? `<div class="guest-photos">${m.photos.slice(0, 6).map((url, i) => `
+          <button type="button" class="guest-photo" data-action="open-photo" data-gallery="${gallery}" data-index="${i}">
+            <img src="${escapeHtml(url)}" loading="lazy" alt="Meeting photo ${i + 1}" />
+            ${i === 5 && m.photos.length > 6 ? `<span>+${m.photos.length - 5}</span>` : ""}
+          </button>`).join("")}</div>` : ""}
+        ${highlights.length ? `<p class="guest-label">Highlights</p><ul>${highlights.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>` : ""}
+        ${decisions.length ? `<p class="guest-label">Decisions</p><ul>${decisions.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>` : ""}
+      </article>`;
+    }).join("")}`;
 }
 
 function renderMeetings() {
@@ -5231,7 +5349,7 @@ document.addEventListener("change", (event) => {
   }
 
   // Gallery photo upload
-  if (isDemoUser() && event.target.closest("[data-action='upload-gallery-photos'],[data-action='upload-meeting-photo'],[data-action='upload-avatar']")) {
+  if (isDemoUser() && event.target.closest("[data-action='upload-meeting-photo'],[data-action='upload-avatar']")) {
     event.target.value = "";
     showToast(DEMO_VIEW_ONLY_MSG);
     return;
@@ -6971,6 +7089,7 @@ async function saveMeetingNotes(yearDbYear, data) {
 async function uploadMeetingPhoto(yearDbYear, file) {
   if (!liveBackendReady) throw new Error("Live backend required.");
   const blob = await compressImage(file, 1200, 0.85);
+  if (!blob) throw new Error("This photo's format could not be read.");
   const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const path = `year-${yearDbYear}/${suffix}.jpg`;
   const { error } = await supabaseClient.storage.from("meeting-photos").upload(path, blob, { contentType: "image/jpeg" });
@@ -7749,18 +7868,27 @@ function showGalleryUploadModal(files) {
   setTimeout(() => document.getElementById("gallery-caption-input")?.focus(), 100);
 }
 
+// Uploads photos one after another (several big photos at once can run a phone out of
+// memory), shrinking each first; if shrinking fails the original is uploaded instead.
 async function uploadGalleryPhotos(files, caption) {
   if (!liveBackendReady) { showToast("Live backend required."); return; }
   const user = state.members.find(m => m.id === currentProfileId()) || state.allMembers?.find(m => m.id === currentProfileId());
   const uploaderName = user?.name || "Member";
-  let done = 0;
-  showToast(`Uploading ${files.length} photo${files.length !== 1 ? "s" : ""}…`);
-  await Promise.all(files.map(async (file) => {
+  const total = files.length;
+  let done = 0, failed = 0;
+  for (let n = 0; n < total; n++) {
+    const file = files[n];
+    showToast(`Uploading ${total > 1 ? `${n + 1} of ${total}` : "photo"}…`);
     try {
-      const blob = await compressImage(file, 1200, 0.85);
+      const shrunk = await compressImage(file, 1200, 0.85);
+      const isImage = /^image\/(jpeg|png|webp|gif)$/i.test(file.type || "");
+      const blob = shrunk || (isImage ? file : null);
+      if (!blob) throw new Error("This photo's format could not be read.");
+      const ext = shrunk ? "jpg" : (file.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
       const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      const path = `${currentProfileId()}/${suffix}.jpg`;
-      const { error } = await supabaseClient.storage.from("club-gallery").upload(path, blob, { contentType: "image/jpeg" });
+      const path = `${currentProfileId()}/${suffix}.${ext}`;
+      const { error } = await supabaseClient.storage.from("club-gallery")
+        .upload(path, blob, { contentType: shrunk ? "image/jpeg" : file.type });
       if (error) throw error;
       const { data: urlData } = supabaseClient.storage.from("club-gallery").getPublicUrl(path);
       await liveQuery(supabaseClient.from("gallery_photos").insert({
@@ -7772,12 +7900,15 @@ async function uploadGalleryPhotos(files, caption) {
       }));
       done++;
     } catch (e) {
+      failed++;
       console.error("Gallery upload error:", e);
     }
-  }));
+  }
   await loadLiveState();
   render();
-  showToast(`${done} photo${done !== 1 ? "s" : ""} uploaded successfully!`);
+  showToast(failed
+    ? `${done} uploaded, ${failed} failed. Try the failed ${failed === 1 ? "photo" : "photos"} again.`
+    : `${done} photo${done !== 1 ? "s" : ""} uploaded.`);
 }
 
 async function deleteGalleryPhoto(photoId, storagePath) {
