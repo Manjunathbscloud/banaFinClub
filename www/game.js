@@ -671,7 +671,8 @@ function initGameInvites() {
 function tttShowInvite(row) {
   if (row.status !== "invited") return;
   if (tttNow() - tttMs(row.created_at) > TTT_INVITE_SECONDS * 1000) return;
-  const inChowka = typeof cb !== "undefined" && cb.game && cb.game.status === "active";
+  const inChowka = (typeof cb !== "undefined" && cb.game && cb.game.status === "active")
+    || (typeof c7Busy === "function" && c7Busy());
   if ((ttt.game && ttt.game.status === "active") || inChowka) {   // already playing: say no automatically
     supabaseClient.from("ttt_games").update({ status: "declined", updated_at: tttIso() }).eq("id", row.id).eq("status", "invited").then(() => {});
     return;
@@ -763,6 +764,7 @@ async function tttAnswerInvite(accept) {
   if (error || !data) { showToast("This challenge is no longer available."); return; }
 
   if (typeof cbClose === "function" && document.getElementById("cb-overlay")) cbClose();
+  if (typeof c7Close === "function" && document.getElementById("c7-overlay")) c7Close();
   document.getElementById("games-hub")?.remove();
   openGameLobby();
   tttWatchGame(tttParse(data));

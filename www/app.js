@@ -782,6 +782,7 @@ async function loadLiveState() {
   touchLastSeen(true);
   if (typeof initGameInvites === "function") initGameInvites();
   if (typeof cbInitInvites === "function") cbInitInvites();
+  if (typeof c7InitInvites === "function") c7InitInvites();
   if (isDemoUser()) { await loadGuestOverview(); return; } // view only: no push, no settings writes
   subscribeToPush();
 

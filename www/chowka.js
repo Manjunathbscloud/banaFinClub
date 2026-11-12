@@ -41,9 +41,14 @@ function cbNewState(first = "A") {
   return {
     pieces: { A: Array(CB_PIECES).fill(0), B: Array(CB_PIECES).fill(0) },   // all start on the home ✕
     cap: { A: false, B: false },
-    turn: first, phase: "throw", roll: null, shells: null, last: null,
+    turn: first, phase: "throw",
+    rolls: [],          // numbers saved this turn (4 and 8 throw again; any other number stops the throwing)
+    shells: null, bonus: false, throwN: 0, last: null,
   };
 }
+
+const CB_BONUS = [4, 8];
+const cbRolls = (st) => st.rolls || (st.roll ? [st.roll] : []);   // older saved games used a single roll
 
 function cbThrow() {
   const shells = Array.from({ length: 4 }, () => Math.random() < 0.5);
@@ -51,31 +56,66 @@ function cbThrow() {
   return { shells, roll: up === 0 ? 8 : up };
 }
 
-// Where a piece at `pos` ends up with `roll`, or null if it can't move.
-function cbTarget(st, side, pos, roll) {
+// Every total the saved numbers can make → the fewest numbers that make it.
+// Shared with the 7×7 board. `ok` limits which numbers may be used.
+function cbCombos(rolls, ok = () => true) {
+  const list = rolls.slice(0, 12).map((v, i) => ({ v, i })).filter((x) => ok(x.v));
+  const out = new Map();
+  for (let mask = 1; mask < (1 << list.length); mask++) {
+    let sum = 0;
+    const use = [];
+    list.forEach((x, j) => { if (mask & (1 << j)) { sum += x.v; use.push(x.i); } });
+    const cur = out.get(sum);
+    if (!cur || use.length < cur.length) out.set(sum, use);
+  }
+  return out;
+}
+
+// Where a piece at `pos` ends up after moving `n` squares, or null if it can't.
+function cbTarget(st, side, pos, n) {
   if (pos === CB_FINISH) return null;
-  let to = pos + roll;
-  if (!st.cap[side] && pos < CB_OUTER && to >= CB_OUTER) to -= CB_OUTER;   // no capture yet: keep circling
-  return to > CB_FINISH ? null : to;                           // exact throw for the centre
+  let to = pos + n;
+  if (!st.cap[side] && pos < CB_OUTER && to >= CB_OUTER) to %= CB_OUTER;   // no capture yet: keep circling
+  return to > CB_FINISH ? null : to;                                       // exact throw for the centre
 }
 
-function cbMoves(st, side, roll) {
-  const seen = new Set();
-  const moves = [];
+// All moves with the saved numbers: one piece, using one or more of the numbers together.
+function cbMoves(st, side) {
+  const combos = cbCombos(cbRolls(st));
+  const best = new Map();
   st.pieces[side].forEach((pos, piece) => {
-    const to = cbTarget(st, side, pos, roll);
-    if (to === null) return;
-    const k = `${pos}>${to}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    moves.push({ piece, from: pos, to });
+    for (const [sum, use] of combos) {
+      const to = cbTarget(st, side, pos, sum);
+      if (to === null || to === pos) continue;
+      const k = `${pos}>${to}`;
+      const cur = best.get(k);
+      if (!cur || use.length < cur.use.length) best.set(k, { piece, from: pos, to, use, sum });
+    }
   });
-  return moves;
+  return [...best.values()];
 }
 
-// Applies a move. Returns { st, captured, extra, won }.
-function cbApply(st, side, mv, roll) {
+// After a throw: save the number. 4 or 8 → throw again; otherwise start moving (or pass if nothing can move).
+function cbAfterThrow(st, side, roll, shells) {
   const next = JSON.parse(JSON.stringify(st));
+  next.rolls = [...cbRolls(st), roll];
+  next.roll = null;
+  next.shells = shells;
+  next.bonus = false;
+  next.throwN = (st.throwN || 0) + 1;
+  next.last = { side, roll, kind: "throw" };
+  if (CB_BONUS.includes(roll)) { next.phase = "throw"; next.last.again = true; return next; }
+  if (cbMoves(next, side).length) { next.phase = "move"; return next; }
+  next.last.noMove = true;
+  next.rolls = []; next.phase = "throw";
+  next.turn = cbOther(side);
+  return next;
+}
+
+// Applies a move. Returns { st, captured, won }.
+function cbApply(st, side, mv) {
+  const next = JSON.parse(JSON.stringify(st));
+  const rolls = cbRolls(st);
   next.pieces[side][mv.piece] = mv.to;
   let captured = 0;
   const opp = cbOther(side);
@@ -86,24 +126,21 @@ function cbApply(st, side, mv, roll) {
       return p;
     });
   }
-  if (captured) next.cap[side] = true;
+  if (captured) { next.cap[side] = true; next.bonus = true; }
+  next.rolls = rolls.filter((_, i) => !mv.use.includes(i));
+  next.roll = null;
   const won = next.pieces[side].every((p) => p === CB_FINISH);
-  const extra = !won && (roll === 4 || roll === 8 || captured > 0);
-  next.last = { side, roll, from: mv.from, to: mv.to, captured };
-  next.roll = null; next.shells = null;
-  next.phase = "throw";
-  next.turn = extra ? side : opp;
-  return { st: next, captured, extra, won };
-}
-
-// After a throw with no possible move: throw again on 4/8, otherwise the turn passes.
-function cbPass(st, side, roll, shells) {
-  const next = JSON.parse(JSON.stringify(st));
-  const again = roll === 4 || roll === 8;
-  next.last = { side, roll, noMove: true };
-  next.roll = null; next.shells = shells; next.phase = "throw";
-  next.turn = again ? side : cbOther(side);
-  return next;
+  next.last = { side, kind: "move", from: mv.from, to: mv.to, captured, used: mv.use.map((i) => rolls[i]) };
+  if (won) { next.phase = "done"; next.rolls = []; return { st: next, captured, won }; }
+  if (next.rolls.length && cbMoves(next, side).length) {
+    next.phase = "move";                      // more saved numbers to use
+  } else {
+    next.rolls = [];
+    next.phase = "throw";
+    if (next.bonus) { next.bonus = false; next.last.again = true; }   // a capture earns one more throw
+    else next.turn = opp;
+  }
+  return { st: next, captured, won };
 }
 
 const cbHome = (st, side) => st.pieces[side].filter((p) => p === CB_FINISH).length;
@@ -124,13 +161,13 @@ function cbDanger(st, side, pos) {
   return n;
 }
 
-function cbComputerMove(st, side, roll, level) {
-  const moves = cbMoves(st, side, roll);
+function cbComputerMove(st, side, level) {
+  const moves = cbMoves(st, side);
   if (!moves.length) return null;
   if (level === "easy") return moves[Math.floor(Math.random() * moves.length)];
   let best = moves[0], bestScore = -Infinity;
   for (const mv of moves) {
-    const { st: after, captured, won } = cbApply(st, side, mv, roll);
+    const { st: after, captured, won } = cbApply(st, side, mv);
     let s = Math.random();
     if (won) s += 1000;
     s += captured * 120;
@@ -141,6 +178,7 @@ function cbComputerMove(st, side, roll, level) {
     s -= cbDanger(after, side, mv.to) * 45;
     if (mv.from >= 0) s += cbDanger(st, side, mv.from) * 35;               // escaping danger
     s += mv.to * 0.8;
+    s -= mv.use.length * 2;                                                 // keep numbers apart when it costs nothing
     if (s > bestScore) { bestScore = s; best = mv; }
   }
   return best;
@@ -148,7 +186,7 @@ function cbComputerMove(st, side, roll, level) {
 
 // Exposed for tests (node) — harmless in the browser.
 if (typeof module !== "undefined") {
-  module.exports = { cbNewState, cbThrow, cbMoves, cbApply, cbPass, cbHome, cbComputerMove, cbTarget, cbKey, CB_PATH_A, CB_PATH_B, CB_SAFE, CB_FINISH };
+  module.exports = { cbNewState, cbThrow, cbMoves, cbApply, cbAfterThrow, cbCombos, cbHome, cbComputerMove, cbTarget, cbKey, cbOther, CB_PATH_A, CB_PATH_B, CB_SAFE, CB_FINISH };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -210,10 +248,10 @@ function cbSoundsFor(prev, next) {
     return cbSound(next.winner === my ? "win" : next.winner === "draw" ? "home" : "lose");
   }
   if (!a || !b) return;
-  const thrown = (b.phase === "move" && a.phase !== "move") || (b.last?.noMove && JSON.stringify(b.last) !== JSON.stringify(a.last));
-  const moved = b.last && !b.last.noMove && !b.last.missed && b.last.to != null && JSON.stringify(b.last) !== JSON.stringify(a.last);
+  const thrown = (b.throwN || 0) !== (a.throwN || 0);
+  const moved = b.last?.kind === "move" && JSON.stringify(b.last) !== JSON.stringify(a.last);
   if (thrown) {
-    const mine = (b.phase === "move" ? b.turn : b.last?.side) === my;
+    const mine = b.last?.side === my;
     if (!mine) cbSound("rattle");                 // my own rattle already played when I tapped
     setTimeout(() => cbSound("land"), mine ? 0 : 450);
   }
@@ -237,6 +275,7 @@ const cb = {
   confirmLeave: false,
   busy: false,
   rolling: false,      // shells animation on this phone
+  sel: null,           // "r,c" of the piece I picked to move
 };
 
 const cbIso = () => new Date().toISOString();
@@ -255,7 +294,8 @@ function cbSideName(g, side) {
   return id === currentProfileId() ? "You" : tttFirstName(id);
 }
 const cbOpponentId = (g) => (g.challenger_id === currentProfileId() ? g.opponent_id : g.challenger_id);
-const cbBusyElsewhere = () => typeof ttt !== "undefined" && ttt.game && ttt.game.status === "active";
+const cbBusyElsewhere = () => (typeof ttt !== "undefined" && ttt.game && ttt.game.status === "active")
+  || (typeof c7Busy === "function" && c7Busy());
 
 // ── Games hub (the GAMES tile opens this) ─────────────────────────────────────
 function openGamesHub() {
@@ -275,7 +315,12 @@ function openGamesHub() {
         </button>
         <button class="hub-game" data-hub="cb">
           <span class="hub-thumb hub-cb" aria-hidden="true"></span>
-          <span class="hub-text"><b>Chowka Bhara</b><span>5×5 board · 4 cowrie shells · about 15 minutes</span></span>
+          <span class="hub-text"><b>Chowka Bhara 5×5</b><span>2 players · 4 cowrie shells · about 15 minutes</span></span>
+          <span class="hub-go">›</span>
+        </button>
+        <button class="hub-game" data-hub="c7">
+          <span class="hub-thumb hub-c7" aria-hidden="true"></span>
+          <span class="hub-text"><b>Chowka Bhara 7×7</b><span>2–4 players · 8 shells · pairs inside · up to 45 minutes</span></span>
           <span class="hub-go">›</span>
         </button>
         <p class="ttt-muted" style="text-align:center;margin-top:6px;">Play a member who is online, or the computer.</p>
@@ -288,6 +333,7 @@ function openGamesHub() {
     document.body.style.overflow = "";
     if (b.dataset.hub === "ttt") openGameLobby();
     if (b.dataset.hub === "cb") cbOpenLobby();
+    if (b.dataset.hub === "c7" && typeof c7Open === "function") c7Open("lobby");
   });
   document.body.appendChild(el);
   document.body.style.overflow = "hidden";
@@ -378,8 +424,9 @@ function cbLobbyHtml() {
     <div class="ttt-rules">
       <b>How to play</b>
       <p>Throw the 4 shells: 1, 2, 3 or 4 facing up moves that many squares; all four down moves <b>8</b>. All 4 of your pieces start on your home square (✕).</p>
+      <p><b>A 4 or an 8 is saved and you throw again.</b> Any other number stops the throwing; then move with all your saved numbers, split between pieces or added together on one piece (a piece can only stop where your numbers add up to).</p>
       <p>Go round the outer ring, then the inner ring, then into the centre (exact throw needed). Land on an opponent's piece to send it back to their home. On a ✕ square everyone is safe.</p>
-      <p><b>You must capture a piece before you can enter the inner ring.</b> A 4, an 8 or a capture gives you another throw. First to get all 4 pieces to the centre wins.</p>
+      <p><b>You must capture a piece before you can enter the inner ring.</b> A capture gives you one more throw after your numbers are used. First to get all 4 pieces to the centre wins.</p>
       <p>30 seconds per throw or move · missing 2 in a row loses · 30 minutes per game, then most pieces home wins.</p>
     </div>`;
 }
@@ -464,13 +511,12 @@ function cbGameHtml() {
   const opp = cbOther(my);
   const active = g.status === "active";
   const myTurn = active && st.turn === my;
-  const moves = myTurn && st.phase === "move" && st.roll ? cbMoves(st, my, st.roll) : [];
-  const fromSquares = new Map();   // "r,c" of a movable piece -> move
-  const targets = new Set();
-  for (const mv of moves) {
-    if (!fromSquares.has(cbKey(my, mv.from))) fromSquares.set(cbKey(my, mv.from), mv);
-    targets.add(cbKey(my, mv.to));
-  }
+  const moves = myTurn && st.phase === "move" ? cbMoves(st, my) : [];
+  const fromSquares = new Set(moves.map((mv) => cbKey(my, mv.from)));   // pieces that can move
+  if (cb.sel && !fromSquares.has(cb.sel)) cb.sel = null;
+  if (!cb.sel && fromSquares.size === 1) cb.sel = [...fromSquares][0];
+  const targets = new Map();       // "r,c" -> numbers used, for the picked piece
+  for (const mv of moves) if (cbKey(my, mv.from) === cb.sel) targets.set(cbKey(my, mv.to), mv);
   // What sits on each square.
   const at = {};
   for (const side of ["A", "B"]) st.pieces[side].forEach((p) => {
@@ -478,7 +524,7 @@ function cbGameHtml() {
     const k = cbKey(side, p);
     (at[k] = at[k] || { A: 0, B: 0 })[side]++;
   });
-  const lastKey = st.last && st.last.to != null && !st.last.noMove ? cbKey(st.last.side, st.last.to) : null;
+  const lastKey = st.last?.kind === "move" ? cbKey(st.last.side, st.last.to) : null;
   // My side is always drawn at the bottom.
   const flip = my === "B";
   let cells = "";
@@ -489,9 +535,11 @@ function cbGameHtml() {
     const tokens = ["A", "B"].map((s) => here[s]
       ? `<span class="cb-tok ${s === my ? "mine" : "theirs"}">${here[s] > 1 ? `<b>${here[s]}</b>` : ""}</span>` : "").join("");
     const can = fromSquares.has(k);
+    const tgt = targets.get(k);
     const cls = ["cb-cell", CB_SAFE.has(k) ? "safe" : "", k === "2,2" ? "centre" : "", can ? "can" : "",
-      targets.has(k) ? "tgt" : "", k === lastKey ? "last" : ""].filter(Boolean).join(" ");
-    cells += `<button class="${cls}" data-cb="cell" data-k="${k}" ${can ? "" : "tabindex=\"-1\""} aria-label="Square ${vr * 5 + vc + 1}">${tokens}</button>`;
+      k === cb.sel ? "sel" : "", tgt ? "tgt" : "", k === lastKey ? "last" : ""].filter(Boolean).join(" ");
+    const label = tgt ? `<span class="cb-tgt-n">${tgt.use.map((i) => cbRolls(st)[i]).join("+")}</span>` : "";
+    cells += `<button class="${cls}" data-cb="cell" data-k="${k}" ${can || tgt ? "" : "tabindex=\"-1\""} aria-label="Square ${vr * 5 + vc + 1}">${tokens}${label}</button>`;
   }
 
   const tray = (side) => `
@@ -522,18 +570,20 @@ function cbGameHtml() {
         <button class="secondary small" data-cb="to-lobby">Back to lobby</button>
       </div></div>`;
   } else if (myTurn && st.phase === "throw") {
-    status = `<button class="primary cb-throw" data-cb="throw" ${cb.rolling ? "disabled" : ""}>🐚 Throw shells</button>`;
+    status = `<button class="primary cb-throw" data-cb="throw" ${cb.rolling ? "disabled" : ""}>🐚 ${cbRolls(st).length ? "Throw again" : "Throw shells"}</button>`;
   } else if (myTurn && st.phase === "move") {
-    status = `<p class="ttt-turn mine">You threw <b>${st.roll}</b>: tap a glowing piece to move it</p>`;
+    status = `<p class="ttt-turn mine">${cb.sel ? "Tap a square with a number to move there" : "Tap a glowing piece, then where to move it"}</p>`;
   } else {
-    status = `<p class="ttt-turn">${escapeHtml(cbSideName(g, st.turn))} ${st.phase === "move" ? `threw <b>${st.roll}</b>, moving…` : "is throwing…"}</p>`;
+    status = `<p class="ttt-turn">${escapeHtml(cbSideName(g, st.turn))} ${st.phase === "move" ? "is moving…" : "is throwing…"}</p>`;
   }
   const lastLine = (() => {
     const l = st.last;
     if (!l || g.status !== "active") return "";
     const who = cbSideName(g, l.side);
     if (l.missed) return `${escapeHtml(who)} ran out of time.`;
-    if (l.noMove) return `${escapeHtml(who)} threw ${l.roll}, no move possible${l.roll === 4 || l.roll === 8 ? " (throws again)" : ""}.`;
+    if (l.noMove) return `${escapeHtml(who)} threw ${l.roll}: no piece can move.`;
+    if (l.kind === "throw" && l.again) return `${escapeHtml(who)} threw ${l.roll}: saved, throw again.`;
+    if (l.kind === "move" && l.captured && l.again) return `${escapeHtml(who)} captured! 🎯 One more throw.`;
     if (l.captured) return `${escapeHtml(who)} captured ${l.captured > 1 ? l.captured + " pieces" : "a piece"}! 🎯`;
     if (l.to === CB_FINISH) return `${escapeHtml(who)} got a piece home 🏠`;
     return "";
@@ -549,8 +599,10 @@ function cbGameHtml() {
     ${tray(opp)}
     <div class="cb-board${flip ? " flip" : ""}">${cells}</div>
     ${tray(my)}
-    <div class="cb-shells${cb.rolling ? " rolling" : ""}">${shells.map(cbShell).join("")}
-      <span class="cb-roll"${st.roll && st.phase === "move" ? "" : ' style="visibility:hidden"'}>${st.roll || 0}</span></div>
+    <div class="cb-shells${cb.rolling ? " rolling" : ""}">${shells.map(cbShell).join("")}</div>
+    <div class="cb-rolls" aria-label="Saved numbers">${cbRolls(st).length && active
+      ? `<span class="cb-rolls-label">${st.turn === my ? "Your" : escapeHtml(cbSideName(g, st.turn)) + "'s"} numbers</span>${cbRolls(st).map((r) => `<span class="cb-roll">${r}</span>`).join("")}`
+      : `<span class="cb-rolls-label">${active ? "4 or 8 = throw again and save the number" : ""}</span>`}</div>
     <div class="cb-status">${status}</div>
     <div class="cb-info">
       ${lastLine ? `<p class="ttt-muted">${lastLine}</p>` : ""}
@@ -646,11 +698,8 @@ async function cbCommit(patch) {
 }
 
 function cbAfterThrowPatch(g, side, roll, shells) {
-  const st = g.state;
-  const moves = cbMoves(st, side, roll);
   const missedKey = side === "A" ? "missed_a" : "missed_b";
-  if (!moves.length) return { state: cbPass(st, side, roll, shells), [missedKey]: 0 };
-  return { state: { ...st, phase: "move", roll, shells, last: st.last }, [missedKey]: 0 };
+  return { state: cbAfterThrow(g.state, side, roll, shells), [missedKey]: 0 };
 }
 
 async function cbDoThrow() {
@@ -669,8 +718,7 @@ async function cbDoThrow() {
 }
 
 function cbMovePatch(g, side, mv) {
-  const res = cbApply(g.state, side, mv, g.state.roll);
-  res.st.last.shells = g.state.shells;
+  const res = cbApply(g.state, side, mv);
   const missedKey = side === "A" ? "missed_a" : "missed_b";
   return {
     state: res.st, [missedKey]: 0, move_count: (g.move_count || 0) + 1,
@@ -678,12 +726,15 @@ function cbMovePatch(g, side, mv) {
   };
 }
 
+// Tap a glowing piece to pick it, then tap a square showing numbers to move there.
 function cbTapCell(k) {
   const g = cb.game;
   const my = cbMySide(g);
   if (!g || g.status !== "active" || g.state.turn !== my || g.state.phase !== "move") return;
-  const mv = cbMoves(g.state, my, g.state.roll).find((m) => cbKey(my, m.from) === k);
-  if (mv) cbCommit(cbMovePatch(g, my, mv));
+  const moves = cbMoves(g.state, my);
+  const mv = cb.sel && moves.find((m) => cbKey(my, m.from) === cb.sel && cbKey(my, m.to) === k);
+  if (mv) { cb.sel = null; return cbCommit(cbMovePatch(g, my, mv)); }
+  if (moves.some((m) => cbKey(my, m.from) === k)) { cb.sel = k; return cbRender(); }
 }
 
 // ── Computer game ─────────────────────────────────────────────────────────────
@@ -720,7 +771,7 @@ function cbMaybeCpu() {
       const { roll, shells } = cbThrow();
       return cbCommit(cbAfterThrowPatch(g, ai, roll, shells));
     }
-    const mv = cbComputerMove(g.state, ai, g.state.roll, g.level);
+    const mv = cbComputerMove(g.state, ai, g.level);
     if (mv) cbCommit(cbMovePatch(g, ai, mv));
   }, phase === "throw" ? 800 : 900);
 }
@@ -895,7 +946,7 @@ async function cbTick() {
 
   const key = st.turn === "A" ? "missed_a" : "missed_b";
   const missed = (g[key] || 0) + 1;
-  const passed = { ...st, phase: "throw", roll: null, shells: null, turn: cbOther(st.turn), last: { side: st.turn, missed: true } };
+  const passed = { ...st, phase: "throw", roll: null, rolls: [], bonus: false, shells: null, turn: cbOther(st.turn), last: { side: st.turn, missed: true } };
   const patch = missed >= CB_MAX_MISSED
     ? { [key]: missed, status: "finished", winner: cbOther(st.turn), end_reason: "missed_turns" }
     : { [key]: missed, state: passed };
@@ -1009,6 +1060,7 @@ async function cbAnswerInvite(accept) {
   if (error || !data) { showToast("This challenge is no longer available."); return; }
 
   if (typeof tttClose === "function" && document.getElementById("ttt-overlay")) tttClose();
+  if (typeof c7Close === "function" && document.getElementById("c7-overlay")) c7Close();
   document.getElementById("games-hub")?.remove();
   cbOpenLobby();
   cbWatchGame(cbParse(data));
