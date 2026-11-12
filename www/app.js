@@ -1591,6 +1591,7 @@ function render() {
         ${isDemoUser() ? `
         ${navButton("dashboard", "⌂", "Home")}
         ${navButton("history", "📅", "Meetings")}
+        ${navButton("members", "☷", "Members")}
         ${navButton("gallery", "🖼", "Gallery")}` : `
         ${navButton("dashboard", "⌂", t("dashboard"))}
         ${navButton("deposits", "₹", t("deposits"))}
@@ -1962,7 +1963,7 @@ function renderSetNewPassword() {
 function renderTab() {
   // Demo users (guests) see only the non-money parts of the club.
   if (isDemoUser()) {
-    const guestTabs = { dashboard: renderGuestHome, history: renderGuestMeetings, gallery: renderGallery, profile: renderProfile };
+    const guestTabs = { dashboard: renderGuestHome, history: renderGuestMeetings, members: renderMembers, gallery: renderGallery, profile: renderProfile };
     return (guestTabs[state.activeTab] || renderGuestHome)();
   }
   const tabs = {
@@ -2599,6 +2600,7 @@ function renderGuestHome() {
     <div class="guest-tiles">
       ${tile("🎮", "Games", "Tic-Tac-Toe · Chowka Bhara", `data-action="open-game"`)}
       ${tile("📅", "Meetings", "Our yearly meetings, highlights & photos", `data-tab="history"`)}
+      ${tile("👥", "Members", "Who is in the family club", `data-tab="members"`)}
       ${tile("🖼️", "Gallery", `Club photos & memories${state.galleryPhotos?.length ? ` · ${state.galleryPhotos.length}` : ""}`, `data-tab="gallery"`)}
     </div>`;
 }
@@ -3977,7 +3979,9 @@ function renderMembers() {
   const me = currentProfileId();
   const admin = isAdmin();
   const roleRank = (m) => (m.isDemo ? 3 : m.role === "president" ? 0 : m.role === "vice_president" ? 1 : 2);
-  const rows = [...state.members].sort((a, b) =>
+  const guest = isDemoUser();   // guests see names only (the overview list never includes phone numbers)
+  const pool = guest ? (state.allMembers || []).filter((m) => m.status === "active" || m.status === "demo") : state.members;
+  const rows = [...pool].sort((a, b) =>
     (isMemberOnline(b.id) - isMemberOnline(a.id)) || (roleRank(a) - roleRank(b)) || String(a.name).localeCompare(String(b.name)));
   const onlineCount = rows.filter((m) => isMemberOnline(m.id)).length;
   const demoCount = rows.filter((m) => m.isDemo).length;
@@ -3994,6 +3998,22 @@ function renderMembers() {
 
   const card = (m) => {
     const online = isMemberOnline(m.id);
+    if (guest) {
+      return `
+      <div class="mbr mbr-plain" data-mbr-online="${online ? 1 : 0}" data-mbr-demo="${m.isDemo ? 1 : 0}">
+        <div class="mbr-summary">
+          <span class="presence-wrap${online ? " is-online" : ""}" data-presence-for="${m.id}">
+            ${memberAvatarHtml(m, "md")}
+            <span class="presence-dot" aria-hidden="true"></span>
+          </span>
+          <span class="mbr-main">
+            <span class="mbr-name">${escapeHtml(m.name)}${m.id === me ? ` <span class="mbr-you">You</span>` : ""}</span>
+            ${liveBackendReady ? `<span class="presence-text${online ? " is-online" : ""}" data-presence-for="${m.id}">${online ? "Online now" : lastSeenLabel(m.lastSeenAt)}</span>` : ""}
+          </span>
+          ${roleTag(m)}
+        </div>
+      </div>`;
+    }
     const isMe = m.id === me;
     const showPhone = !isDemoUser() && m.phone;
     const nominee = admin && !m.isDemo ? (m.nomineeName

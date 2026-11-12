@@ -3322,6 +3322,7 @@ html, body { overscroll-behavior-y: none; }
   list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .mbr summary::-webkit-details-marker { display: none; }
+.mbr-summary { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
 .mbr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mbr-name {
   font-size: 15px; font-weight: 700; color: var(--ink);
