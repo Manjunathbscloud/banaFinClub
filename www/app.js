@@ -781,6 +781,7 @@ async function loadLiveState() {
   initPresence();
   touchLastSeen(true);
   if (typeof initGameInvites === "function") initGameInvites();
+  if (typeof cbInitInvites === "function") cbInitInvites();
   if (isDemoUser()) return; // view only: no push subscription, no settings writes
   subscribeToPush();
 
@@ -2007,7 +2008,7 @@ function renderHome() {
     { icon: "📒", title: "STATEMENT", sub: "Transaction history & balances", tab: "statement" },
     { icon: "📜", title: "RULES", sub: "Association guidelines", action: "show-rules" },
     { icon: "🖼️", title: "GALLERY", sub: `Club photos & memories · ${state.galleryPhotos.length} photo${state.galleryPhotos.length !== 1 ? "s" : ""}`, tab: "gallery" },
-    { icon: "🎮", title: "GAMES", sub: "Tic-Tac-Toe · 3 pieces · vs member or computer", action: "open-game" },
+    { icon: "🎮", title: "GAMES", sub: "Tic-Tac-Toe · Chowka Bhara · vs member or computer", action: "open-game" },
     isAdmin()
       ? { icon: "📅", title: "MEETINGS", sub: "Annual meeting records & photos", tab: "history" }
       : null,
@@ -3305,20 +3306,27 @@ function showDepositYearModal(yearKey) {
       const livePayments = state.monthlyPayments
         .filter((p) => p.status === "paid" && p.month >= activeYearStart)
         .sort((a, b) => a.month.localeCompare(b.month));
+      // The first month's deposit includes the yearly renewal fee; show it as its own line
+      // (display only: the month's total and the running balance are unchanged).
+      const renewalPerMember = Number(state.settings.activeYearRenewalFeePerMember || 0);
       const liveByMonth = {};
       livePayments.forEach((p) => {
         const mem = memberById(p.memberId);
         if (!mem) return;
         const paid = Number(p.paidAmount || p.amount || 0);
         const { dep, interest } = splitOfPayment(p, mem, paid);
-        if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0 };
-        liveByMonth[p.month].deposit += dep;
+        if (!liveByMonth[p.month]) liveByMonth[p.month] = { deposit: 0, interest: 0, renewal: 0, renewalCount: 0 };
+        const renewal = p.month === activeYearStart && renewalPerMember > 0 ? Math.min(renewalPerMember, dep) : 0;
+        liveByMonth[p.month].deposit += dep - renewal;
         liveByMonth[p.month].interest += interest;
+        liveByMonth[p.month].renewal += renewal;
+        if (renewal > 0) liveByMonth[p.month].renewalCount += 1;
       });
       const liveRows = Object.entries(liveByMonth).flatMap(([month, data]) => {
         const [yr, mo] = month.split("-");
         const lbl = `${MNAMES[Number(mo) - 1]} ${yr}`;
         return [
+          ...(data.renewal > 0 ? [{ label: "Renewal Fee", detail: `${lbl} (${money(renewalPerMember)} × ${data.renewalCount} member${data.renewalCount === 1 ? "" : "s"})`, amount: data.renewal }] : []),
           { label: "Monthly Deposits",   detail: `${lbl} – collected`, amount: data.deposit },
           ...(data.interest > 0 ? [{ label: "Interest Collected", detail: `${lbl} – loan interest`, amount: data.interest }] : []),
         ];
@@ -3843,55 +3851,83 @@ function showLoanYearModal(yearKey) {
   });
 }
 
+// Members page: a compact card per member. Tap a card to see phone, nominee (admin) and actions.
+// Online members come first, then by role (President, Vice President, Member, Demo), then name.
+let memberFilter = "all";
 function renderMembers() {
-  const rows = state.members;
+  const me = currentProfileId();
+  const admin = isAdmin();
+  const roleRank = (m) => (m.isDemo ? 3 : m.role === "president" ? 0 : m.role === "vice_president" ? 1 : 2);
+  const rows = [...state.members].sort((a, b) =>
+    (isMemberOnline(b.id) - isMemberOnline(a.id)) || (roleRank(a) - roleRank(b)) || String(a.name).localeCompare(String(b.name)));
+  const onlineCount = rows.filter((m) => isMemberOnline(m.id)).length;
+  const demoCount = rows.filter((m) => m.isDemo).length;
+  const noNominee = admin ? rows.filter((m) => !m.isDemo && m.status === "active" && !m.nomineeName).length : 0;
+  if (memberFilter === "demo" && !demoCount) memberFilter = "all";
+  const chip = (key, label, count) =>
+    `<button type="button" class="mbr-chip${memberFilter === key ? " on" : ""}" data-member-filter="${key}">${label}<span>${count}</span></button>`;
+  const roleTag = (m) => m.isDemo
+    ? `<span class="mbr-role demo">Demo</span>`
+    : m.role === "president" ? `<span class="mbr-role lead">President</span>`
+    : m.role === "vice_president" ? `<span class="mbr-role lead">Vice President</span>`
+    : m.status !== "active" ? statusBadge(m.status)
+    : "";
+
+  const card = (m) => {
+    const online = isMemberOnline(m.id);
+    const isMe = m.id === me;
+    const showPhone = !isDemoUser() && m.phone;
+    const nominee = admin && !m.isDemo ? (m.nomineeName
+      ? `<div class="mbr-line"><span class="mbr-k">Nominee</span><span class="mbr-v">${escapeHtml(m.nomineeName)}${m.nomineeRelationship ? ` · ${escapeHtml(m.nomineeRelationship)}` : ""}${m.nomineePhone ? ` · ${escapeHtml(m.nomineePhone)}` : ""}</span></div>`
+      : `<div class="mbr-line warn"><span class="mbr-k">Nominee</span><span class="mbr-v">Not added yet</span></div>`) : "";
+    const actions = [
+      showPhone && !isMe ? `<a class="mbr-act" href="tel:+91${escapeHtml(m.phone)}">📞 Call</a>` : "",
+      isMe && liveBackendReady && !isDemoUser() ? `<label class="mbr-act" for="member-avatar-input">📷 Change photo</label><input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" hidden />` : "",
+      admin ? `<button type="button" class="mbr-act" data-action="change-phone" data-id="${m.id}" data-name="${escapeHtml(m.name)}" data-phone="${escapeHtml(m.phone)}">✏️ Change phone</button>` : "",
+      admin && m.isDemo ? `<button type="button" class="mbr-act" data-action="resend-demo-sms" data-id="${m.id}">🔑 Resend SMS</button>` : "",
+      admin && !isMe ? `<button type="button" class="mbr-act danger" data-action="revoke-member" data-id="${m.id}">Revoke access</button>` : "",
+    ].filter(Boolean).join("");
+    return `
+      <details class="mbr" data-mbr-online="${online ? 1 : 0}" data-mbr-demo="${m.isDemo ? 1 : 0}">
+        <summary>
+          <span class="presence-wrap${online ? " is-online" : ""}" data-presence-for="${m.id}">
+            ${memberAvatarHtml(m, "md")}
+            <span class="presence-dot" aria-hidden="true"></span>
+          </span>
+          <span class="mbr-main">
+            <span class="mbr-name">${escapeHtml(m.name)}${isMe ? ` <span class="mbr-you">You</span>` : ""}${m.demoLabel ? ` <span class="mbr-alias">${escapeHtml(m.demoLabel)}</span>` : ""}</span>
+            ${liveBackendReady ? `<span class="presence-text${online ? " is-online" : ""}" data-presence-for="${m.id}">${online ? "Online now" : lastSeenLabel(m.lastSeenAt)}</span>` : ""}
+          </span>
+          ${roleTag(m)}
+          <span class="mbr-chev" aria-hidden="true">›</span>
+        </summary>
+        <div class="mbr-body">
+          ${showPhone ? `<div class="mbr-line"><span class="mbr-k">Phone</span><span class="mbr-v">${escapeHtml(m.phone)}</span></div>` : ""}
+          ${m.isDemo ? `<div class="mbr-line"><span class="mbr-k">Access</span><span class="mbr-v">View only + games${m.demoLabel ? ` · members see "${escapeHtml(m.demoLabel)}"` : ""}</span></div>` : ""}
+          ${nominee}
+          ${actions ? `<div class="mbr-actions">${actions}</div>` : ""}
+        </div>
+      </details>`;
+  };
+
   return `
-    <section class="page-title"><p>${t("members")}</p><h2>Member directory</h2>${isAdmin() && liveBackendReady ? `<button class="primary small" data-action="open-add-demo-user" type="button" style="margin-top:8px;">＋ Add demo user</button>` : ""}${liveBackendReady ? `<p class="online-summary"><span class="presence-dot-inline"></span><span id="online-summary">${onlineSummaryText()}</span></p>` : ""}</section>
-    <section class="card">
-      <div class="card-body row-list">
-        ${rows.map((member) => `
-          <div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px;">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-              <span class="presence-wrap${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">
-                ${memberAvatarHtml(member, "md")}
-                <span class="presence-dot" aria-hidden="true"></span>
-              </span>
-              <div style="min-width:0;flex:1;">
-                <strong>${escapeHtml(member.name)}</strong>${member.demoLabel ? ` <small style="color:var(--muted);font-weight:500;">(${escapeHtml(member.demoLabel)})</small>` : ""}
-                <span>
-                  ${isDemoUser() ? "" : `${escapeHtml(member.phone)} · `}${escapeHtml(member.isDemo ? "Demo · view only" : roleLabel(member.role))}
-                  ${isAdmin() ? `<button type="button" data-action="change-phone" data-id="${member.id}" data-name="${escapeHtml(member.name)}" data-phone="${escapeHtml(member.phone)}" style="font-size:11px;padding:2px 7px;margin-left:6px;min-height:0;vertical-align:middle;background:var(--bg2,#F3F4F6);border:1px solid var(--border,#E5E7EB);border-radius:4px;cursor:pointer;color:var(--muted);">✏️</button>` : ""}
-                </span>
-                ${liveBackendReady && (member.status === "active" || member.isDemo) ? `<span class="presence-text${isMemberOnline(member.id) ? " is-online" : ""}" data-presence-for="${member.id}">${isMemberOnline(member.id) ? "Online now" : lastSeenLabel(member.lastSeenAt)}</span>` : ""}
-                ${member.id === currentProfileId() && liveBackendReady ? `
-                  <label class="change-photo-link" for="member-avatar-input">📷 Change photo</label>
-                  <input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" style="display:none;" />
-                ` : ""}
-              </div>
-              <div class="member-actions">
-                ${statusBadge(member.status)}
-                ${isAdmin() && member.isDemo ? `<button class="secondary" data-action="resend-demo-sms" data-id="${member.id}" type="button">Resend SMS</button>` : ""}
-                ${isAdmin() && member.id !== currentProfileId() ? `<button class="danger" data-action="revoke-member" data-id="${member.id}" type="button">Revoke</button>` : ""}
-              </div>
-            </div>
-            ${isAdmin() ? (member.nomineeName
-              ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg2,#F9FAFB);border-radius:8px;border:1px solid var(--border,#E5E7EB);">
-                  <span style="font-size:13px;">👤</span>
-                  <div style="font-size:12px;color:var(--muted);line-height:1.4;">
-                    <span style="font-weight:600;color:var(--ink);">Nominee:</span>
-                    ${escapeHtml(member.nomineeName)}
-                    ${member.nomineeRelationship ? `<span style="color:var(--muted);"> · ${escapeHtml(member.nomineeRelationship)}</span>` : ""}
-                    ${member.nomineePhone ? `<span style="color:var(--muted);"> · ${escapeHtml(member.nomineePhone)}</span>` : ""}
-                  </div>
-                </div>`
-              : `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#FFF7ED;border-radius:8px;border:1px solid #FED7AA;">
-                  <span style="font-size:13px;">⚠️</span>
-                  <span style="font-size:12px;color:#9A3412;font-weight:500;">No nominee added yet</span>
-                </div>`)
-            : ""}
-          </div>
-        `).join("")}
+    <section class="page-title mbr-head">
+      <div>
+        <p>${t("members")}</p>
+        <h2>Members</h2>
+        ${liveBackendReady ? `<p class="online-summary"><span class="presence-dot-inline"></span><span id="online-summary">${onlineSummaryText()}</span></p>` : ""}
       </div>
+      ${admin && liveBackendReady ? `<button class="mbr-add" data-action="open-add-demo-user" type="button">＋ Demo user</button>` : ""}
+    </section>
+    ${admin && noNominee ? `<p class="mbr-note">⚠️ ${noNominee} member${noNominee > 1 ? "s have" : " has"} no nominee yet. Tap a member to see details.</p>` : ""}
+    <div class="mbr-chips" role="tablist">
+      ${chip("all", "All", rows.length)}
+      ${liveBackendReady ? chip("online", "Online", onlineCount) : ""}
+      ${admin && demoCount ? chip("demo", "Demo", demoCount) : ""}
+    </div>
+    <section class="mbr-list" data-member-list data-filter="${memberFilter}">
+      ${rows.map(card).join("")}
+      <p class="mbr-empty">Nobody is online right now.</p>
     </section>
   `;
 }
@@ -4590,6 +4626,15 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const memberChip = event.target.closest("[data-member-filter]");
+  if (memberChip) {
+    memberFilter = memberChip.dataset.memberFilter;
+    document.querySelectorAll("[data-member-filter]").forEach((c) => c.classList.toggle("on", c === memberChip));
+    const list = document.querySelector("[data-member-list]");
+    if (list) list.dataset.filter = memberFilter;
+    return;
+  }
+
   const authButton = event.target.closest("[data-auth-mode]");
   if (authButton) {
     renderAuth(authButton.dataset.authMode);
@@ -4913,7 +4958,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action.dataset.action === "open-settlement-doc") { event.preventDefault(); openSettlementDoc(); return; }
-  if (action.dataset.action === "open-game") { event.preventDefault(); if (typeof openGameLobby === "function") openGameLobby(); return; }
+  if (action.dataset.action === "open-game") { event.preventDefault(); if (typeof openGamesHub === "function") openGamesHub(); else if (typeof openGameLobby === "function") openGameLobby(); return; }
   if (action.dataset.action === "open-notifications") {
     await openNotifications();
     return;
@@ -8648,6 +8693,8 @@ function refreshPresenceDom() {
     const member = state.members.find(m => m.id === id);
     const online = isMemberOnline(id);
     el.classList.toggle("is-online", online);
+    const card = el.closest(".mbr");
+    if (card) card.dataset.mbrOnline = online ? "1" : "0";
     if (el.classList.contains("presence-text")) {
       el.textContent = online ? "Online now" : lastSeenLabel(member?.lastSeenAt);
     }

@@ -423,6 +423,17 @@ async function tttChallenge(opponentId) {
   if (ttt.busy) return;
   ttt.busy = true;
   try {
+    // They may have challenged me a moment ago: join that game instead of starting a second one.
+    const { data: theirs } = await supabaseClient.from("ttt_games").select("*")
+      .eq("challenger_id", opponentId).eq("opponent_id", currentProfileId()).eq("status", "invited")
+      .order("created_at", { ascending: false }).limit(1);
+    const pending = (theirs || []).find((r) => tttNow() - tttMs(r.created_at) < TTT_INVITE_SECONDS * 1000);
+    if (pending) {
+      ttt.busy = false;
+      tttHideInvite();
+      ttt.invite = tttParse(pending);
+      return tttAnswerInvite(true);
+    }
     const { data, error } = await supabaseClient.from("ttt_games").insert({
       challenger_id: currentProfileId(), opponent_id: opponentId, status: "invited",
     }).select().single();
@@ -431,6 +442,14 @@ async function tttChallenge(opponentId) {
     ttt.view = "waiting";
     tttRender();
     tttStartTicker();
+    // Their challenge arrived while mine was being sent: settle it the same way on both phones.
+    const inv = ttt.invite;
+    if (inv && inv.challenger_id === opponentId && String(data.id) > String(inv.id)) {
+      tttDropMyInvite();
+      tttAnswerInvite(true);
+    } else if (inv && inv.challenger_id === opponentId) {
+      tttHideInvite();   // keep mine; their phone will join it
+    }
   } catch (err) {
     console.error("challenge failed:", err);
     showToast("Could not send the challenge. Please try again.");
@@ -652,8 +671,20 @@ function initGameInvites() {
 function tttShowInvite(row) {
   if (row.status !== "invited") return;
   if (tttNow() - tttMs(row.created_at) > TTT_INVITE_SECONDS * 1000) return;
-  if (ttt.game && ttt.game.status === "active") {   // already playing: say no automatically
+  const inChowka = typeof cb !== "undefined" && cb.game && cb.game.status === "active";
+  if ((ttt.game && ttt.game.status === "active") || inChowka) {   // already playing: say no automatically
     supabaseClient.from("ttt_games").update({ status: "declined", updated_at: tttIso() }).eq("id", row.id).eq("status", "invited").then(() => {});
+    return;
+  }
+  const mine = ttt.game;
+  if (mine && mine.mode !== "cpu" && mine.status === "invited"
+      && mine.challenger_id === currentProfileId() && mine.opponent_id === row.challenger_id) {
+    // We challenged each other at the same moment. Both phones keep the game with the lower id:
+    // the phone whose own challenge loses cancels it and joins the other game automatically.
+    if (String(mine.id) < String(row.id)) return;   // keep mine; the other phone will join it
+    tttDropMyInvite();
+    ttt.invite = row;
+    tttAnswerInvite(true);
     return;
   }
   ttt.invite = row;
@@ -690,6 +721,17 @@ function tttHideInvite() {
   document.getElementById("ttt-invite")?.remove();
 }
 
+// Cancel my own unanswered challenge without showing "challenge expired" on this phone.
+function tttDropMyInvite() {
+  const mine = ttt.game;
+  if (!mine || mine.mode === "cpu" || mine.status !== "invited" || mine.challenger_id !== currentProfileId()) return;
+  tttStopTicker();
+  tttLeaveGameChannel();
+  ttt.game = null;
+  supabaseClient.from("ttt_games").update({ status: "expired", updated_at: tttIso() })
+    .eq("id", mine.id).eq("status", "invited").then(() => {});
+}
+
 async function tttAnswerInvite(accept) {
   const row = ttt.invite;
   tttHideInvite();
@@ -698,6 +740,8 @@ async function tttAnswerInvite(accept) {
     await supabaseClient.from("ttt_games").update({ status: "declined", updated_at: tttIso() }).eq("id", row.id).eq("status", "invited");
     return;
   }
+  tttDropMyInvite();   // one game at a time: accepting cancels a challenge I had sent
+  if (typeof cbDropMyInvite === "function") cbDropMyInvite();
   // Who starts: a rematch gives the first move to the player who went second last time;
   // otherwise a coin toss.
   let playerX, playerO;
@@ -718,6 +762,8 @@ async function tttAnswerInvite(accept) {
   }).eq("id", row.id).eq("status", "invited").select().maybeSingle();
   if (error || !data) { showToast("This challenge is no longer available."); return; }
 
+  if (typeof cbClose === "function" && document.getElementById("cb-overlay")) cbClose();
+  document.getElementById("games-hub")?.remove();
   openGameLobby();
   tttWatchGame(tttParse(data));
   ttt.view = "toss";
