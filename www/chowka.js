@@ -6,7 +6,8 @@
 // (exact throw). Landing on an opponent piece on a normal square sends it back home; on a
 // safe square (✕: the four homes and the centre) pieces sit together. A player must
 // capture at least once before their pieces can enter the inner ring; until then they
-// keep going round the outer ring. A throw of 4 or 8, or a capture, earns another throw.
+// can go no further than the last outer square (15) and wait there. If neither player
+// can move any more, the game is a draw. A throw of 4 or 8, or a capture, earns another throw.
 // First to bring all 4 pieces to the centre wins. 30 s per action (2 missed in a row
 // loses); 30 minutes per game, then most pieces home wins (equal = draw).
 // Member games sync through the cb_games table (Supabase Realtime); computer games run
@@ -74,8 +75,8 @@ function cbCombos(rolls, ok = () => true) {
 // Where a piece at `pos` ends up after moving `n` squares, or null if it can't.
 function cbTarget(st, side, pos, n) {
   if (pos === CB_FINISH) return null;
-  let to = pos + n;
-  if (!st.cap[side] && pos < CB_OUTER && to >= CB_OUTER) to %= CB_OUTER;   // no capture yet: keep circling
+  const to = pos + n;
+  if (!st.cap[side] && to >= CB_OUTER) return null;                       // no capture yet: stop on 15 at most
   return to > CB_FINISH ? null : to;                                       // exact throw for the centre
 }
 
@@ -132,6 +133,7 @@ function cbApply(st, side, mv) {
   const won = next.pieces[side].every((p) => p === CB_FINISH);
   next.last = { side, kind: "move", from: mv.from, to: mv.to, captured, used: mv.use.map((i) => rolls[i]) };
   if (won) { next.phase = "done"; next.rolls = []; return { st: next, captured, won }; }
+  if (cbStuck(next)) { next.phase = "done"; next.rolls = []; return { st: next, captured, won: false, stuck: true }; }
   if (next.rolls.length && cbMoves(next, side).length) {
     next.phase = "move";                      // more saved numbers to use
   } else {
@@ -142,6 +144,10 @@ function cbApply(st, side, mv) {
   }
   return { st: next, captured, won };
 }
+
+// Neither player can ever move again: every piece is home or waiting on 15 without a capture.
+const cbFrozen = (st, side) => st.pieces[side].every((p) => p === CB_FINISH || (!st.cap[side] && p === CB_OUTER - 1));
+const cbStuck = (st) => cbFrozen(st, "A") && cbFrozen(st, "B");
 
 const cbHome = (st, side) => st.pieces[side].filter((p) => p === CB_FINISH).length;
 
@@ -426,7 +432,7 @@ function cbLobbyHtml() {
       <p>Throw the 4 shells: 1, 2, 3 or 4 facing up moves that many squares; all four down moves <b>8</b>. All 4 of your pieces start on your home square (✕).</p>
       <p><b>A 4 or an 8 is saved and you throw again.</b> Any other number stops the throwing; then move with all your saved numbers, split between pieces or added together on one piece (a piece can only stop where your numbers add up to).</p>
       <p>Go round the outer ring, then the inner ring, then into the centre (exact throw needed). Land on an opponent's piece to send it back to their home. On a ✕ square everyone is safe.</p>
-      <p><b>You must capture a piece before you can enter the inner ring.</b> A capture gives you one more throw after your numbers are used. First to get all 4 pieces to the centre wins.</p>
+      <p><b>You must capture a piece before you can enter the inner ring.</b> Until then your pieces stop on the last outer square and wait there; if neither player can move, it's a draw. A capture gives you one more throw after your numbers are used. First to get all 4 pieces to the centre wins.</p>
       <p>30 seconds per throw or move · missing 2 in a row loses · 30 minutes per game, then most pieces home wins.</p>
     </div>`;
 }
@@ -559,6 +565,7 @@ function cbGameHtml() {
       all_home: won ? "All 4 pieces reached the centre" : "They got all 4 pieces home",
       missed_turns: won ? "The other player missed 2 turns" : "You missed 2 turns in a row",
       time_up: "30 minutes are up",
+      stuck: "No one can move any more: all pieces are waiting without a capture",
       forfeit: won ? "The other player left" : "You left the game",
       forfeit_self: "You left the game",
     }[g.end_reason] || "";
@@ -723,6 +730,7 @@ function cbMovePatch(g, side, mv) {
   return {
     state: res.st, [missedKey]: 0, move_count: (g.move_count || 0) + 1,
     ...(res.won ? { status: "finished", winner: side, end_reason: "all_home" } : {}),
+    ...(res.stuck ? { status: "finished", winner: "draw", end_reason: "stuck" } : {}),
   };
 }
 

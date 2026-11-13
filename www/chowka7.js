@@ -6,20 +6,23 @@
 //    Then move with all saved numbers: split between pieces or added together on one piece
 //    (a piece can only stop where the numbers add up to).
 //  • Outer ring (steps 0–23, anticlockwise): pieces move one at a time.
-//  • Two of your pieces on square 23 go inside together as a pair. Inside (24–47, clockwise
-//    rings, then the centre 48) only pairs move, only with numbers that are even by themselves,
-//    and they move half the number.
-//  • You must capture once before going inside; until then pieces keep circling the outer ring.
+//  • After a capture, a single piece from anywhere on the outer ring may step into square 24
+//    (the first inside square, safe) when the number lands it exactly there. It waits on 24
+//    until a second piece joins it; the two become a pair. Inside (25–47, clockwise rings, then
+//    the centre 48) only pairs move, only with numbers that are even by themselves, half the number.
+//  • You must capture once before going inside; until then pieces can go no further than 23 and
+//    wait there.
 //  • Landing on opponents on a square without ✕ sends them home. A pair captured anywhere goes
 //    home still joined; on the outer ring it moves with any number at full value (it must land on
-//    23 exactly before going inside). A single piece can capture a pair.
+//    24 exactly to go inside). A single piece can capture a pair.
 //  • A capture gives one more throw after the saved numbers are used.
 //  • Exact number for the centre. First with all 6 home is 1st; the others play on for 2nd/3rd.
 //  • 30 s per throw or move; missing 2 turns puts you out. 45 minutes per game, then places go
 //    by pieces home, then by distance travelled.
 
 const C7_PIECES = 6;
-const C7_GATE = 23;           // last outer square: pairs form here
+const C7_GATE = 23;           // last outer square
+const C7_ENTRY = 24;          // first inside square: singles wait here and join into a pair
 const C7_FINISH = 48;         // centre
 const C7_TURN_SECONDS = 30;
 const C7_GAME_SECONDS = 45 * 60;
@@ -92,17 +95,17 @@ function c7NextSeat(st, seat) {
 // Where a single or a pair at `p` ends up after `n` squares' worth of numbers (null = can't).
 function c7Dest(st, seat, k, p, n) {
   if (p === C7_FINISH) return null;
-  if (k === 1) {
-    if (!st.cap[seat]) { const to = (p + n) % (C7_GATE + 1); return to === p ? null : to; }   // keep circling
-    return p < C7_GATE && p + n <= C7_GATE ? p + n : null;                                  // stop on 23 at most
+  if (p < C7_ENTRY) {                                                   // outer ring: full value
+    const last = st.cap[seat] ? C7_ENTRY : C7_GATE;                     // no capture yet: stop on 23 at most
+    return p + n <= last ? p + n : null;                                // inside only on 24 exactly
   }
-  if (p < C7_GATE) return p + n <= C7_GATE ? p + n : null;              // joined pair on the outer ring: full value
+  if (k === 1) return null;                                             // a single inside waits for a partner
   if (!c7Even(n)) return null;
   const to = p + n / 2;                                                 // inside: half
   return to <= C7_FINISH ? to : null;
 }
 
-// All moves with the saved numbers. kind: single | pair (a joined pair) | enter (2 singles on 23).
+// All moves with the saved numbers. kind: single | pair (a joined pair).
 function c7Moves(st, seat) {
   const units = st.units[seat] || [];
   const all = c7Combos(st.rolls);
@@ -116,21 +119,12 @@ function c7Moves(st, seat) {
   units.forEach((u, i) => {
     if (u.p === C7_FINISH) return;
     const kind = u.k === 2 ? "pair" : "single";
-    const combos = u.k === 2 && u.p >= C7_GATE ? even : all;
+    const combos = u.k === 2 && u.p >= C7_ENTRY ? even : all;
     for (const [sum, use] of combos) {
       const to = c7Dest(st, seat, u.k, u.p, sum);
       if (to !== null) add({ kind, units: [i], from: u.p, to, use, sum });
     }
   });
-  if (st.cap[seat]) {
-    const waiting = units.map((u, i) => (u.k === 1 && u.p === C7_GATE ? i : -1)).filter((i) => i >= 0);
-    if (waiting.length >= 2) {
-      for (const [sum, use] of even) {
-        const to = c7Dest(st, seat, 2, C7_GATE, sum);
-        if (to !== null) add({ kind: "enter", units: waiting.slice(0, 2), from: C7_GATE, to, use, sum });
-      }
-    }
-  }
   return [...out.values()];
 }
 
@@ -157,11 +151,20 @@ function c7Ranking(st) {
   return [...st.places, ...alive, ...[...st.out].reverse()];
 }
 
-// The game is over when one player (or none) is left, or only computers are left.
+// A player who can never move again: every piece is home, waiting on 23 without a capture,
+// or a single piece waiting alone on 24.
+function c7Frozen(st, seat) {
+  return (st.units[seat] || []).every((u) => u.p === C7_FINISH
+    || (!st.cap[seat] && u.p === C7_GATE) || (u.k === 1 && u.p === C7_ENTRY));
+}
+
+// The game is over when one player (or none) is left, or only computers are left, or nobody
+// can ever move again (a draw between the players still playing).
 function c7CheckOver(st) {
   const alive = c7Alive(st);
   const humansLeft = alive.filter((s) => !st.cpu.includes(s)).length;
   if (alive.length <= 1 || humansLeft === 0) { st.phase = "done"; st.rolls = []; return true; }
+  if (alive.every((s) => c7Frozen(st, s))) { st.phase = "done"; st.rolls = []; st.draw = true; return true; }
   return false;
 }
 
@@ -185,12 +188,15 @@ function c7AfterThrow(st, seat, roll, shells) {
 function c7Apply(st, seat, mv) {
   const next = c7Clone(st);
   const units = next.units[seat];
-  if (mv.kind === "enter") {
-    const [a, b] = mv.units;
+  units[mv.units[0]].p = mv.to;
+  // Two single pieces waiting on 24 join into a pair.
+  let joined = false;
+  const waiting = units.map((u, i) => (u.k === 1 && u.p === C7_ENTRY ? i : -1)).filter((i) => i >= 0);
+  if (waiting.length >= 2) {
+    const [a, b] = waiting;
     next.units[seat] = units.filter((_, i) => i !== a && i !== b);
-    next.units[seat].push({ p: mv.to, k: 2 });
-  } else {
-    units[mv.units[0]].p = mv.to;
+    next.units[seat].push({ p: C7_ENTRY, k: 2 });
+    joined = true;
   }
   // Capture: everyone else on that square goes home (a pair stays a pair).
   let captured = 0;
@@ -207,7 +213,7 @@ function c7Apply(st, seat, mv) {
   if (captured) { next.cap[seat] = true; next.bonus = true; }
   next.rolls = st.rolls.filter((_, i) => !mv.use.includes(i));
   next.missed[seat] = 0;
-  next.last = { seat, kind: "move", type: mv.kind, from: mv.from, to: mv.to, captured,
+  next.last = { seat, kind: "move", type: mv.kind, from: mv.from, to: mv.to, captured, joined,
     used: mv.use.map((i) => st.rolls[i]) };
 
   const done = c7HomeCount(next, seat) === C7_PIECES;
@@ -229,6 +235,7 @@ function c7Apply(st, seat, mv) {
     if (next.bonus) { next.bonus = false; next.last.again = true; }
     else next.turn = c7NextSeat(next, seat);
   }
+  c7CheckOver(next);                                    // nobody can move any more: a draw
   return { st: next, captured, finished: false };
 }
 
@@ -282,10 +289,9 @@ function c7ComputerMove(st, seat, level) {
     if (finished) s += 1000;
     s += captured * 110;
     if (mv.to === C7_FINISH) s += 100;
-    if (mv.kind === "enter") s += 70;
-    if (k === 1 && mv.to === C7_GATE && st.cap[seat]) {
-      const waiting = st.units[seat].filter((u) => u.k === 1 && u.p === C7_GATE).length;
-      s += waiting ? 55 : 20;                                    // a partner is waiting: make a pair
+    if (k === 1 && mv.to === C7_ENTRY && st.cap[seat]) {
+      const waiting = st.units[seat].filter((u) => u.k === 1 && u.p === C7_ENTRY).length;
+      s += waiting ? 70 : 35;                                    // a partner is waiting: make a pair
     }
     if (C7_SAFE.has(c7Key(seat, mv.to))) s += 18;
     s -= c7Danger(after, seat, mv.to) * 40 * k;
@@ -300,7 +306,7 @@ function c7ComputerMove(st, seat, level) {
 
 if (typeof module !== "undefined") {
   module.exports = { c7NewState, c7Throw, c7Moves, c7Apply, c7AfterThrow, c7Miss, c7Ranking, c7Alive,
-    c7HomeCount, c7ComputerMove, c7Key, c7Dest, C7_PATHS, C7_SAFE, C7_FINISH, C7_GATE };
+    c7HomeCount, c7ComputerMove, c7Key, c7Dest, C7_PATHS, C7_SAFE, C7_FINISH, C7_GATE, C7_ENTRY };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -354,7 +360,7 @@ function c7SoundsFor(prev, next) {
   const a = prev.state, b = next.state;
   if (next.status === "finished" && prev.status !== "finished") {
     const r = (next.results || []).find((x) => x.seat === my);
-    return cbSound(!r ? "home" : r.place === 1 ? "win" : r.place === (next.results || []).length ? "lose" : "home");
+    return cbSound(!r || r.draw ? "home" : r.place === 1 ? "win" : r.place === (next.results || []).length ? "lose" : "home");
   }
   if (!a || !b) return;
   const thrown = (b.throwN || 0) !== (a.throwN || 0);
@@ -408,6 +414,7 @@ function c7Record(id) {
     const me = res.find((x) => x.profile_id === id);
     if (!me) continue;
     r.played++;
+    if (me.draw) continue;
     if (me.place === 1) r.p1++; else if (me.place === 2) r.p2++; else if (me.place === 3) r.p3++;
   }
   return r;
@@ -454,8 +461,8 @@ function c7LobbyHtml() {
       <b>How to play</b>
       <p>2 to 4 players, 6 pieces each, all starting on your home ✕. Throw 8 shells: 1–8 facing up moves that many; none up moves <b>12</b>.</p>
       <p><b>4, 6, 8 and 12 are saved and you throw again.</b> Then move with all your numbers: split between pieces or added together (a piece stops only where your numbers add up to).</p>
-      <p>Go round the outer ring one piece at a time. <b>Two pieces must meet on the last square</b> before home to go inside as a <b>pair</b>. Inside, a pair moves only with even numbers, <b>half</b> the number (4 = 2 squares).</p>
-      <p>You must capture once before going inside. Landing on others (not on ✕) sends them home; a pair goes home still joined and then moves with any number on the outer ring. A capture gives one more throw.</p>
+      <p>Go round the outer ring one piece at a time. After a capture, a piece can step <b>inside onto the first inside square</b> (safe) when the number lands it exactly there. It <b>waits there until a second piece joins it</b>; the two become a <b>pair</b>. Inside, a pair moves only with even numbers, <b>half</b> the number (4 = 2 squares).</p>
+      <p>You must capture once before going inside; until then your pieces stop on the last square before home and wait there. Landing on others (not on ✕) sends them home; a pair goes home still joined and then moves with any number on the outer ring. A capture gives one more throw.</p>
       <p>Exact number for the centre. All 6 home first wins; the rest play on for 2nd and 3rd. 30 s per step · 2 missed turns and you're out · 45 minutes per game.</p>
     </div>`;
 }
@@ -607,7 +614,10 @@ function c7GameHtml() {
   if (!st.seats.includes(my)) order.splice(0, order.length, ...st.seats);
   const medal = ["", "🥇", "🥈", "🥉", "4th"];
   const chips = order.map((seat) => {
-    const place = (g.results || []).find((x) => x.seat === seat)?.place || (st.places.indexOf(seat) + 1) || 0;
+    const res = (g.results || []).find((x) => x.seat === seat);
+    const place = res?.draw ? 0 : res?.place || (st.places.indexOf(seat) + 1) || 0;
+    if (res?.draw) return `<div class="c7-chip"><span class="c7-tok sm c7-s${seat}"></span>
+      <span class="c7-chip-name">${escapeHtml(c7SeatName(g, seat))}</span><span class="c7-chip-home">🤝</span></div>`;
     const out = st.out.includes(seat);
     return `<div class="c7-chip${st.turn === seat && active && !place && !out ? " now" : ""}${out ? " out" : ""}">
       <span class="c7-tok sm c7-s${seat}"></span>
@@ -620,10 +630,12 @@ function c7GameHtml() {
   let status;
   if (g.status === "finished") {
     const mine = (g.results || []).find((x) => x.seat === my);
-    const place = mine?.place;
+    const place = mine?.draw ? 0 : mine?.place;
+    const drawNote = g.end_reason === "draw" || st.draw ? `<p class="ttt-muted">Draw: no one could move any more (all pieces waiting without a capture).</p>` : "";
     status = `<div class="ttt-result ${place === 1 ? "won" : "draw"}">
-      <p class="ttt-result-title">${place === 1 ? "🏆 You came 1st!" : place ? `You came ${["", "1st", "2nd", "3rd", "4th"][place]}` : "Game over"}</p>
-      <p class="ttt-muted">${(g.results || []).map((x) => `${medal[x.place]} ${escapeHtml(c7SeatName(g, x.seat))}`).join(" · ")}</p>
+      <p class="ttt-result-title">${mine?.draw ? "🤝 It's a draw" : place === 1 ? "🏆 You came 1st!" : place ? `You came ${["", "1st", "2nd", "3rd", "4th"][place]}` : "Game over"}</p>
+      ${drawNote}
+      <p class="ttt-muted">${(g.results || []).map((x) => `${x.draw ? "🤝" : medal[x.place]} ${escapeHtml(c7SeatName(g, x.seat))}`).join(" · ")}</p>
       <div class="ttt-result-actions">
         ${g.mode === "cpu" ? `<button class="primary small" data-c7="again">Play again</button>` : ""}
         <button class="secondary small" data-c7="to-lobby">Back to lobby</button>
@@ -650,7 +662,8 @@ function c7GameHtml() {
     if (l.kind === "throw" && l.again) return `${who} threw ${l.roll}: saved, throws again.`;
     if (l.finished) return `${who} got all 6 home: ${medal[l.finished]}!`;
     if (l.captured) return `${who} captured ${l.captured > 1 ? l.captured + " pieces" : "a piece"}! 🎯${l.again ? " One more throw." : ""}`;
-    if (l.type === "enter") return `${who} took a pair inside.`;
+    if (l.joined) return `${who} made a pair inside 👥`;
+    if (l.to === C7_ENTRY && l.type === "single") return `${who} moved a piece inside; it waits for a partner.`;
     if (l.to === C7_FINISH) return `${who} got a pair home 🏠`;
     return "";
   })();
@@ -749,10 +762,13 @@ function c7StatePatch(g, next) {
   if (next.phase === "done") {
     const ranking = c7Ranking(next);
     patch.status = "finished";
-    patch.end_reason = next.places.length ? "all_home" : "players_out";
+    patch.end_reason = next.draw ? "draw" : next.places.length ? "all_home" : "players_out";
+    const drawn = next.draw ? c7Alive(next) : [];
+    const drawPlace = next.places.length + 1;
     patch.results = ranking.map((seat, i) => {
       const e = (g.seats || []).find((x) => x.seat === seat) || {};
-      return { seat, place: i + 1, profile_id: e.profile_id || null, cpu: !!e.cpu };
+      const d = drawn.includes(seat);
+      return { seat, place: d ? drawPlace : i + 1, profile_id: e.profile_id || null, cpu: !!e.cpu, ...(d ? { draw: true } : {}) };
     });
   }
   return patch;
