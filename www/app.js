@@ -784,7 +784,6 @@ async function loadLiveState() {
   if (typeof cbInitInvites === "function") cbInitInvites();
   if (typeof c7InitInvites === "function") c7InitInvites();
   if (typeof vcInit === "function") vcInit();   // demo users listen too, but only answer the admin's calls
-  if (!isDemoUser() && typeof gcInit === "function") gcInit();   // group calls: members only
   if (isDemoUser()) { await loadGuestOverview(); return; } // view only: no push, no settings writes
   subscribeToPush();
 

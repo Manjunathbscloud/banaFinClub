@@ -120,7 +120,7 @@ async function vcStart(peerId, { video = false } = {}) {
   if (!liveBackendReady) { showToast("App calls need the live app."); return; }
   if (!vcSupported()) { showToast("This phone's browser can't make app calls."); return; }
   if (!vc.ready) { vcInit(); showToast("Connecting… try again in a moment."); return; }
-  if (vc.call || (typeof gcBusy === "function" && gcBusy())) { showToast("You're already on a call."); return; }
+  if (vc.call) { showToast("You're already on a call."); return; }
 
   // Hold the slot while asking for the microphone so a double tap can't start two calls.
   vc.call = { id: `${Date.now().toString(36)}-${vc.device}`, peerId, role: "out", status: "starting", video, facing: "user", pendingIce: [], timers: [] };
@@ -285,8 +285,7 @@ async function vcOnMessage(p) {
   if (p.type === "ring") {
     if (c && c.id === p.callId) { c.lastRingAt = Date.now(); return; }
     // Demo users only take calls from the admin (President); anyone else hears "on another call".
-    const inGroup = typeof gcBusy === "function" && gcBusy();
-    if (c || inGroup || (isDemoUser() && !vcCallerIsAdmin(p))) { vcReply(p, "busy"); return; }
+    if (c || (isDemoUser() && !vcCallerIsAdmin(p))) { vcReply(p, "busy"); return; }
     vcIncoming(p);
     return;
   }
@@ -435,18 +434,11 @@ function vcOpenPicker() {
         <h3>Call a member</h3>
         <button type="button" class="vc-pick-close" data-vc-close aria-label="Close">✕</button>
       </div>
-      ${typeof gcStart === "function" && typeof isAdmin === "function" && isAdmin()
-        ? `<button type="button" class="vc-pick-group" data-vc-group>
-             <span class="vc-pick-group-icon" aria-hidden="true">👥</span>
-             <span class="vc-pick-main"><span class="vc-pick-name">Group call · all members</span><span class="vc-pick-seen">Rings every member. Others can join later.</span></span>
-             <span class="vc-pick-call" aria-hidden="true">${VC_ICON_PHONE}</span>
-           </button>` : ""}
       <input type="search" class="vc-pick-search" placeholder="Search members" aria-label="Search members" />
       <div class="vc-pick-list">${vcPickerListHtml("")}</div>
     </div>`;
   sheet.addEventListener("click", (e) => {
     if (e.target === sheet || e.target.closest("[data-vc-close]")) { vcClosePicker(); return; }
-    if (e.target.closest("[data-vc-group]")) { vcClosePicker(); gcStart(); return; }
     const row = e.target.closest("[data-vc-pick]");
     if (row) { vcClosePicker(); vcStart(row.dataset.vcPick, { video: row.dataset.vcVideo === "1" }); }
   });
