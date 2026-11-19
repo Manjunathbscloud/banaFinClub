@@ -551,7 +551,7 @@ function isDemoUser() {
 const DEMO_VIEW_ONLY_MSG = "Demo account: view only. You can browse and play games.";
 const DEMO_BLOCKED_ACTIONS = new Set([
   "acknowledge-financial", "acknowledge-records", "approve-extension", "approve-loan", "approve-partial-repayment",
-  "approve-signup", "open-add-demo-user", "resend-demo-sms", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
+  "approve-signup", "voice-call", "open-call-picker", "open-add-demo-user", "resend-demo-sms", "change-phone", "clear-ai-chat", "clear-current-loan", "close-current-year",
   "confirm-close-year", "confirm-mark-paid", "delete-current-loan", "delete-gallery-photo",
   "delete-meeting-photo", "delete-rule", "edit-rule", "save-rule", "open-ai-chat", "send-ai-message", "open-chat",
   "send-chat", "open-financial-signoff", "open-meeting-signoff", "toggle-financial-signoff", "toggle-meeting-signoff",
@@ -783,6 +783,7 @@ async function loadLiveState() {
   if (typeof initGameInvites === "function") initGameInvites();
   if (typeof cbInitInvites === "function") cbInitInvites();
   if (typeof c7InitInvites === "function") c7InitInvites();
+  if (typeof vcInit === "function") vcInit();   // demo users listen too, but only answer the admin's calls
   if (isDemoUser()) { await loadGuestOverview(); return; } // view only: no push, no settings writes
   subscribeToPush();
 
@@ -1575,6 +1576,9 @@ function render() {
           </div>
           <div class="top-actions">
             <span class="mode-badge ${liveBackendReady ? "live" : "demo"}">${backendLabel()}</span>
+            ${liveBackendReady && !isDemoUser() && typeof vcSupported === "function" && vcSupported() ? `<button class="icon-button vc-head-btn" type="button" data-action="open-call-picker" aria-label="Voice call a member" title="Voice call">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
+            </button>` : ""}
             <button class="icon-button" type="button" data-action="toggle-lang">${t("language")}</button>
             ${isAdmin() && !NOTIFICATIONS_OFF ? `<button class="icon-button notif-bell-btn" type="button" data-action="open-notifications" aria-label="Notifications">
               ${bellIcon()}
@@ -4016,11 +4020,15 @@ function renderMembers() {
     }
     const isMe = m.id === me;
     const showPhone = !isDemoUser() && m.phone;
+    // Members call active members; the admin (President) can also call demo users.
+    const canAppCall = liveBackendReady && !isDemoUser() && !isMe && typeof vcSupported === "function" && vcSupported()
+      && (m.isDemo ? admin : m.status === "active");
     const nominee = admin && !m.isDemo ? (m.nomineeName
       ? `<div class="mbr-line"><span class="mbr-k">Nominee</span><span class="mbr-v">${escapeHtml(m.nomineeName)}${m.nomineeRelationship ? ` · ${escapeHtml(m.nomineeRelationship)}` : ""}${m.nomineePhone ? ` · ${escapeHtml(m.nomineePhone)}` : ""}</span></div>`
       : `<div class="mbr-line warn"><span class="mbr-k">Nominee</span><span class="mbr-v">Not added yet</span></div>`) : "";
     const actions = [
-      showPhone && !isMe ? `<a class="mbr-act" href="tel:+91${escapeHtml(m.phone)}">📞 Call</a>` : "",
+      canAppCall ? `<button type="button" class="mbr-act" data-action="voice-call" data-id="${m.id}">🎙️ App call</button>` : "",
+      showPhone && !isMe ? `<a class="mbr-act" href="tel:+91${escapeHtml(m.phone)}">📱 Phone call</a>` : "",
       isMe && liveBackendReady && !isDemoUser() ? `<label class="mbr-act" for="member-avatar-input">📷 Change photo</label><input type="file" id="member-avatar-input" accept="image/*" data-action="upload-avatar" hidden />` : "",
       admin ? `<button type="button" class="mbr-act" data-action="change-phone" data-id="${m.id}" data-name="${escapeHtml(m.name)}" data-phone="${escapeHtml(m.phone)}">✏️ Change phone</button>` : "",
       admin && m.isDemo ? `<button type="button" class="mbr-act" data-action="resend-demo-sms" data-id="${m.id}">🔑 Resend SMS</button>` : "",
@@ -4794,6 +4802,17 @@ document.addEventListener("click", async (event) => {
     const onBackground = action === event.target;
     const onCloseBtn   = !!event.target.closest(".rules-modal-close");
     if (!onBackground && !onCloseBtn) return;
+  }
+
+  // App voice call. The button sits inside a member card's <summary>, so stop it opening the card.
+  if (action.dataset.action === "open-call-picker") {
+    if (typeof vcOpenPicker === "function") vcOpenPicker();
+    return;
+  }
+  if (action.dataset.action === "voice-call") {
+    event.preventDefault();
+    if (typeof vcStart === "function") vcStart(action.dataset.id);
+    return;
   }
 
   if (action.dataset.action === "open-profile") {

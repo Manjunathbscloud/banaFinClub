@@ -1,4 +1,4 @@
-const CACHE_NAME = "banakar-finclub-v448";
+const CACHE_NAME = "banakar-finclub-v451";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./game.js",
   "./chowka.js",
   "./chowka7.js",
+  "./call.js",
   "./config.js",
   "./manifest.json",
   "./icon.svg",
@@ -42,6 +43,13 @@ self.addEventListener("push", (event) => {
     vibrate: [200, 100, 200],
     data: { url: self.registration.scope },
   };
+  // Incoming / missed app call: keep it on screen and buzz like a phone ringing.
+  if (data.kind === "call") {
+    options.tag = data.tag || "voice-call";
+    options.renotify = true;
+    options.requireInteraction = true;
+    options.vibrate = [600, 300, 600, 300, 600, 300, 600];
+  }
   event.waitUntil(self.registration.showNotification(title, options));
 });
 

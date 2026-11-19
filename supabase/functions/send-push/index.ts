@@ -22,7 +22,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const { profile_id, title, body } = await req.json();
+    const { profile_id, title, body, kind, tag } = await req.json();
     if (!profile_id || !title) return new Response("invalid payload", { status: 400, headers: CORS });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -34,7 +34,8 @@ serve(async (req) => {
 
     if (!subs || subs.length === 0) return new Response("no subscriptions", { status: 200, headers: CORS });
 
-    const payload = JSON.stringify({ title, body });
+    // kind/tag are optional: "call" makes the service worker show a ringing-style notification.
+    const payload = JSON.stringify({ title, body, kind, tag });
 
     const results = await Promise.allSettled(
       subs.map((sub) =>
